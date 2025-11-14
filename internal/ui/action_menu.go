@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -168,7 +170,9 @@ func (m *Model) renderActionMenu() string {
 func (m *Model) executeAction(action ActionType) tea.Cmd {
 	switch action {
 	case ActionViewLogs:
-		if m.selectedPod != nil {
+		if m.selectedPod != nil && len(m.selectedPod.ContainerStates) > 0 {
+			// Select first container by default
+			m.selectedContainer = m.selectedPod.ContainerStates[0].Name
 			m.logsMode = true
 			m.logsScrollOffset = 0
 			m.logsAutoScroll = true
@@ -176,19 +180,100 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 		}
 
 	case ActionDescribe:
-		// This would execute kubectl describe and show output
-		// For now, we'll show a message
-		m.exportMessage = "Describe: kubectl describe not yet implemented"
-		return tea.Tick(time.Second*3, func(time.Time) tea.Msg {
-			return clearExportMessageMsg{}
-		})
+		// Execute describe command asynchronously
+		return func() tea.Msg {
+			var content string
+			var err error
+
+			// Try to get the API client through type assertion
+			apiClient, ok := m.dataProvider.(interface {
+				DescribePod(ctx context.Context, namespace, podName string) (string, error)
+				DescribeNode(ctx context.Context, nodeName string) (string, error)
+			})
+
+			if !ok {
+				return commandOutputMsg{
+					title: "Error",
+					content: "API client does not support describe functionality",
+					err: fmt.Errorf("unsupported operation"),
+				}
+			}
+
+			ctx := context.Background()
+			if m.selectedPod != nil {
+				content, err = apiClient.DescribePod(ctx, m.selectedPod.Namespace, m.selectedPod.Name)
+			} else if m.selectedNode != nil {
+				content, err = apiClient.DescribeNode(ctx, m.selectedNode.Name)
+			}
+
+			if err != nil {
+				return commandOutputMsg{
+					title: "Describe Error",
+					content: err.Error(),
+					err: err,
+				}
+			}
+
+			var title string
+			if m.selectedPod != nil {
+				title = fmt.Sprintf("Describe Pod: %s/%s", m.selectedPod.Namespace, m.selectedPod.Name)
+			} else if m.selectedNode != nil {
+				title = fmt.Sprintf("Describe Node: %s", m.selectedNode.Name)
+			}
+
+			return commandOutputMsg{
+				title: title,
+				content: content,
+			}
+		}
 
 	case ActionGetYAML:
-		// This would execute kubectl get -o yaml and show output
-		m.exportMessage = "Get YAML: kubectl get not yet implemented"
-		return tea.Tick(time.Second*3, func(time.Time) tea.Msg {
-			return clearExportMessageMsg{}
-		})
+		// Execute get yaml command asynchronously
+		return func() tea.Msg {
+			var content string
+			var err error
+
+			// Try to get the API client through type assertion
+			apiClient, ok := m.dataProvider.(interface {
+				GetPodYAML(ctx context.Context, namespace, podName string) (string, error)
+				GetNodeYAML(ctx context.Context, nodeName string) (string, error)
+			})
+
+			if !ok {
+				return commandOutputMsg{
+					title: "Error",
+					content: "API client does not support YAML export",
+					err: fmt.Errorf("unsupported operation"),
+				}
+			}
+
+			ctx := context.Background()
+			if m.selectedPod != nil {
+				content, err = apiClient.GetPodYAML(ctx, m.selectedPod.Namespace, m.selectedPod.Name)
+			} else if m.selectedNode != nil {
+				content, err = apiClient.GetNodeYAML(ctx, m.selectedNode.Name)
+			}
+
+			if err != nil {
+				return commandOutputMsg{
+					title: "Get YAML Error",
+					content: err.Error(),
+					err: err,
+				}
+			}
+
+			var title string
+			if m.selectedPod != nil {
+				title = fmt.Sprintf("YAML: %s/%s", m.selectedPod.Namespace, m.selectedPod.Name)
+			} else if m.selectedNode != nil {
+				title = fmt.Sprintf("YAML: %s", m.selectedNode.Name)
+			}
+
+			return commandOutputMsg{
+				title: title,
+				content: content,
+			}
+		}
 
 	case ActionCopyName:
 		var name string
@@ -199,9 +284,13 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 		}
 
 		if name != "" {
-			// Copy to clipboard (this requires a clipboard library)
-			// For now, just show the name
-			m.exportMessage = fmt.Sprintf("📋 Copied: %s", name)
+			// Actually copy to clipboard
+			err := clipboard.WriteAll(name)
+			if err != nil {
+				m.exportMessage = fmt.Sprintf("❌ Copy failed: %v", err)
+			} else {
+				m.exportMessage = fmt.Sprintf("✅ Copied: %s", name)
+			}
 			return tea.Tick(time.Second*2, func(time.Time) tea.Msg {
 				return clearExportMessageMsg{}
 			})
@@ -210,7 +299,13 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 	case ActionCopyNamespaceName:
 		if m.selectedPod != nil {
 			fullName := fmt.Sprintf("%s/%s", m.selectedPod.Namespace, m.selectedPod.Name)
-			m.exportMessage = fmt.Sprintf("📋 Copied: %s", fullName)
+			// Actually copy to clipboard
+			err := clipboard.WriteAll(fullName)
+			if err != nil {
+				m.exportMessage = fmt.Sprintf("❌ Copy failed: %v", err)
+			} else {
+				m.exportMessage = fmt.Sprintf("✅ Copied: %s", fullName)
+			}
 			return tea.Tick(time.Second*2, func(time.Time) tea.Msg {
 				return clearExportMessageMsg{}
 			})
@@ -225,6 +320,13 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 	}
 
 	return nil
+}
+
+// commandOutputMsg is sent when a command output is ready to display
+type commandOutputMsg struct {
+	title   string
+	content string
+	err     error
 }
 
 // clearExportMessageMsg is sent to clear the export message

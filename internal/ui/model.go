@@ -186,6 +186,12 @@ type Model struct {
 
 	// Workloads view state
 	workloadSections map[string]workloadSection // Track each workload type's position
+
+	// Command output viewer state
+	commandOutputMode    bool   // True when viewing command output
+	commandOutputTitle   string // Title of the command output
+	commandOutputContent string // Content to display
+	commandOutputScroll  int    // Scroll offset for command output
 }
 
 // workloadSection tracks the position and count of a workload type in the view
@@ -684,7 +690,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case key.Matches(msg, m.keys.Back):
-			// Esc key returns to list view or exits filter/search/logs mode
+			// Esc key returns to list view or exits filter/search/logs/command output mode
+			// Exit command output viewer if active
+			if m.commandOutputMode {
+				m.commandOutputMode = false
+				m.commandOutputTitle = ""
+				m.commandOutputContent = ""
+				m.commandOutputScroll = 0
+				return m, nil
+			}
 			if m.logsMode {
 				// If in logs search mode, exit search mode first
 				if m.logsSearchMode {
@@ -962,6 +976,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Handle filter navigation
 				return m, m.handleFilterNavigation(-1)
 			}
+			if m.commandOutputMode {
+				// Scroll up in command output view
+				if m.commandOutputScroll > 0 {
+					m.commandOutputScroll--
+				}
+				return m, nil
+			}
 			if m.logsMode {
 				// Scroll up in logs view
 				if m.logsScrollOffset > 0 {
@@ -1021,6 +1042,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.filterMode {
 				// Handle filter navigation
 				return m, m.handleFilterNavigation(1)
+			}
+			if m.commandOutputMode {
+				// Scroll down in command output view
+				lines := strings.Split(m.commandOutputContent, "\n")
+				maxVisible := m.height - 6
+				if maxVisible < 1 {
+					maxVisible = 1
+				}
+				totalLines := len(lines)
+				maxScroll := totalLines - maxVisible
+				if maxScroll < 0 {
+					maxScroll = 0
+				}
+				if m.commandOutputScroll < maxScroll {
+					m.commandOutputScroll++
+				}
+				return m, nil
 			}
 			if m.logsMode {
 				// Scroll down in logs view
@@ -1396,6 +1434,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return clearExportMessageMsg{}
 		})
 
+	case commandOutputMsg:
+		// Display command output in viewer mode
+		m.commandOutputMode = true
+		m.commandOutputTitle = msg.title
+		m.commandOutputContent = msg.content
+		m.commandOutputScroll = 0
+		return m, nil
+
 	case clearExportMessageMsg:
 		m.exportMessage = ""
 		return m, nil
@@ -1420,6 +1466,13 @@ func (m *Model) View() string {
 
 	// Render header
 	header := m.renderHeader()
+
+	// Render command output view if in command output mode
+	if m.commandOutputMode {
+		content := m.renderCommandOutput()
+		footer := m.renderFooter()
+		return fmt.Sprintf("%s\n\n%s\n\n%s", header, content, footer)
+	}
 
 	// Render logs view if in logs mode
 	if m.logsMode {
@@ -1588,7 +1641,12 @@ func (m *Model) renderFooter() string {
 	}
 
 	// Different key bindings for different modes
-	if m.logsSearchMode {
+	if m.commandOutputMode {
+		// Command output mode - show scroll and exit bindings
+		bindings = append(bindings, RenderKeyBinding("↑/↓", m.T("keys.scroll")))
+		bindings = append(bindings, RenderKeyBinding("PgUp/PgDn", m.T("keys.page")))
+		bindings = append(bindings, RenderKeyBinding("esc", m.T("keys.back")))
+	} else if m.logsSearchMode {
 		// Logs search mode - show search-specific bindings
 		bindings = append(bindings, RenderKeyBinding("text", m.T("keys.type_to_search")))
 		bindings = append(bindings, RenderKeyBinding("backspace", m.T("keys.delete")))

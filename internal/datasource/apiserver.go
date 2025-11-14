@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"sigs.k8s.io/yaml"
 )
 
 // APIServerClient implements DataSource using Kubernetes API Server
@@ -758,6 +759,255 @@ func (c *APIServerClient) GetPodLogs(ctx context.Context, namespace, podName, co
 	}
 
 	return buf.String(), nil
+}
+
+// DescribePod returns kubectl describe output for a pod
+func (c *APIServerClient) DescribePod(ctx context.Context, namespace, podName string) (string, error) {
+	c.logger.Debug("Describing pod",
+		zap.String("namespace", namespace),
+		zap.String("pod", podName),
+	)
+
+	// Get pod details
+	pod, err := c.clientset.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("failed to get pod: %w", err)
+	}
+
+	// Get events for this pod
+	events, err := c.clientset.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{
+		FieldSelector: fmt.Sprintf("involvedObject.name=%s,involvedObject.namespace=%s", podName, namespace),
+	})
+	if err != nil {
+		c.logger.Warn("Failed to get events", zap.Error(err))
+		events = &corev1.EventList{}
+	}
+
+	// Format describe output
+	var buf strings.Builder
+	buf.WriteString(fmt.Sprintf("Name:         %s\n", pod.Name))
+	buf.WriteString(fmt.Sprintf("Namespace:    %s\n", pod.Namespace))
+	buf.WriteString(fmt.Sprintf("Node:         %s\n", pod.Spec.NodeName))
+	buf.WriteString(fmt.Sprintf("Status:       %s\n", pod.Status.Phase))
+	buf.WriteString(fmt.Sprintf("IP:           %s\n", pod.Status.PodIP))
+	buf.WriteString(fmt.Sprintf("Created:      %s\n", pod.CreationTimestamp.Format(time.RFC3339)))
+
+	// Labels
+	if len(pod.Labels) > 0 {
+		buf.WriteString("\nLabels:\n")
+		for k, v := range pod.Labels {
+			buf.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
+		}
+	}
+
+	// Containers
+	buf.WriteString("\nContainers:\n")
+	for _, container := range pod.Spec.Containers {
+		buf.WriteString(fmt.Sprintf("  %s:\n", container.Name))
+		buf.WriteString(fmt.Sprintf("    Image:         %s\n", container.Image))
+		if len(container.Ports) > 0 {
+			buf.WriteString("    Ports:         ")
+			for i, port := range container.Ports {
+				if i > 0 {
+					buf.WriteString(", ")
+				}
+				buf.WriteString(fmt.Sprintf("%d/%s", port.ContainerPort, port.Protocol))
+			}
+			buf.WriteString("\n")
+		}
+	}
+
+	// Container statuses
+	buf.WriteString("\nContainer Statuses:\n")
+	for _, cs := range pod.Status.ContainerStatuses {
+		buf.WriteString(fmt.Sprintf("  %s:\n", cs.Name))
+		buf.WriteString(fmt.Sprintf("    State:         %s\n", getContainerState(cs)))
+		buf.WriteString(fmt.Sprintf("    Ready:         %t\n", cs.Ready))
+		buf.WriteString(fmt.Sprintf("    Restart Count: %d\n", cs.RestartCount))
+	}
+
+	// Conditions
+	if len(pod.Status.Conditions) > 0 {
+		buf.WriteString("\nConditions:\n")
+		for _, cond := range pod.Status.Conditions {
+			buf.WriteString(fmt.Sprintf("  Type:    %s\n", cond.Type))
+			buf.WriteString(fmt.Sprintf("  Status:  %s\n", cond.Status))
+			if cond.Reason != "" {
+				buf.WriteString(fmt.Sprintf("  Reason:  %s\n", cond.Reason))
+			}
+			if cond.Message != "" {
+				buf.WriteString(fmt.Sprintf("  Message: %s\n", cond.Message))
+			}
+			buf.WriteString("\n")
+		}
+	}
+
+	// Events
+	if len(events.Items) > 0 {
+		buf.WriteString("Events:\n")
+		for _, event := range events.Items {
+			buf.WriteString(fmt.Sprintf("  %s  %s  %s  %s\n",
+				event.LastTimestamp.Format("15:04:05"),
+				event.Type,
+				event.Reason,
+				event.Message,
+			))
+		}
+	}
+
+	return buf.String(), nil
+}
+
+// DescribeNode returns kubectl describe output for a node
+func (c *APIServerClient) DescribeNode(ctx context.Context, nodeName string) (string, error) {
+	c.logger.Debug("Describing node", zap.String("node", nodeName))
+
+	// Get node details
+	node, err := c.clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("failed to get node: %w", err)
+	}
+
+	// Get events for this node
+	events, err := c.clientset.CoreV1().Events("").List(ctx, metav1.ListOptions{
+		FieldSelector: fmt.Sprintf("involvedObject.name=%s", nodeName),
+	})
+	if err != nil {
+		c.logger.Warn("Failed to get events", zap.Error(err))
+		events = &corev1.EventList{}
+	}
+
+	// Format describe output
+	var buf strings.Builder
+	buf.WriteString(fmt.Sprintf("Name:         %s\n", node.Name))
+
+	// Roles
+	roles := []string{}
+	for label := range node.Labels {
+		if strings.HasPrefix(label, "node-role.kubernetes.io/") {
+			role := strings.TrimPrefix(label, "node-role.kubernetes.io/")
+			roles = append(roles, role)
+		}
+	}
+	if len(roles) > 0 {
+		buf.WriteString(fmt.Sprintf("Roles:        %s\n", strings.Join(roles, ",")))
+	}
+
+	// Labels
+	buf.WriteString("\nLabels:\n")
+	for k, v := range node.Labels {
+		buf.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
+	}
+
+	// Addresses
+	buf.WriteString("\nAddresses:\n")
+	for _, addr := range node.Status.Addresses {
+		buf.WriteString(fmt.Sprintf("  %s: %s\n", addr.Type, addr.Address))
+	}
+
+	// Capacity
+	buf.WriteString("\nCapacity:\n")
+	buf.WriteString(fmt.Sprintf("  cpu:     %s\n", node.Status.Capacity.Cpu().String()))
+	buf.WriteString(fmt.Sprintf("  memory:  %s\n", node.Status.Capacity.Memory().String()))
+	buf.WriteString(fmt.Sprintf("  pods:    %s\n", node.Status.Capacity.Pods().String()))
+
+	// Allocatable
+	buf.WriteString("\nAllocatable:\n")
+	buf.WriteString(fmt.Sprintf("  cpu:     %s\n", node.Status.Allocatable.Cpu().String()))
+	buf.WriteString(fmt.Sprintf("  memory:  %s\n", node.Status.Allocatable.Memory().String()))
+	buf.WriteString(fmt.Sprintf("  pods:    %s\n", node.Status.Allocatable.Pods().String()))
+
+	// System Info
+	buf.WriteString("\nSystem Info:\n")
+	buf.WriteString(fmt.Sprintf("  OS Image:           %s\n", node.Status.NodeInfo.OSImage))
+	buf.WriteString(fmt.Sprintf("  Kernel Version:     %s\n", node.Status.NodeInfo.KernelVersion))
+	buf.WriteString(fmt.Sprintf("  Container Runtime:  %s\n", node.Status.NodeInfo.ContainerRuntimeVersion))
+	buf.WriteString(fmt.Sprintf("  Kubelet Version:    %s\n", node.Status.NodeInfo.KubeletVersion))
+
+	// Conditions
+	buf.WriteString("\nConditions:\n")
+	for _, cond := range node.Status.Conditions {
+		buf.WriteString(fmt.Sprintf("  Type:    %s\n", cond.Type))
+		buf.WriteString(fmt.Sprintf("  Status:  %s\n", cond.Status))
+		if cond.Reason != "" {
+			buf.WriteString(fmt.Sprintf("  Reason:  %s\n", cond.Reason))
+		}
+		if cond.Message != "" {
+			buf.WriteString(fmt.Sprintf("  Message: %s\n", cond.Message))
+		}
+		buf.WriteString("\n")
+	}
+
+	// Events
+	if len(events.Items) > 0 {
+		buf.WriteString("Events:\n")
+		for _, event := range events.Items {
+			buf.WriteString(fmt.Sprintf("  %s  %s  %s  %s\n",
+				event.LastTimestamp.Format("15:04:05"),
+				event.Type,
+				event.Reason,
+				event.Message,
+			))
+		}
+	}
+
+	return buf.String(), nil
+}
+
+// GetPodYAML returns YAML representation of a pod
+func (c *APIServerClient) GetPodYAML(ctx context.Context, namespace, podName string) (string, error) {
+	c.logger.Debug("Getting pod YAML",
+		zap.String("namespace", namespace),
+		zap.String("pod", podName),
+	)
+
+	// Get pod
+	pod, err := c.clientset.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("failed to get pod: %w", err)
+	}
+
+	// Convert to YAML
+	yamlBytes, err := yaml.Marshal(pod)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert to YAML: %w", err)
+	}
+
+	return string(yamlBytes), nil
+}
+
+// GetNodeYAML returns YAML representation of a node
+func (c *APIServerClient) GetNodeYAML(ctx context.Context, nodeName string) (string, error) {
+	c.logger.Debug("Getting node YAML", zap.String("node", nodeName))
+
+	// Get node
+	node, err := c.clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("failed to get node: %w", err)
+	}
+
+	// Convert to YAML
+	yamlBytes, err := yaml.Marshal(node)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert to YAML: %w", err)
+	}
+
+	return string(yamlBytes), nil
+}
+
+// getContainerState returns a human-readable container state
+func getContainerState(cs corev1.ContainerStatus) string {
+	if cs.State.Running != nil {
+		return fmt.Sprintf("Running (started at %s)", cs.State.Running.StartedAt.Format(time.RFC3339))
+	}
+	if cs.State.Waiting != nil {
+		return fmt.Sprintf("Waiting (%s: %s)", cs.State.Waiting.Reason, cs.State.Waiting.Message)
+	}
+	if cs.State.Terminated != nil {
+		return fmt.Sprintf("Terminated (exit code %d, reason: %s)",
+			cs.State.Terminated.ExitCode, cs.State.Terminated.Reason)
+	}
+	return "Unknown"
 }
 
 // Close cleans up resources
