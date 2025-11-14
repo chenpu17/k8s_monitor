@@ -355,6 +355,27 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		)
 
 	case tea.KeyMsg:
+		// In search modes, treat most single-character keys as text input
+		// Only allow navigation keys (arrows, page up/down, esc, backspace, space, enter)
+		if m.logsSearchMode || m.searchMode {
+			// Check if this is a special key that should work in search mode
+			isSpecialKey := key.Matches(msg, m.keys.Back) || // Esc
+				key.Matches(msg, m.keys.Up) ||
+				key.Matches(msg, m.keys.Down) ||
+				key.Matches(msg, m.keys.PageUp) ||
+				key.Matches(msg, m.keys.PageDown) ||
+				key.Matches(msg, m.keys.Enter) ||
+				msg.Type == tea.KeyBackspace ||
+				msg.Type == tea.KeyDelete ||
+				msg.Type == tea.KeySpace
+
+			// If not a special key, skip all shortcut processing and go to text input
+			if !isSpecialKey {
+				// Fall through to default case for text input handling
+				break
+			}
+		}
+
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			m.quitting = true
