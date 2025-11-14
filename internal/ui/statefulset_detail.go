@@ -1,0 +1,317 @@
+package ui
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/yourusername/k8s-monitor/internal/model"
+)
+
+// renderStatefulSetDetail renders the statefulset detail view
+func (m *Model) renderStatefulSetDetail() string {
+	if m.selectedStatefulSet == nil {
+		return "No statefulset selected"
+	}
+
+	sts := m.selectedStatefulSet
+
+	// Build sections
+	var sections []string
+
+	// Basic info
+	sections = append(sections, m.renderStatefulSetBasicInfo(sts))
+	sections = append(sections, "")
+
+	// Replica status
+	sections = append(sections, m.renderStatefulSetReplicaStatus(sts))
+	sections = append(sections, "")
+
+	// Selector
+	sections = append(sections, m.renderStatefulSetSelector(sts))
+	sections = append(sections, "")
+
+	// Pods
+	sections = append(sections, m.renderStatefulSetPods(sts))
+
+	// Split into lines for scroll handling
+	lines := strings.Split(strings.Join(sections, "\n"), "\n")
+	totalLines := len(lines)
+
+	// Apply scroll offset
+	maxVisible := m.height - 10
+	if maxVisible < 1 {
+		maxVisible = 1
+	}
+
+	// Clamp scroll offset
+	maxScroll := totalLines - maxVisible
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if m.detailScrollOffset > maxScroll {
+		m.detailScrollOffset = maxScroll
+	}
+	if m.detailScrollOffset < 0 {
+		m.detailScrollOffset = 0
+	}
+
+	startIdx := m.detailScrollOffset
+	if startIdx >= totalLines {
+		startIdx = totalLines - 1
+		if startIdx < 0 {
+			startIdx = 0
+		}
+	}
+
+	endIdx := startIdx + maxVisible
+	if endIdx > totalLines {
+		endIdx = totalLines
+	}
+
+	visibleLines := lines[startIdx:endIdx]
+
+	// Add scroll indicator
+	if totalLines > maxVisible {
+		scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n[Lines %d-%d of %d] (↑/↓ to scroll)", startIdx+1, endIdx, totalLines))
+		visibleLines = append(visibleLines, scrollInfo)
+	}
+
+	return strings.Join(visibleLines, "\n")
+}
+
+// renderStatefulSetBasicInfo renders statefulset basic information
+func (m *Model) renderStatefulSetBasicInfo(sts *model.StatefulSetData) string {
+	var info []string
+
+	info = append(info, StyleHeader.Render(fmt.Sprintf("📊 StatefulSet: %s", sts.Name)))
+	info = append(info, "")
+
+	info = append(info, fmt.Sprintf("  %s: %s",
+		StyleTextSecondary.Render("Namespace"),
+		sts.Namespace))
+
+	// Age
+	age := time.Since(sts.CreationTimestamp)
+	info = append(info, fmt.Sprintf("  %s: %s",
+		StyleTextSecondary.Render("Age"),
+		formatAge(age)))
+
+	return strings.Join(info, "\n")
+}
+
+// renderStatefulSetReplicaStatus renders replica status information
+func (m *Model) renderStatefulSetReplicaStatus(sts *model.StatefulSetData) string {
+	var info []string
+
+	info = append(info, StyleSubHeader.Render("Replica Status"))
+	info = append(info, "")
+
+	// Desired replicas
+	info = append(info, fmt.Sprintf("  %s: %s",
+		StyleTextSecondary.Render("Desired Replicas"),
+		StyleHighlight.Render(fmt.Sprintf("%d", sts.Replicas))))
+
+	// Ready replicas
+	readyStr := fmt.Sprintf("%d / %d", sts.ReadyReplicas, sts.Replicas)
+	if sts.ReadyReplicas == sts.Replicas && sts.Replicas > 0 {
+		readyStr = StyleStatusReady.Render(readyStr)
+	} else if sts.ReadyReplicas == 0 {
+		readyStr = StyleStatusNotReady.Render(readyStr)
+	} else {
+		readyStr = StyleStatusPending.Render(readyStr)
+	}
+	info = append(info, fmt.Sprintf("  %s: %s",
+		StyleTextSecondary.Render("Ready Replicas"),
+		readyStr))
+
+	// Current replicas
+	info = append(info, fmt.Sprintf("  %s: %d",
+		StyleTextSecondary.Render("Current Replicas"),
+		sts.CurrentReplicas))
+
+	// Updated replicas
+	info = append(info, fmt.Sprintf("  %s: %d",
+		StyleTextSecondary.Render("Updated Replicas"),
+		sts.UpdatedReplicas))
+
+	return strings.Join(info, "\n")
+}
+
+// renderStatefulSetSelector renders selector and labels
+func (m *Model) renderStatefulSetSelector(sts *model.StatefulSetData) string {
+	var info []string
+
+	info = append(info, StyleSubHeader.Render("Selector"))
+	info = append(info, "")
+
+	if len(sts.Selector) == 0 {
+		info = append(info, StyleTextMuted.Render("  No selector configured"))
+	} else {
+		for key, value := range sts.Selector {
+			info = append(info, fmt.Sprintf("  %s: %s",
+				StyleTextSecondary.Render(key),
+				value))
+		}
+	}
+
+	info = append(info, "")
+	info = append(info, StyleSubHeader.Render("Labels"))
+	info = append(info, "")
+
+	if len(sts.Labels) == 0 {
+		info = append(info, StyleTextMuted.Render("  No labels"))
+	} else {
+		for key, value := range sts.Labels {
+			info = append(info, fmt.Sprintf("  %s: %s",
+				StyleTextSecondary.Render(key),
+				value))
+		}
+	}
+
+	return strings.Join(info, "\n")
+}
+
+// renderStatefulSetPods renders pods managed by this statefulset
+func (m *Model) renderStatefulSetPods(sts *model.StatefulSetData) string {
+	var info []string
+
+	if m.clusterData == nil || len(m.clusterData.Pods) == 0 {
+		info = append(info, StyleSubHeader.Render("Managed Pods"))
+		info = append(info, "")
+		info = append(info, StyleTextMuted.Render("  No pod information available"))
+		return strings.Join(info, "\n")
+	}
+
+	// Check if statefulset has a selector
+	if len(sts.Selector) == 0 {
+		info = append(info, StyleSubHeader.Render("Managed Pods"))
+		info = append(info, "")
+		info = append(info, StyleTextMuted.Render("  No selector configured (matchLabels is empty)"))
+		return strings.Join(info, "\n")
+	}
+
+	// Find pods that match the statefulset selector
+	var matchingPods []*model.PodData
+	for _, pod := range m.clusterData.Pods {
+		// Check if pod is in same namespace
+		if pod.Namespace != sts.Namespace {
+			continue
+		}
+
+		// Check if pod labels match statefulset selector
+		matches := true
+		for selectorKey, selectorValue := range sts.Selector {
+			if podLabelValue, exists := pod.Labels[selectorKey]; !exists || podLabelValue != selectorValue {
+				matches = false
+				break
+			}
+		}
+
+		if matches {
+			matchingPods = append(matchingPods, pod)
+		}
+	}
+
+	info = append(info, StyleSubHeader.Render(fmt.Sprintf("Managed Pods (%d)", len(matchingPods))))
+	info = append(info, "")
+
+	if len(matchingPods) == 0 {
+		info = append(info, StyleTextMuted.Render("  No pods match this statefulset selector"))
+		return strings.Join(info, "\n")
+	}
+
+	// Table header
+	const (
+		colName     = 38
+		colPhase    = 11
+		colCPU      = 11
+		colMemory   = 11
+		colRx       = 10
+		colTx       = 10
+		colRestarts = 8
+	)
+
+	headerRow := fmt.Sprintf("  %s  %s  %s  %s  %s  %s  %s",
+		padRight("POD NAME", colName),
+		padRight("PHASE", colPhase),
+		padRight("CPU", colCPU),
+		padRight("MEMORY", colMemory),
+		padRight("RX ↓", colRx),
+		padRight("TX ↑", colTx),
+		padRight("RESTARTS", colRestarts),
+	)
+	info = append(info, StyleTextMuted.Render(headerRow))
+
+	// Show up to 20 pods
+	displayCount := len(matchingPods)
+	if displayCount > 20 {
+		displayCount = 20
+	}
+
+	for i := 0; i < displayCount; i++ {
+		pod := matchingPods[i]
+
+		phase := pod.Phase
+		var phaseStyled string
+		switch phase {
+		case "Running":
+			phaseStyled = StyleStatusRunning.Render(phase)
+		case "Succeeded":
+			phaseStyled = StyleStatusReady.Render(phase)
+		case "Failed":
+			phaseStyled = StyleStatusNotReady.Render(phase)
+		case "Pending":
+			phaseStyled = StyleStatusPending.Render(phase)
+		default:
+			phaseStyled = StyleTextMuted.Render(phase)
+		}
+
+		cpuStr := FormatMillicores(pod.CPUUsage)
+		if pod.CPUUsage == 0 {
+			cpuStr = StyleTextMuted.Render("-")
+		}
+
+		memStr := FormatBytes(pod.MemoryUsage)
+		if pod.MemoryUsage == 0 {
+			memStr = StyleTextMuted.Render("-")
+		}
+
+		// Network RX (download/receive)
+		rxRate := m.calculatePodNetworkRxRate(pod.Namespace, pod.Name)
+		rxStr := formatNetworkRate(rxRate)
+		if rxRate == 0 {
+			rxStr = StyleTextMuted.Render("-")
+		}
+
+		// Network TX (upload/send)
+		txRate := m.calculatePodNetworkTxRate(pod.Namespace, pod.Name)
+		txStr := formatNetworkRate(txRate)
+		if txRate == 0 {
+			txStr = StyleTextMuted.Render("-")
+		}
+
+		restarts := fmt.Sprintf("%d", pod.RestartCount)
+		if pod.RestartCount > 0 {
+			restarts = StyleWarning.Render(restarts)
+		}
+
+		row := fmt.Sprintf("  %s  %s  %s  %s  %s  %s  %s",
+			padRight(truncate(pod.Name, colName), colName),
+			padRight(phaseStyled, colPhase),
+			padRight(cpuStr, colCPU),
+			padRight(memStr, colMemory),
+			padRight(rxStr, colRx),
+			padRight(txStr, colTx),
+			padRight(restarts, colRestarts),
+		)
+		info = append(info, row)
+	}
+
+	if len(matchingPods) > displayCount {
+		info = append(info, "")
+		info = append(info, StyleTextMuted.Render(fmt.Sprintf("  ... and %d more pods", len(matchingPods)-displayCount)))
+	}
+
+	return strings.Join(info, "\n")
+}

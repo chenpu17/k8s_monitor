@@ -1,0 +1,1521 @@
+# English translations for k8s-monitor
+# This file contains all translatable strings for the application
+
+# ============================================================================
+# Application Info
+# ============================================================================
+[app.name]
+other = "Kubernetes Monitor"
+
+[app.title]
+other = "🔍 Kubernetes Monitor"
+
+[app.author]
+other = "chenpu"
+
+[app.description]
+other = "A CLI monitoring console for Kubernetes clusters"
+
+[app.long_description]
+other = "k8s-monitor is a lightweight, read-only CLI monitoring console for Kubernetes clusters. It provides real-time cluster health overview, node status, workload monitoring, and quick diagnostics."
+
+[app.footer]
+other = "Built with ❤️  using Bubble Tea and client-go."
+
+# ============================================================================
+# Commands
+# ============================================================================
+[commands.console.name]
+other = "console"
+
+[commands.console.short]
+other = "Start the interactive monitoring console"
+
+[commands.console.long]
+other = "Launch the interactive TUI console to monitor your Kubernetes cluster"
+
+# ============================================================================
+# Flags
+# ============================================================================
+[flags.config]
+other = "config file path (default: ./config/config.yaml)"
+
+[flags.kubeconfig]
+other = "path to kubeconfig file (default: $HOME/.kube/config)"
+
+[flags.context]
+other = "kubernetes context to use"
+
+[flags.namespace]
+other = "namespace to monitor (default: all namespaces)"
+
+[flags.verbose]
+other = "enable verbose logging"
+
+[flags.refresh]
+other = "refresh interval in seconds"
+
+[flags.no_color]
+other = "disable color output"
+
+[flags.insecure_kubelet]
+other = "skip TLS verification for kubelet metrics (use in test environments)"
+
+[flags.max_concurrent]
+other = "maximum concurrent kubelet queries (default: 10)"
+
+[flags.locale]
+other = "interface language (en, zh) (default \"en\")"
+
+# ============================================================================
+# View Titles
+# ============================================================================
+[views.overview.title]
+other = "Overview"
+
+[views.nodes.title]
+other = "Nodes"
+
+[views.pods.title]
+other = "Pods"
+
+[views.workloads.title]
+other = "Workloads"
+
+[views.network.title]
+other = "Network"
+
+[views.storage.title]
+other = "Storage"
+
+[views.events.title]
+other = "Events"
+
+[views.alerts.title]
+other = "Alerts"
+
+# ============================================================================
+# Overview Panel Headers
+# ============================================================================
+[overview.cluster_load.title]
+other = "⚡ Cluster Load - Sum of All Nodes"
+
+[overview.cluster_load.cpu]
+other = "💻 CPU"
+
+[overview.cluster_load.memory]
+other = "🧠 Memory"
+
+[overview.cluster_load.pods]
+other = "📦 Pods"
+
+[overview.cluster_load.nodes]
+other = "🖥️  Nodes"
+
+[overview.cluster_load.services]
+other = "🔌 Services"
+
+[overview.cluster_load.storage]
+other = "💾 Storage"
+
+[overview.cluster_load.workloads]
+other = "📋 Workloads"
+
+[overview.cluster_load.network]
+other = "🌐 Network"
+
+[overview.cluster_load.events]
+other = "⚠️  Events"
+
+[overview.cluster_load.alerts]
+other = "⚠️  Alerts"
+
+# ============================================================================
+# Cluster Load Labels
+# ============================================================================
+[load.cpu_used]
+other = "CPU Used"
+
+[load.cpu_req]
+other = "CPU Req"
+
+[load.mem_used]
+other = "Mem Used"
+
+[load.mem_req]
+other = "Mem Req"
+
+[load.net]
+other = "Net"
+
+[load.capacity]
+other = "capacity"
+
+[load.allocatable]
+other = "allocatable"
+
+[load.rx]
+other = "RX ↓"
+
+[load.tx]
+other = "TX ↑"
+
+[load.no_usage_metrics]
+other = "[no usage metrics]"
+
+[load.collecting_bandwidth]
+other = "collecting bandwidth data..."
+
+[load.metrics_unavailable]
+other = "metrics unavailable"
+
+# ============================================================================
+# Column Headers
+# ============================================================================
+[columns.name]
+other = "NAME"
+
+[columns.namespace]
+other = "NAMESPACE"
+
+[columns.status]
+other = "STATUS"
+
+[columns.roles]
+other = "ROLES"
+
+[columns.cpu]
+other = "CPU"
+
+[columns.memory]
+other = "MEMORY"
+
+[columns.rx]
+other = "RX ↓"
+
+[columns.tx]
+other = "TX ↑"
+
+[columns.pods]
+other = "PODS"
+
+[columns.restarts]
+other = "RESTARTS"
+
+[columns.type]
+other = "TYPE"
+
+[columns.reason]
+other = "REASON"
+
+[columns.object]
+other = "OBJECT"
+
+[columns.message]
+other = "MESSAGE"
+
+[columns.count]
+other = "COUNT"
+
+[columns.claim]
+other = "CLAIM"
+
+[columns.capacity]
+other = "CAPACITY"
+
+[columns.storageclass]
+other = "STORAGECLASS"
+
+[columns.volume]
+other = "VOLUME"
+
+[columns.completions]
+other = "COMPLETIONS"
+
+[columns.duration]
+other = "DURATION"
+
+[columns.age]
+other = "AGE"
+
+[columns.cluster_ip]
+other = "CLUSTER-IP"
+
+[columns.ports]
+other = "PORT(S)"
+
+[columns.endpoints]
+other = "ENDPOINTS"
+
+[columns.ready]
+other = "READY"
+
+[columns.up_to_date]
+other = "UP-TO-DATE"
+
+[columns.available]
+other = "AVAILABLE"
+
+[columns.current]
+other = "CURRENT"
+
+[columns.updated]
+other = "UPDATED"
+
+[columns.desired]
+other = "DESIRED"
+
+[columns.schedule]
+other = "SCHEDULE"
+
+[columns.suspend]
+other = "SUSPEND"
+
+[columns.active]
+other = "ACTIVE"
+
+[columns.last_schedule]
+other = "LAST SCHEDULE"
+
+[columns.pod]
+other = "POD"
+
+[columns.pod_ip]
+other = "POD IP"
+
+[columns.node]
+other = "NODE"
+
+# ============================================================================
+# Status Values
+# ============================================================================
+[status.ready]
+other = "Ready"
+
+[status.not_ready]
+other = "NotReady"
+
+[status.unknown]
+other = "Unknown"
+
+[status.running]
+other = "Running"
+
+[status.pending]
+other = "Pending"
+
+[status.failed]
+other = "Failed"
+
+[status.succeeded]
+other = "Succeeded"
+
+[status.terminating]
+other = "Terminating"
+
+[status.container_creating]
+other = "ContainerCreating"
+
+[status.crash_loop_back_off]
+other = "CrashLoopBackOff"
+
+[status.image_pull_back_off]
+other = "ImagePullBackOff"
+
+[status.error]
+other = "Error"
+
+[status.bound]
+other = "Bound"
+
+[status.available]
+other = "Available"
+
+[status.released]
+other = "Released"
+
+[status.complete]
+other = "Complete"
+
+[status.active]
+other = "Active"
+
+[status.suspended]
+other = "Suspended"
+
+# ============================================================================
+# General Messages
+# ============================================================================
+[msg.loading]
+other = "Loading..."
+
+[msg.goodbye]
+other = "Goodbye!"
+
+[msg.last_updated]
+other = "Last updated: {{.Time}}"
+
+[msg.auto_refresh]
+other = "Auto refresh: {{.Interval}}"
+
+[msg.no_data]
+other = "No cluster data available"
+
+[msg.no_summary]
+other = "No cluster summary available"
+
+[msg.no_pods]
+other = "No pods found"
+
+[msg.no_nodes]
+other = "No nodes found"
+
+[msg.no_events]
+other = "No events found"
+
+[msg.no_workloads]
+other = "No workloads found"
+
+[msg.no_services]
+other = "No services found"
+
+[msg.no_pvs]
+other = "No PVs"
+
+[msg.no_pvcs]
+other = "No PVCs"
+
+[msg.no_alerts]
+other = "No alerts"
+
+[msg.all_healthy]
+other = "All Systems Healthy"
+
+[msg.no_alerts_detected]
+other = "No alerts detected in the cluster."
+
+# ============================================================================
+# Scroll Indicators
+# ============================================================================
+[scroll.indicator]
+other = "[Lines {{.Start}}-{{.End}} of {{.Total}}] (↑/↓ to scroll, PgUp/PgDn for page)"
+
+[scroll.showing]
+other = "(showing {{.Start}}-{{.End}} of {{.Total}})"
+
+# ============================================================================
+# Key Bindings
+# ============================================================================
+[help.quit]
+other = "quit"
+
+[help.refresh]
+other = "refresh"
+
+[help.help]
+other = "help"
+
+[help.up]
+other = "up"
+
+[help.down]
+other = "down"
+
+[help.page_up]
+other = "page up"
+
+[help.page_down]
+other = "page down"
+
+[help.switch_view]
+other = "switch view"
+
+[help.detail]
+other = "detail"
+
+[help.back]
+other = "back"
+
+[help.filter]
+other = "filter"
+
+[help.clear_filter]
+other = "clear filter"
+
+[help.sort]
+other = "sort"
+
+[help.search]
+other = "search"
+
+[help.logs]
+other = "logs"
+
+[help.views]
+other = "views"
+
+[help.next]
+other = "next"
+
+[help.scroll]
+other = "scroll"
+
+[help.cancel]
+other = "cancel"
+
+[help.apply]
+other = "apply"
+
+[help.type_to_search]
+other = "type to search"
+
+[help.delete]
+other = "delete"
+
+[help.select]
+other = "select"
+
+[help.page]
+other = "page"
+
+# ============================================================================
+# Alerts
+# ============================================================================
+[alerts.panel_title]
+other = "⚠️  Alerts"
+
+[alerts.panel_title_compact]
+other = "⚠️  Alerts"
+
+[alerts.no_alerts]
+other = "✓ No alerts"
+
+[alerts.node_not_ready]
+other = "❌ {{.Count}} NotReady"
+
+[alerts.memory_pressure]
+other = "💾 {{.Count}} MemPress"
+
+[alerts.disk_pressure]
+other = "💿 {{.Count}} DiskPress"
+
+[alerts.pid_pressure]
+other = "🔢 {{.Count}} PID Pressure"
+
+[alerts.crash_loop]
+other = "🔄 {{.Count}} CrashLoop"
+
+[alerts.image_pull]
+other = "📦 {{.Count}} ImgPull"
+
+[alerts.oom_killed]
+other = "💥 {{.Count}} OOMKill"
+
+[alerts.no_endpoints]
+other = "🔌 {{.Count}} Service(s) with no endpoints"
+
+[alerts.more]
+other = "+{{.Count}} more"
+
+[alerts.high_restart_pods]
+other = "High Restart Pods:"
+
+# Full alert messages for alert view
+[alerts.full.node_not_ready]
+other = "❌ {{.Count}} Node(s) NotReady"
+
+[alerts.full.memory_pressure]
+other = "💾 {{.Count}} Node(s) with Memory Pressure"
+
+[alerts.full.disk_pressure]
+other = "💿 {{.Count}} Node(s) with Disk Pressure"
+
+[alerts.full.pid_pressure]
+other = "🔢 {{.Count}} Node(s) with PID Pressure"
+
+[alerts.full.crash_loop]
+other = "🔄 {{.Count}} Pod(s) in CrashLoopBackOff"
+
+[alerts.full.image_pull]
+other = "📦 {{.Count}} Pod(s) with ImagePullBackOff"
+
+[alerts.full.oom_killed]
+other = "💥 {{.Count}} Pod(s) OOMKilled"
+
+# ============================================================================
+# Kubelet Hints
+# ============================================================================
+[kubelet.hint.rbac]
+other = "Check RBAC: kubectl auth can-i get nodes/proxy"
+
+[kubelet.hint.tls]
+other = "Use --insecure-kubelet for TLS issues (test clusters only)"
+
+[kubelet.hint.try_insecure]
+other = "Try --insecure-kubelet"
+
+# ============================================================================
+# Storage View
+# ============================================================================
+[storage.title]
+other = "💾 Storage (PVs & PVCs)"
+
+[storage.pvs.title]
+other = "📦 PersistentVolumes"
+
+[storage.pvcs.title]
+other = "📋 PersistentVolumeClaims"
+
+[storage.stats.pvs]
+other = "Total PVs: {{.Total}}  Bound: {{.Bound}}  Available: {{.Available}}  Released: {{.Released}}"
+
+[storage.stats.pvcs]
+other = "Total PVCs: {{.Total}}  Bound: {{.Bound}}  Pending: {{.Pending}}"
+
+[storage.stats.size]
+other = "Storage Size: {{.Used}} / {{.Total}} ({{.Percent}}% used)"
+
+# ============================================================================
+# Network View
+# ============================================================================
+[network.title]
+other = "🌐 Network"
+
+[network.services_endpoints]
+other = "Services → Endpoints"
+
+[network.pod_network]
+other = "Pod Network Information & Traffic"
+
+[network.stats]
+other = "Services: {{.Services}} • Endpoints: {{.Endpoints}}"
+
+[network.stats_detailed]
+other = "With Endpoints: {{.WithEP}} • Without: {{.Without}} • Total Endpoints: {{.Total}}"
+
+[network.top_pods]
+other = "Showing top {{.Shown}} pods by current traffic rate (total: {{.Total}} pods)"
+
+[network.no_pods]
+other = "No pods with network information"
+
+[network.no_endpoints_short]
+other = "NoEP"
+
+# ============================================================================
+# Workloads View
+# ============================================================================
+[workloads.title]
+other = "⚙️  Workloads"
+
+[workloads.services]
+other = "Services"
+
+[workloads.no_jobs]
+other = "No jobs found"
+
+[workloads.active_jobs]
+other = "▸ Active Jobs"
+
+[workloads.failed_jobs]
+other = "▸ Failed Jobs"
+
+[workloads.completed_jobs]
+other = "▸ Completed Jobs (last 5)"
+
+[workloads.and_more]
+other = "... and {{.Count}} more completed jobs"
+
+# ============================================================================
+# Events View
+# ============================================================================
+[events.type_filter]
+other = "(type: {{.Type}})"
+
+[events.type.warning]
+other = "Warning"
+
+[events.type.normal]
+other = "Normal"
+
+# ============================================================================
+# Filter Panel
+# ============================================================================
+[filter.title]
+other = "🔍 Filter by Namespace"
+
+[filter.all_namespaces]
+other = "[All namespaces]"
+
+[filter.no_namespaces]
+other = "No namespaces available"
+
+[filter.filtered_by]
+other = "(filtered by: {{.Filter}})"
+
+# ============================================================================
+# Search Panel
+# ============================================================================
+[search.title]
+other = "🔍 Search"
+
+[search.help]
+other = "Type to search by name (case-insensitive)"
+
+[search.press_esc]
+other = "Press ESC to cancel"
+
+# ============================================================================
+# Logs Viewer
+# ============================================================================
+[logs.title]
+other = "📜 Logs: {{.Namespace}}/{{.Pod}}"
+
+[logs.container]
+other = "Container: {{.Name}}"
+
+[logs.no_pod]
+other = "No pod selected"
+
+[logs.error]
+other = "Error fetching logs: {{.Error}}"
+
+[logs.loading]
+other = "Loading logs..."
+
+[logs.no_containers]
+other = "No containers available"
+
+# ============================================================================
+# Detail View Labels
+# ============================================================================
+[detail.basic_info]
+other = "📋 Basic Information"
+
+[detail.resource_info]
+other = "📊 Resource Information"
+
+[detail.name]
+other = "Name"
+
+[detail.namespace]
+other = "Namespace"
+
+[detail.status]
+other = "Status"
+
+[detail.created]
+other = "Created"
+
+[detail.age]
+other = "Age"
+
+[detail.labels]
+other = "Labels"
+
+
+# ============================================================================
+# Sort Info
+# ============================================================================
+[sort.info]
+other = "Sort: {{.Field}} {{.Order}}"
+
+# ============================================================================
+# Error Messages
+# ============================================================================
+[errors.failed_to_load]
+other = "failed to load config: {{.Error}}"
+
+[errors.failed_to_create_app]
+other = "failed to create application: {{.Error}}"
+
+[errors.shutdown_error]
+other = "Error during shutdown: {{.Error}}"
+
+[errors.received_signal]
+other = "Received signal, shutting down..."
+
+[errors.application_error]
+other = "application error: {{.Error}}"
+
+# ============================================================================
+# Statistics Labels
+# ============================================================================
+[stats.total]
+other = "Total"
+
+[stats.total_alt]
+other = "Total:"
+
+[stats.ready]
+other = "Ready:"
+
+[stats.running]
+other = "Running:"
+
+[stats.pending]
+other = "Pending:"
+
+[stats.failed]
+other = "Failed:"
+
+[stats.not_ready]
+other = "NotReady:"
+
+[stats.bound]
+other = "Bound:"
+
+[stats.available]
+other = "Available:"
+
+[stats.released]
+other = "Released:"
+
+[stats.cluster_summary]
+other = "Cluster Summary:"
+
+[stats.total_alerts]
+other = "Total Alerts: {{.Count}}"
+
+[stats.critical]
+other = "🔴 Critical"
+
+[stats.warning]
+other = "🟡 Warning"
+
+[stats.info]
+other = "ℹ️  Info"
+
+# ============================================================================
+# Overview View
+# ============================================================================
+[overview.cluster_load_header]
+other = "⚡ Cluster Load - Sum of All Nodes"
+
+[overview.collecting_bandwidth]
+other = "Net: collecting bandwidth data..."
+
+[overview.metrics_unavailable]
+other = "Net: metrics unavailable"
+
+[overview.partial_metrics]
+other = "Partial metrics: {{.WithMetrics}}/{{.Total}} nodes reporting"
+
+# ============================================================================
+# Common Metrics
+# ============================================================================
+[metrics.cpu_used]
+other = "CPU Used:"
+
+[metrics.cpu_req]
+other = "CPU Req:"
+
+[metrics.mem_used]
+other = "Mem Used:"
+
+[metrics.mem_req]
+other = "Mem Req:"
+
+[metrics.net]
+other = "Net:"
+
+[metrics.rx]
+other = "RX ↓"
+
+[metrics.tx]
+other = "TX ↑"
+
+[metrics.capacity]
+other = "capacity"
+
+[metrics.allocatable]
+other = "allocatable"
+
+[metrics.no_usage_metrics]
+other = "[no usage metrics]"
+
+# ============================================================================
+# Common Terms
+# ============================================================================
+[common.nodes]
+other = "nodes"
+
+[common.pods]
+other = "pods"
+
+[common.services]
+other = "services"
+
+
+[overview.cluster_load_realtime]
+other = "⚡ Cluster Load - Real-time Status"
+
+[overview.cpu_load]
+other = "CPU Load:"
+
+[overview.memory_load]
+other = "Memory Load:"
+
+[overview.network_traffic]
+other = "Network Traffic:"
+
+[overview.usage_unavailable_show_requests]
+other = "(actual usage data unavailable, showing requests)"
+
+[overview.requests]
+other = "Requests:"
+
+[overview.cumulative]
+other = "(cumulative)"
+
+[overview.partial_nodes_missing_metrics]
+other = "Some nodes missing kubelet metrics ({{.WithMetrics}}/{{.Total}})"
+
+[overview.hint_kubelet_no_rate]
+other = "Hint: kubelet not providing rate data"
+
+[overview.kubelet_metrics_unavailable]
+other = "kubelet metrics unavailable"
+
+[overview.hint]
+other = "Hint"
+
+[overview.hint_tls_alternative]
+other = "or configure cluster to skip kubelet TLS verification"
+
+[overview.hint_rbac_grant]
+other = "grant get nodes/proxy permission to current credentials"
+
+[overview.partial_nodes_no_metrics]
+other = "Some nodes not returning kubelet metrics ({{.WithMetrics}}/{{.Total}})"
+
+[overview.capacity]
+other = "Capacity:"
+
+[overview.allocatable]
+other = "Allocatable:"
+
+[overview.requested]
+other = "Requested:"
+
+[overview.actual]
+other = "Actual:"
+
+[overview.running]
+other = "Running:"
+
+[overview.pending]
+other = "Pending:"
+
+[overview.failed]
+other = "Failed:"
+
+
+# ============================================================================
+# Common UI Terms
+# ============================================================================
+[common.error]
+other = "Error"
+
+[common.last_updated]
+other = "Last updated"
+
+[common.auto_refresh]
+other = "Auto refresh"
+
+[common.loading]
+other = "Loading..."
+
+# ============================================================================
+# Key Bindings
+# ============================================================================
+[keys.quit]
+other = "quit"
+
+[keys.refresh]
+other = "refresh"
+
+[keys.scroll]
+other = "scroll"
+
+[keys.page]
+other = "page"
+
+[keys.back]
+other = "back"
+
+[keys.type_to_search]
+other = "type to search"
+
+[keys.delete]
+other = "delete"
+
+[keys.cancel]
+other = "cancel"
+
+[keys.select]
+other = "select"
+
+[keys.apply]
+other = "apply"
+
+[keys.logs]
+other = "logs"
+
+[keys.views]
+other = "views"
+
+[keys.next]
+other = "next"
+
+[keys.up]
+other = "up"
+
+[keys.down]
+other = "down"
+
+[keys.detail]
+other = "detail"
+
+[keys.sort]
+other = "sort"
+
+[keys.search]
+other = "search"
+
+[keys.filter]
+other = "filter"
+
+[keys.clear]
+other = "clear"
+
+# ============================================================================
+# View Names
+# ============================================================================
+[views.overview.name]
+other = "Overview"
+
+[views.nodes.name]
+other = "Nodes"
+
+[views.pods.name]
+other = "Pods"
+
+[views.workloads.name]
+other = "Workloads"
+
+[views.network.name]
+other = "Network"
+
+[views.storage.name]
+other = "Storage"
+
+[views.events.name]
+other = "Events"
+
+[views.alerts.name]
+other = "Alerts"
+
+
+# ============================================================================
+# Detail Views
+# ============================================================================
+
+# Pod Detail View
+[detail.pod.no_selected]
+other = "No pod selected"
+
+[detail.pod.title]
+other = "Pod"
+
+[detail.pod.basic_info]
+other = "📋 Basic Information"
+
+[detail.pod.network_bandwidth]
+other = "Network Bandwidth:"
+
+[detail.pod.collecting_data]
+other = "Collecting bandwidth data..."
+
+[detail.pod.metrics_unavailable]
+other = "Metrics unavailable (pod not reporting kubelet stats)"
+
+[detail.pod.historical_trends]
+other = "Historical Trends:"
+
+[detail.pod.cpu_label]
+other = "CPU:    "
+
+[detail.pod.memory_label]
+other = "Memory: "
+
+[detail.pod.network_rx_label]
+other = "Net RX: "
+
+[detail.pod.network_tx_label]
+other = "Net TX: "
+
+[detail.pod.snapshots]
+other = "(Based on {{.Count}} snapshots)"
+
+[detail.pod.containers]
+other = "🐳 Containers ({{.Total}} total, {{.Ready}} ready)"
+
+[detail.pod.no_container_info]
+other = "No container information available"
+
+[detail.pod.image]
+other = "Image"
+
+[detail.pod.state]
+other = "State"
+
+[detail.pod.restart_count]
+other = "Restart Count"
+
+# Node Detail View
+[detail.node.no_selected]
+other = "No node selected"
+
+[detail.node.title]
+other = "Node"
+
+[detail.node.basic_info]
+other = "📋 Basic Information"
+
+[detail.node.resource_info]
+other = "📊 Resource Information"
+
+[detail.node.network_traffic]
+other = "Network Traffic (Cumulative):"
+
+[detail.node.rx]
+other = "RX"
+
+[detail.node.tx]
+other = "TX"
+
+[detail.node.historical_trends]
+other = "Historical Trends:"
+
+[detail.node.cpu_label]
+other = "CPU:    "
+
+[detail.node.memory_label]
+other = "Memory: "
+
+[detail.node.network_rx_label]
+other = "Net RX: "
+
+[detail.node.network_tx_label]
+other = "Net TX: "
+
+[detail.node.snapshots]
+other = "(Based on {{.Count}} snapshots)"
+
+[detail.node.pods_on_node]
+other = "📦 Pods on this Node ({{.Total}} total)"
+
+[detail.node.no_pods]
+other = "No pods running on this node"
+
+# Common Detail View
+[detail.scroll_indicator]
+other = "[Lines {{.Start}}-{{.End}} of {{.Total}}] (↑/↓ to scroll, PgUp/PgDn for page)"
+
+[detail.field.name]
+other = "Name"
+
+[detail.field.namespace]
+other = "Namespace"
+
+[detail.field.status]
+other = "Status"
+
+[detail.field.node]
+other = "Node"
+
+[detail.field.pod_ip]
+other = "Pod IP"
+
+[detail.field.host_ip]
+other = "Host IP"
+
+[detail.field.restarts]
+other = "Restarts"
+
+[detail.field.architecture]
+other = "Architecture"
+
+[detail.field.os_image]
+other = "OS Image"
+
+[detail.field.internal_ip]
+other = "Internal IP"
+
+[detail.field.external_ip]
+other = "External IP"
+
+[detail.field.cpu]
+other = "CPU"
+
+[detail.field.memory]
+other = "Memory"
+
+[detail.field.pods]
+other = "Pods"
+
+
+# ============================================================================
+# Network View - Pod Network Section
+# ============================================================================
+[network.pod_network_title]
+other = "Pod Network Information & Traffic"
+
+[network.pod_network_showing_top]
+other = "Showing top {{.Top}} pods by current traffic rate (total: {{.Total}} pods)"
+
+[network.pod_network_no_pods]
+other = "No pods with network information"
+
+[network.pod_network_rx]
+other = "RX (Received)"
+
+[network.pod_network_tx]
+other = "TX (Sent)"
+
+[network.ports_more]
+other = "+{{.Count}} more"
+
+[network.status_no_endpoints]
+other = "NoEP"
+
+[network.status_ready]
+other = "Ready"
+
+# ============================================================================
+# Workloads View - Detailed Sections
+# ============================================================================
+[workloads.deployments.title]
+other = "Deployments"
+
+[workloads.statefulsets.title]
+other = "StatefulSets"
+
+[workloads.daemonsets.title]
+other = "DaemonSets"
+
+[workloads.jobs.title]
+other = "Jobs"
+
+[workloads.cronjobs.title]
+other = "CronJobs"
+
+[workloads.jobs.stats]
+other = "Total: {{.Total}} • {{.Succeeded}} • {{.Failed}} • {{.Active}}"
+
+[workloads.jobs.stats_succeeded]
+other = "Succeeded: {{.Count}}"
+
+[workloads.jobs.stats_failed]
+other = "Failed: {{.Count}}"
+
+[workloads.jobs.stats_active]
+other = "Active: {{.Count}}"
+
+[workloads.jobs.active_section]
+other = "▸ Active Jobs"
+
+[workloads.jobs.failed_section]
+other = "▸ Failed Jobs"
+
+[workloads.jobs.completed_section]
+other = "▸ Completed Jobs (last 5)"
+
+[workloads.jobs.and_more]
+other = "... and {{.Count}} more completed jobs"
+
+[workloads.jobs.status_complete]
+other = "Complete"
+
+[workloads.jobs.status_failed]
+other = "Failed({{.Count}})"
+
+[workloads.jobs.status_active]
+other = "Active({{.Count}})"
+
+[workloads.jobs.status_pending]
+other = "Pending"
+
+[workloads.jobs.status_running]
+other = "running"
+
+[workloads.cronjobs.suspend_false]
+other = "False"
+
+[workloads.cronjobs.suspend_true]
+other = "True"
+
+[workloads.no_deployments]
+other = "No deployments found"
+
+[workloads.no_statefulsets]
+other = "No statefulsets found"
+
+[workloads.no_daemonsets]
+other = "No daemonsets found"
+
+[workloads.no_cronjobs]
+other = "No cronjobs found"
+
+
+
+# ============================================================================
+# Job Detail View
+# ============================================================================
+[detail.job.no_selected]
+other = "No job selected"
+
+[detail.job.title]
+other = "Job"
+
+[detail.job.basic_info]
+other = "📋 Basic Information"
+
+[detail.job.status_completed]
+other = "✓ Completed ({{.Succeeded}}/{{.Completions}})"
+
+[detail.job.status_failed]
+other = "✗ Failed ({{.Failed}} failed, {{.Succeeded}}/{{.Completions}} succeeded)"
+
+[detail.job.status_running]
+other = "⟳ Running ({{.Active}} active, {{.Succeeded}}/{{.Completions}} succeeded)"
+
+[detail.job.target_completions]
+other = "Target Completions"
+
+[detail.job.duration]
+other = "Duration"
+
+[detail.job.still_running]
+other = "still running"
+
+[detail.job.pods_header]
+other = "📦 Job Pods"
+
+[detail.job.pods_total]
+other = "📦 Job Pods ({{.Total}} total)"
+
+[detail.job.pods_running]
+other = "{{.Count}} running"
+
+[detail.job.pods_succeeded]
+other = "{{.Count}} succeeded"
+
+[detail.job.pods_failed]
+other = "{{.Count}} failed"
+
+[detail.job.no_pod_info]
+other = "No pod information available"
+
+[detail.job.no_pods]
+other = "No pods found for this job"
+
+[detail.job.resource_summary]
+other = "Resource Summary"
+
+[detail.job.network_bandwidth]
+other = "Network Bandwidth"
+
+[detail.job.request]
+other = "Request"
+
+[detail.job.limit]
+other = "Limit"
+
+[detail.job.usage]
+other = "Usage"
+
+[detail.job.total]
+other = "Total"
+
+[detail.job.pods_detail]
+other = "Pods Detail"
+
+[detail.job.more_pods]
+other = "... and {{.Extra}} more pods (showing top {{.Shown}} by priority)"
+
+[detail.job.help_text]
+other = "↑/↓ to select pod • Enter to view details • l to view logs • Esc to go back"
+
+[detail.job.phase]
+other = "Phase"
+
+
+# ============================================================================
+# Additional Logs Viewer Keys
+# ============================================================================
+[logs.auto_follow]
+other = "Auto-follow"
+
+[logs.paused]
+other = "Paused"
+
+[logs.lines_range]
+other = "[Lines {{.Start}}-{{.End}} of {{.Total}}]"
+
+[logs.lines_total]
+other = "[{{.Total}} lines]"
+
+[logs.updated_ago]
+other = "Updated {{.Seconds}}s ago"
+
+[logs.help.scroll]
+other = "↑/↓ scroll • PgUp/PgDn page • Esc back"
+
+[logs.help.back]
+other = "Esc back"
+
+# ============================================================================
+# Additional Search Panel Keys
+# ============================================================================
+[search.placeholder]
+other = "Type to search by name (case-insensitive)"
+
+# ============================================================================
+# PV Detail View
+# ============================================================================
+[detail.pv.no_selected]
+other = "No PV selected"
+
+[detail.pv.title]
+other = "PersistentVolume"
+
+[detail.pv.basic_info]
+other = "📋 Basic Information"
+
+[detail.pv.status]
+other = "Status"
+
+[detail.pv.capacity]
+other = "Capacity"
+
+[detail.pv.storageclass]
+other = "StorageClass"
+
+[detail.pv.reclaim_policy]
+other = "Reclaim Policy"
+
+[detail.pv.access_modes]
+other = "Access Modes"
+
+[detail.pv.volume_mode]
+other = "Volume Mode"
+
+[detail.pv.claim_info]
+other = "📦 Claim Information"
+
+[detail.pv.bound_to]
+other = "Bound to"
+
+[detail.pv.not_bound]
+other = "<not bound>"
+
+[detail.pv.source_info]
+other = "💾 Source Information"
+
+[detail.pv.type]
+other = "Type"
+
+[detail.pv.path]
+other = "Path"
+
+[detail.pv.server]
+other = "Server"
+
+[detail.pv.lifecycle]
+other = "📅 Lifecycle"
+
+[detail.pv.age]
+other = "Age"
+
+# ============================================================================
+# PVC Detail View
+# ============================================================================
+[detail.pvc.no_selected]
+other = "No PVC selected"
+
+[detail.pvc.title]
+other = "PersistentVolumeClaim"
+
+[detail.pvc.basic_info]
+other = "📋 Basic Information"
+
+[detail.pvc.namespace]
+other = "Namespace"
+
+[detail.pvc.status]
+other = "Status"
+
+[detail.pvc.volume]
+other = "Volume"
+
+[detail.pvc.not_bound]
+other = "<not bound>"
+
+[detail.pvc.capacity]
+other = "Capacity"
+
+[detail.pvc.unknown]
+other = "<unknown>"
+
+[detail.pvc.storageclass]
+other = "StorageClass"
+
+[detail.pvc.none]
+other = "<none>"
+
+[detail.pvc.access_modes]
+other = "Access Modes"
+
+[detail.pvc.volume_mode]
+other = "Volume Mode"
+
+[detail.pvc.spec]
+other = "📝 Spec"
+
+[detail.pvc.requested]
+other = "Requested"
+
+[detail.pvc.selector]
+other = "Selector"
+
+[detail.pvc.volume_name]
+other = "Volume Name"
+
+[detail.pvc.lifecycle]
+other = "📅 Lifecycle"
+
+[detail.pvc.age]
+other = "Age"
+
+[detail.pvc.conditions]
+other = "📊 Conditions"
+
+[detail.pvc.no_conditions]
+other = "No conditions recorded"
+
+[detail.pvc.condition.type]
+other = "Type"
+
+[detail.pvc.condition.status]
+other = "Status"
+
+[detail.pvc.condition.reason]
+other = "Reason"
+
+[detail.pvc.condition.message]
+other = "Message"
+
+[detail.pvc.condition.since]
+other = "Since"

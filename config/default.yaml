@@ -1,0 +1,78 @@
+# k8s-monitor Configuration File
+# This file contains default configuration for k8s-monitor
+
+cluster:
+  # Path to kubeconfig file. Leave empty to use default ($HOME/.kube/config)
+  kubeconfig: ""
+
+  # Kubernetes context to use. Leave empty to use current context
+  context: ""
+
+  # Default namespace to monitor. Leave empty for all namespaces
+  namespace: ""
+
+refresh:
+  # Auto-refresh interval (format: 10s, 1m, etc.)
+  interval: 10s
+
+  # Request timeout
+  timeout: 5s
+
+  # Maximum concurrent requests to API server/kubelet
+  max_concurrent: 10
+
+cache:
+  # Cache entry TTL
+  ttl: 60s
+
+  # Maximum number of cache entries
+  max_entries: 1000
+
+datasource:
+  # Data source priority: apiserver, kubelet, metrics-server
+  priority:
+    - apiserver
+    - kubelet
+    - metrics-server
+
+  kubelet:
+    # Kubelet port
+    port: 10250
+
+    # Access mode: auto (try direct, fallback to proxy), direct, proxy
+    use_proxy: auto
+
+    # Kubelet request timeout
+    timeout: 5s
+
+ui:
+  # Color mode: auto, always, never
+  color_mode: auto
+
+  # Default view: overview, node, workload
+  default_view: overview
+
+  # Maximum rows to display in tables
+  max_rows: 100
+
+filter:
+  # Default namespace filter (empty means all)
+  default_namespace: ""
+
+  # Namespaces to exclude from display
+  exclude_namespaces: []
+    # - kube-system
+    # - kube-public
+
+logging:
+  # Log level: debug, info, warn, error
+  level: info
+
+  # Log file path
+  file: /tmp/k8s-monitor.log
+
+  # Max log file size in MB
+  max_size: 100
+
+  # Max number of log backups
+  max_backups: 3

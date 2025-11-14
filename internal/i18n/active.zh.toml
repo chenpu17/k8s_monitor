@@ -1,0 +1,1520 @@
+# 简体中文翻译 - k8s-monitor
+# 本文件包含应用程序的所有可翻译字符串
+
+# ============================================================================
+# 应用信息
+# ============================================================================
+[app.name]
+other = "Kubernetes 监控器"
+
+[app.title]
+other = "🔍 Kubernetes 监控器"
+
+[app.author]
+other = "陈普"
+
+[app.description]
+other = "Kubernetes 集群 CLI 监控控制台"
+
+[app.long_description]
+other = "k8s-monitor 是一个轻量级、只读的 Kubernetes 集群 CLI 监控控制台。它提供实时集群健康概览、节点状态、工作负载监控和快速诊断。"
+
+[app.footer]
+other = "基于 Bubble Tea 和 client-go 构建 ❤️"
+
+# ============================================================================
+# 命令
+# ============================================================================
+[commands.console.name]
+other = "console"
+
+[commands.console.short]
+other = "启动交互式监控控制台"
+
+[commands.console.long]
+other = "启动交互式 TUI 控制台来监控您的 Kubernetes 集群"
+
+# ============================================================================
+# 命令行标志
+# ============================================================================
+[flags.config]
+other = "配置文件路径（默认：./config/config.yaml）"
+
+[flags.kubeconfig]
+other = "kubeconfig 文件路径（默认：$HOME/.kube/config）"
+
+[flags.context]
+other = "要使用的 kubernetes 上下文"
+
+[flags.namespace]
+other = "要监控的命名空间（默认：所有命名空间）"
+
+[flags.verbose]
+other = "启用详细日志"
+
+[flags.refresh]
+other = "刷新间隔（秒）"
+
+[flags.no_color]
+other = "禁用彩色输出"
+
+[flags.insecure_kubelet]
+other = "跳过 kubelet 指标的 TLS 验证（仅在测试环境中使用）"
+
+[flags.max_concurrent]
+other = "最大并发 kubelet 查询数（默认：10）"
+
+[flags.locale]
+other = "界面语言 (en, zh)（默认 \"en\"）"
+
+# ============================================================================
+# 视图标题
+# ============================================================================
+[views.overview.title]
+other = "概览"
+
+[views.nodes.title]
+other = "节点"
+
+[views.pods.title]
+other = "Pod"
+
+[views.workloads.title]
+other = "工作负载"
+
+[views.network.title]
+other = "网络"
+
+[views.storage.title]
+other = "存储"
+
+[views.events.title]
+other = "事件"
+
+[views.alerts.title]
+other = "告警"
+
+# ============================================================================
+# 概览面板标题
+# ============================================================================
+[overview.cluster_load.title]
+other = "⚡ 集群负载 - 所有节点汇总"
+
+[overview.cluster_load.cpu]
+other = "💻 CPU"
+
+[overview.cluster_load.memory]
+other = "🧠 内存"
+
+[overview.cluster_load.pods]
+other = "📦 Pod"
+
+[overview.cluster_load.nodes]
+other = "🖥️  节点"
+
+[overview.cluster_load.services]
+other = "🔌 服务"
+
+[overview.cluster_load.storage]
+other = "💾 存储"
+
+[overview.cluster_load.workloads]
+other = "📋 工作负载"
+
+[overview.cluster_load.network]
+other = "🌐 网络"
+
+[overview.cluster_load.events]
+other = "⚠️  事件"
+
+[overview.cluster_load.alerts]
+other = "⚠️  告警"
+
+# ============================================================================
+# 集群负载标签
+# ============================================================================
+[load.cpu_used]
+other = "CPU 使用"
+
+[load.cpu_req]
+other = "CPU 请求"
+
+[load.mem_used]
+other = "内存使用"
+
+[load.mem_req]
+other = "内存请求"
+
+[load.net]
+other = "网络"
+
+[load.capacity]
+other = "容量"
+
+[load.allocatable]
+other = "可分配"
+
+[load.rx]
+other = "接收 ↓"
+
+[load.tx]
+other = "发送 ↑"
+
+[load.no_usage_metrics]
+other = "[无使用指标]"
+
+[load.collecting_bandwidth]
+other = "正在收集带宽数据..."
+
+[load.metrics_unavailable]
+other = "指标不可用"
+
+# ============================================================================
+# 列标题
+# ============================================================================
+[columns.name]
+other = "名称"
+
+[columns.namespace]
+other = "命名空间"
+
+[columns.status]
+other = "状态"
+
+[columns.roles]
+other = "角色"
+
+[columns.cpu]
+other = "CPU"
+
+[columns.memory]
+other = "内存"
+
+[columns.rx]
+other = "接收 ↓"
+
+[columns.tx]
+other = "发送 ↑"
+
+[columns.pods]
+other = "POD 数"
+
+[columns.restarts]
+other = "重启次数"
+
+[columns.type]
+other = "类型"
+
+[columns.reason]
+other = "原因"
+
+[columns.object]
+other = "对象"
+
+[columns.message]
+other = "消息"
+
+[columns.count]
+other = "次数"
+
+[columns.claim]
+other = "声明"
+
+[columns.capacity]
+other = "容量"
+
+[columns.storageclass]
+other = "存储类"
+
+[columns.volume]
+other = "卷"
+
+[columns.completions]
+other = "完成情况"
+
+[columns.duration]
+other = "持续时间"
+
+[columns.age]
+other = "年龄"
+
+[columns.cluster_ip]
+other = "集群 IP"
+
+[columns.ports]
+other = "端口"
+
+[columns.endpoints]
+other = "端点"
+
+[columns.ready]
+other = "就绪"
+
+[columns.up_to_date]
+other = "最新"
+
+[columns.available]
+other = "可用"
+
+[columns.current]
+other = "当前"
+
+[columns.updated]
+other = "已更新"
+
+[columns.desired]
+other = "期望"
+
+[columns.schedule]
+other = "调度"
+
+[columns.suspend]
+other = "暂停"
+
+[columns.active]
+other = "活跃"
+
+[columns.last_schedule]
+other = "上次调度"
+
+[columns.pod]
+other = "POD"
+
+[columns.pod_ip]
+other = "POD IP"
+
+[columns.node]
+other = "节点"
+
+# ============================================================================
+# 状态值
+# ============================================================================
+[status.ready]
+other = "就绪"
+
+[status.not_ready]
+other = "未就绪"
+
+[status.unknown]
+other = "未知"
+
+[status.running]
+other = "运行中"
+
+[status.pending]
+other = "等待中"
+
+[status.failed]
+other = "失败"
+
+[status.succeeded]
+other = "成功"
+
+[status.terminating]
+other = "终止中"
+
+[status.container_creating]
+other = "容器创建中"
+
+[status.crash_loop_back_off]
+other = "崩溃循环"
+
+[status.image_pull_back_off]
+other = "镜像拉取失败"
+
+[status.error]
+other = "错误"
+
+[status.bound]
+other = "已绑定"
+
+[status.available]
+other = "可用"
+
+[status.released]
+other = "已释放"
+
+[status.complete]
+other = "完成"
+
+[status.active]
+other = "活跃"
+
+[status.suspended]
+other = "已暂停"
+
+# ============================================================================
+# 通用消息
+# ============================================================================
+[msg.loading]
+other = "加载中..."
+
+[msg.goodbye]
+other = "再见！"
+
+[msg.last_updated]
+other = "最后更新：{{.Time}}"
+
+[msg.auto_refresh]
+other = "自动刷新：{{.Interval}}"
+
+[msg.no_data]
+other = "无集群数据"
+
+[msg.no_summary]
+other = "无集群摘要信息"
+
+[msg.no_pods]
+other = "未找到 Pod"
+
+[msg.no_nodes]
+other = "未找到节点"
+
+[msg.no_events]
+other = "未找到事件"
+
+[msg.no_workloads]
+other = "未找到工作负载"
+
+[msg.no_services]
+other = "未找到服务"
+
+[msg.no_pvs]
+other = "无持久卷"
+
+[msg.no_pvcs]
+other = "无持久卷声明"
+
+[msg.no_alerts]
+other = "无告警"
+
+[msg.all_healthy]
+other = "所有系统正常"
+
+[msg.no_alerts_detected]
+other = "集群中未检测到告警"
+
+# ============================================================================
+# 滚动指示器
+# ============================================================================
+[scroll.indicator]
+other = "[第 {{.Start}}-{{.End}} 行，共 {{.Total}} 行]（↑/↓ 滚动，PgUp/PgDn 翻页）"
+
+[scroll.showing]
+other = "（显示 {{.Start}}-{{.End}}，共 {{.Total}}）"
+
+# ============================================================================
+# 按键绑定
+# ============================================================================
+[help.quit]
+other = "退出"
+
+[help.refresh]
+other = "刷新"
+
+[help.help]
+other = "帮助"
+
+[help.up]
+other = "上"
+
+[help.down]
+other = "下"
+
+[help.page_up]
+other = "上一页"
+
+[help.page_down]
+other = "下一页"
+
+[help.switch_view]
+other = "切换视图"
+
+[help.detail]
+other = "详情"
+
+[help.back]
+other = "返回"
+
+[help.filter]
+other = "过滤"
+
+[help.clear_filter]
+other = "清除过滤"
+
+[help.sort]
+other = "排序"
+
+[help.search]
+other = "搜索"
+
+[help.logs]
+other = "日志"
+
+[help.views]
+other = "视图"
+
+[help.next]
+other = "下一个"
+
+[help.scroll]
+other = "滚动"
+
+[help.cancel]
+other = "取消"
+
+[help.apply]
+other = "应用"
+
+[help.type_to_search]
+other = "输入以搜索"
+
+[help.delete]
+other = "删除"
+
+[help.select]
+other = "选择"
+
+[help.page]
+other = "翻页"
+
+# ============================================================================
+# 告警
+# ============================================================================
+[alerts.panel_title]
+other = "⚠️  告警"
+
+[alerts.panel_title_compact]
+other = "⚠️  告警"
+
+[alerts.no_alerts]
+other = "✓ 无告警"
+
+[alerts.node_not_ready]
+other = "❌ {{.Count}} 个未就绪"
+
+[alerts.memory_pressure]
+other = "💾 {{.Count}} 个内存压力"
+
+[alerts.disk_pressure]
+other = "💿 {{.Count}} 个磁盘压力"
+
+[alerts.pid_pressure]
+other = "🔢 {{.Count}} 个 PID 压力"
+
+[alerts.crash_loop]
+other = "🔄 {{.Count}} 个崩溃循环"
+
+[alerts.image_pull]
+other = "📦 {{.Count}} 个镜像拉取"
+
+[alerts.oom_killed]
+other = "💥 {{.Count}} 个 OOM 终止"
+
+[alerts.no_endpoints]
+other = "🔌 {{.Count}} 个服务无端点"
+
+[alerts.more]
+other = "还有 {{.Count}} 个"
+
+[alerts.high_restart_pods]
+other = "高重启 Pod："
+
+# 告警视图的完整消息
+[alerts.full.node_not_ready]
+other = "❌ {{.Count}} 个节点未就绪"
+
+[alerts.full.memory_pressure]
+other = "💾 {{.Count}} 个节点存在内存压力"
+
+[alerts.full.disk_pressure]
+other = "💿 {{.Count}} 个节点存在磁盘压力"
+
+[alerts.full.pid_pressure]
+other = "🔢 {{.Count}} 个节点存在 PID 压力"
+
+[alerts.full.crash_loop]
+other = "🔄 {{.Count}} 个 Pod 处于崩溃循环"
+
+[alerts.full.image_pull]
+other = "📦 {{.Count}} 个 Pod 镜像拉取失败"
+
+[alerts.full.oom_killed]
+other = "💥 {{.Count}} 个 Pod 被 OOM 终止"
+
+# ============================================================================
+# Kubelet 提示
+# ============================================================================
+[kubelet.hint.rbac]
+other = "检查 RBAC：kubectl auth can-i get nodes/proxy"
+
+[kubelet.hint.tls]
+other = "使用 --insecure-kubelet 解决 TLS 问题（仅限测试集群）"
+
+[kubelet.hint.try_insecure]
+other = "尝试 --insecure-kubelet"
+
+# ============================================================================
+# 存储视图
+# ============================================================================
+[storage.title]
+other = "💾 存储（PV 和 PVC）"
+
+[storage.pvs.title]
+other = "📦 持久卷"
+
+[storage.pvcs.title]
+other = "📋 持久卷声明"
+
+[storage.stats.pvs]
+other = "总 PV 数：{{.Total}}  已绑定：{{.Bound}}  可用：{{.Available}}  已释放：{{.Released}}"
+
+[storage.stats.pvcs]
+other = "总 PVC 数：{{.Total}}  已绑定：{{.Bound}}  等待中：{{.Pending}}"
+
+[storage.stats.size]
+other = "存储大小：{{.Used}} / {{.Total}}（已使用 {{.Percent}}%）"
+
+# ============================================================================
+# 网络视图
+# ============================================================================
+[network.title]
+other = "🌐 网络"
+
+[network.services_endpoints]
+other = "服务 → 端点"
+
+[network.pod_network]
+other = "Pod 网络信息与流量"
+
+[network.stats]
+other = "服务：{{.Services}} • 端点：{{.Endpoints}}"
+
+[network.stats_detailed]
+other = "有端点：{{.WithEP}} • 无端点：{{.Without}} • 总端点数：{{.Total}}"
+
+[network.top_pods]
+other = "按当前流量速率显示前 {{.Shown}} 个 Pod（总计：{{.Total}} 个 Pod）"
+
+[network.no_pods]
+other = "无 Pod 网络信息"
+
+[network.no_endpoints_short]
+other = "无端点"
+
+# ============================================================================
+# 工作负载视图
+# ============================================================================
+[workloads.title]
+other = "⚙️  工作负载"
+
+[workloads.services]
+other = "服务"
+
+[workloads.no_jobs]
+other = "未找到任务"
+
+[workloads.active_jobs]
+other = "▸ 活跃任务"
+
+[workloads.failed_jobs]
+other = "▸ 失败任务"
+
+[workloads.completed_jobs]
+other = "▸ 已完成任务（最近 5 个）"
+
+[workloads.and_more]
+other = "... 还有 {{.Count}} 个已完成任务"
+
+# ============================================================================
+# 事件视图
+# ============================================================================
+[events.type_filter]
+other = "（类型：{{.Type}}）"
+
+[events.type.warning]
+other = "警告"
+
+[events.type.normal]
+other = "正常"
+
+# ============================================================================
+# 过滤面板
+# ============================================================================
+[filter.title]
+other = "🔍 按命名空间过滤"
+
+[filter.all_namespaces]
+other = "[所有命名空间]"
+
+[filter.no_namespaces]
+other = "无可用命名空间"
+
+[filter.filtered_by]
+other = "（过滤条件：{{.Filter}}）"
+
+# ============================================================================
+# 搜索面板
+# ============================================================================
+[search.title]
+other = "🔍 搜索"
+
+[search.help]
+other = "输入以按名称搜索（不区分大小写）"
+
+[search.press_esc]
+other = "按 ESC 键取消"
+
+# ============================================================================
+# 日志查看器
+# ============================================================================
+[logs.title]
+other = "📜 日志：{{.Namespace}}/{{.Pod}}"
+
+[logs.container]
+other = "容器：{{.Name}}"
+
+[logs.no_pod]
+other = "未选择 Pod"
+
+[logs.error]
+other = "获取日志出错：{{.Error}}"
+
+[logs.loading]
+other = "加载日志中..."
+
+[logs.no_containers]
+other = "无可用容器"
+
+# ============================================================================
+# 详情视图标签
+# ============================================================================
+[detail.basic_info]
+other = "📋 基本信息"
+
+[detail.resource_info]
+other = "📊 资源信息"
+
+[detail.name]
+other = "名称"
+
+[detail.namespace]
+other = "命名空间"
+
+[detail.status]
+other = "状态"
+
+[detail.created]
+other = "创建时间"
+
+[detail.age]
+other = "年龄"
+
+[detail.labels]
+other = "标签"
+
+
+# ============================================================================
+# 排序信息
+# ============================================================================
+[sort.info]
+other = "排序：{{.Field}} {{.Order}}"
+
+# ============================================================================
+# 错误消息
+# ============================================================================
+[errors.failed_to_load]
+other = "加载配置失败：{{.Error}}"
+
+[errors.failed_to_create_app]
+other = "创建应用程序失败：{{.Error}}"
+
+[errors.shutdown_error]
+other = "关闭时出错：{{.Error}}"
+
+[errors.received_signal]
+other = "收到信号，正在关闭..."
+
+[errors.application_error]
+other = "应用程序错误：{{.Error}}"
+
+# ============================================================================
+# 统计标签
+# ============================================================================
+[stats.total]
+other = "总计"
+
+[stats.total_alt]
+other = "总计："
+
+[stats.ready]
+other = "就绪："
+
+[stats.running]
+other = "运行中："
+
+[stats.pending]
+other = "等待中："
+
+[stats.failed]
+other = "失败："
+
+[stats.not_ready]
+other = "未就绪："
+
+[stats.bound]
+other = "已绑定："
+
+[stats.available]
+other = "可用："
+
+[stats.released]
+other = "已释放："
+
+[stats.cluster_summary]
+other = "集群摘要："
+
+[stats.total_alerts]
+other = "总告警数：{{.Count}}"
+
+[stats.critical]
+other = "🔴 严重"
+
+[stats.warning]
+other = "🟡 警告"
+
+[stats.info]
+other = "ℹ️  信息"
+
+# ============================================================================
+# 概览视图
+# ============================================================================
+[overview.cluster_load_header]
+other = "⚡ 集群负载 - 所有节点总和"
+
+[overview.collecting_bandwidth]
+other = "网络：正在收集带宽数据..."
+
+[overview.metrics_unavailable]
+other = "网络：指标不可用"
+
+[overview.partial_metrics]
+other = "部分指标：{{.WithMetrics}}/{{.Total}} 个节点已上报"
+
+# ============================================================================
+# 通用指标
+# ============================================================================
+[metrics.cpu_used]
+other = "CPU 使用："
+
+[metrics.cpu_req]
+other = "CPU 请求："
+
+[metrics.mem_used]
+other = "内存使用："
+
+[metrics.mem_req]
+other = "内存请求："
+
+[metrics.net]
+other = "网络："
+
+[metrics.rx]
+other = "接收 ↓"
+
+[metrics.tx]
+other = "发送 ↑"
+
+[metrics.capacity]
+other = "容量"
+
+[metrics.allocatable]
+other = "可分配"
+
+[metrics.no_usage_metrics]
+other = "[无使用指标]"
+
+# ============================================================================
+# 通用术语
+# ============================================================================
+[common.nodes]
+other = "节点"
+
+[common.pods]
+other = "Pod"
+
+[common.services]
+other = "服务"
+
+
+[overview.cluster_load_realtime]
+other = "⚡ 集群负载 - 实时状态"
+
+[overview.cpu_load]
+other = "CPU 负载："
+
+[overview.memory_load]
+other = "内存负载："
+
+[overview.network_traffic]
+other = "网络流量："
+
+[overview.usage_unavailable_show_requests]
+other = "（实际使用数据不可用，显示请求量）"
+
+[overview.requests]
+other = "请求量："
+
+[overview.cumulative]
+other = "（累计）"
+
+[overview.partial_nodes_missing_metrics]
+other = "部分节点缺少 kubelet metrics（{{.WithMetrics}}/{{.Total}}）"
+
+[overview.hint_kubelet_no_rate]
+other = "提示：kubelet 未提供速率数据"
+
+[overview.kubelet_metrics_unavailable]
+other = "kubelet metrics 不可用"
+
+[overview.hint]
+other = "提示"
+
+[overview.hint_tls_alternative]
+other = "或配置集群跳过 kubelet TLS 验证"
+
+[overview.hint_rbac_grant]
+other = "为当前凭证授予 get nodes/proxy 权限"
+
+[overview.partial_nodes_no_metrics]
+other = "部分节点未返回 kubelet 指标（{{.WithMetrics}}/{{.Total}}）"
+
+[overview.capacity]
+other = "容量："
+
+[overview.allocatable]
+other = "可分配："
+
+[overview.requested]
+other = "已请求："
+
+[overview.actual]
+other = "实际："
+
+[overview.running]
+other = "运行："
+
+[overview.pending]
+other = "等待："
+
+[overview.failed]
+other = "失败："
+
+
+# ============================================================================
+# 通用 UI 术语
+# ============================================================================
+[common.error]
+other = "错误"
+
+[common.last_updated]
+other = "最后更新"
+
+[common.auto_refresh]
+other = "自动刷新"
+
+[common.loading]
+other = "加载中..."
+
+# ============================================================================
+# 按键绑定
+# ============================================================================
+[keys.quit]
+other = "退出"
+
+[keys.refresh]
+other = "刷新"
+
+[keys.scroll]
+other = "滚动"
+
+[keys.page]
+other = "翻页"
+
+[keys.back]
+other = "返回"
+
+[keys.type_to_search]
+other = "输入搜索"
+
+[keys.delete]
+other = "删除"
+
+[keys.cancel]
+other = "取消"
+
+[keys.select]
+other = "选择"
+
+[keys.apply]
+other = "应用"
+
+[keys.logs]
+other = "日志"
+
+[keys.views]
+other = "视图"
+
+[keys.next]
+other = "下一个"
+
+[keys.up]
+other = "上"
+
+[keys.down]
+other = "下"
+
+[keys.detail]
+other = "详情"
+
+[keys.sort]
+other = "排序"
+
+[keys.search]
+other = "搜索"
+
+[keys.filter]
+other = "筛选"
+
+[keys.clear]
+other = "清除"
+
+# ============================================================================
+# 视图名称
+# ============================================================================
+[views.overview.name]
+other = "概览"
+
+[views.nodes.name]
+other = "节点"
+
+[views.pods.name]
+other = "Pod"
+
+[views.workloads.name]
+other = "工作负载"
+
+[views.network.name]
+other = "网络"
+
+[views.storage.name]
+other = "存储"
+
+[views.events.name]
+other = "事件"
+
+[views.alerts.name]
+other = "告警"
+
+
+# ============================================================================
+# 详情视图
+# ============================================================================
+
+# Pod 详情视图
+[detail.pod.no_selected]
+other = "未选择 Pod"
+
+[detail.pod.title]
+other = "Pod"
+
+[detail.pod.basic_info]
+other = "📋 基本信息"
+
+[detail.pod.network_bandwidth]
+other = "网络带宽："
+
+[detail.pod.collecting_data]
+other = "正在收集带宽数据..."
+
+[detail.pod.metrics_unavailable]
+other = "指标不可用（Pod 未报告 kubelet 统计信息）"
+
+[detail.pod.historical_trends]
+other = "历史趋势："
+
+[detail.pod.cpu_label]
+other = "CPU:    "
+
+[detail.pod.memory_label]
+other = "内存:   "
+
+[detail.pod.network_rx_label]
+other = "接收:   "
+
+[detail.pod.network_tx_label]
+other = "发送:   "
+
+[detail.pod.snapshots]
+other = "（基于 {{.Count}} 个快照）"
+
+[detail.pod.containers]
+other = "🐳 容器（共 {{.Total}} 个，{{.Ready}} 个就绪）"
+
+[detail.pod.no_container_info]
+other = "无可用容器信息"
+
+[detail.pod.image]
+other = "镜像"
+
+[detail.pod.state]
+other = "状态"
+
+[detail.pod.restart_count]
+other = "重启次数"
+
+# 节点详情视图
+[detail.node.no_selected]
+other = "未选择节点"
+
+[detail.node.title]
+other = "节点"
+
+[detail.node.basic_info]
+other = "📋 基本信息"
+
+[detail.node.resource_info]
+other = "📊 资源信息"
+
+[detail.node.network_traffic]
+other = "网络流量（累计）："
+
+[detail.node.rx]
+other = "接收"
+
+[detail.node.tx]
+other = "发送"
+
+[detail.node.historical_trends]
+other = "历史趋势："
+
+[detail.node.cpu_label]
+other = "CPU:    "
+
+[detail.node.memory_label]
+other = "内存:   "
+
+[detail.node.network_rx_label]
+other = "接收:   "
+
+[detail.node.network_tx_label]
+other = "发送:   "
+
+[detail.node.snapshots]
+other = "（基于 {{.Count}} 个快照）"
+
+[detail.node.pods_on_node]
+other = "📦 节点上的 Pods（共 {{.Total}} 个）"
+
+[detail.node.no_pods]
+other = "该节点上没有运行的 Pod"
+
+# 详情视图通用
+[detail.scroll_indicator]
+other = "[第 {{.Start}}-{{.End}} 行，共 {{.Total}} 行]（↑/↓ 滚动，PgUp/PgDn 翻页）"
+
+[detail.field.name]
+other = "名称"
+
+[detail.field.namespace]
+other = "命名空间"
+
+[detail.field.status]
+other = "状态"
+
+[detail.field.node]
+other = "节点"
+
+[detail.field.pod_ip]
+other = "Pod IP"
+
+[detail.field.host_ip]
+other = "主机 IP"
+
+[detail.field.restarts]
+other = "重启次数"
+
+[detail.field.architecture]
+other = "架构"
+
+[detail.field.os_image]
+other = "操作系统"
+
+[detail.field.internal_ip]
+other = "内部 IP"
+
+[detail.field.external_ip]
+other = "外部 IP"
+
+[detail.field.cpu]
+other = "CPU"
+
+[detail.field.memory]
+other = "内存"
+
+[detail.field.pods]
+other = "Pods"
+
+
+# ============================================================================
+# 网络视图 - Pod 网络部分
+# ============================================================================
+[network.pod_network_title]
+other = "Pod 网络信息与流量"
+
+[network.pod_network_showing_top]
+other = "按当前流量速率显示前 {{.Top}} 个 Pod（共 {{.Total}} 个）"
+
+[network.pod_network_no_pods]
+other = "无 Pod 网络信息"
+
+[network.pod_network_rx]
+other = "接收"
+
+[network.pod_network_tx]
+other = "发送"
+
+[network.ports_more]
+other = "+{{.Count}} 个"
+
+[network.status_no_endpoints]
+other = "无端点"
+
+[network.status_ready]
+other = "就绪"
+
+# ============================================================================
+# 工作负载视图 - 详细部分
+# ============================================================================
+[workloads.deployments.title]
+other = "部署"
+
+[workloads.statefulsets.title]
+other = "有状态副本集"
+
+[workloads.daemonsets.title]
+other = "守护进程集"
+
+[workloads.jobs.title]
+other = "任务"
+
+[workloads.cronjobs.title]
+other = "定时任务"
+
+[workloads.jobs.stats]
+other = "总计：{{.Total}} • {{.Succeeded}} • {{.Failed}} • {{.Active}}"
+
+[workloads.jobs.stats_succeeded]
+other = "成功：{{.Count}}"
+
+[workloads.jobs.stats_failed]
+other = "失败：{{.Count}}"
+
+[workloads.jobs.stats_active]
+other = "活跃：{{.Count}}"
+
+[workloads.jobs.active_section]
+other = "▸ 活跃任务"
+
+[workloads.jobs.failed_section]
+other = "▸ 失败任务"
+
+[workloads.jobs.completed_section]
+other = "▸ 已完成任务（最近 5 个）"
+
+[workloads.jobs.and_more]
+other = "... 还有 {{.Count}} 个已完成任务"
+
+[workloads.jobs.status_complete]
+other = "完成"
+
+[workloads.jobs.status_failed]
+other = "失败({{.Count}})"
+
+[workloads.jobs.status_active]
+other = "活跃({{.Count}})"
+
+[workloads.jobs.status_pending]
+other = "等待中"
+
+[workloads.jobs.status_running]
+other = "运行中"
+
+[workloads.cronjobs.suspend_false]
+other = "否"
+
+[workloads.cronjobs.suspend_true]
+other = "是"
+
+[workloads.no_deployments]
+other = "未找到部署"
+
+[workloads.no_statefulsets]
+other = "未找到有状态副本集"
+
+[workloads.no_daemonsets]
+other = "未找到守护进程集"
+
+[workloads.no_cronjobs]
+other = "未找到定时任务"
+
+
+# ============================================================================
+# Job 详情视图
+# ============================================================================
+[detail.job.no_selected]
+other = "未选择作业"
+
+[detail.job.title]
+other = "作业"
+
+[detail.job.basic_info]
+other = "📋 基本信息"
+
+[detail.job.status_completed]
+other = "✓ 已完成（{{.Succeeded}}/{{.Completions}}）"
+
+[detail.job.status_failed]
+other = "✗ 失败（{{.Failed}} 个失败，{{.Succeeded}}/{{.Completions}} 个成功）"
+
+[detail.job.status_running]
+other = "⟳ 运行中（{{.Active}} 个活跃，{{.Succeeded}}/{{.Completions}} 个成功）"
+
+[detail.job.target_completions]
+other = "目标完成数"
+
+[detail.job.duration]
+other = "持续时间"
+
+[detail.job.still_running]
+other = "仍在运行"
+
+[detail.job.pods_header]
+other = "📦 作业 Pod"
+
+[detail.job.pods_total]
+other = "📦 作业 Pod（共 {{.Total}} 个）"
+
+[detail.job.pods_running]
+other = "{{.Count}} 个运行中"
+
+[detail.job.pods_succeeded]
+other = "{{.Count}} 个成功"
+
+[detail.job.pods_failed]
+other = "{{.Count}} 个失败"
+
+[detail.job.no_pod_info]
+other = "无 Pod 信息"
+
+[detail.job.no_pods]
+other = "未找到此作业的 Pod"
+
+[detail.job.resource_summary]
+other = "资源摘要"
+
+[detail.job.network_bandwidth]
+other = "网络带宽"
+
+[detail.job.request]
+other = "请求"
+
+[detail.job.limit]
+other = "限制"
+
+[detail.job.usage]
+other = "使用"
+
+[detail.job.total]
+other = "总计"
+
+[detail.job.pods_detail]
+other = "Pod 详情"
+
+[detail.job.more_pods]
+other = "... 以及另外 {{.Extra}} 个 Pod（显示前 {{.Shown}} 个优先级最高的）"
+
+[detail.job.help_text]
+other = "↑/↓ 选择 Pod • Enter 查看详情 • l 查看日志 • Esc 返回"
+
+[detail.job.phase]
+other = "阶段"
+
+
+# ============================================================================
+# 日志查看器附加键
+# ============================================================================
+[logs.auto_follow]
+other = "自动跟随"
+
+[logs.paused]
+other = "已暂停"
+
+[logs.lines_range]
+other = "[第 {{.Start}}-{{.End}} 行，共 {{.Total}} 行]"
+
+[logs.lines_total]
+other = "[共 {{.Total}} 行]"
+
+[logs.updated_ago]
+other = "{{.Seconds}} 秒前更新"
+
+[logs.help.scroll]
+other = "↑/↓ 滚动 • PgUp/PgDn 翻页 • Esc 返回"
+
+[logs.help.back]
+other = "Esc 返回"
+
+# ============================================================================
+# 搜索面板附加键
+# ============================================================================
+[search.placeholder]
+other = "输入名称搜索（不区分大小写）"
+
+# ============================================================================
+# PV 详情视图
+# ============================================================================
+[detail.pv.no_selected]
+other = "未选择 PV"
+
+[detail.pv.title]
+other = "持久卷"
+
+[detail.pv.basic_info]
+other = "📋 基本信息"
+
+[detail.pv.status]
+other = "状态"
+
+[detail.pv.capacity]
+other = "容量"
+
+[detail.pv.storageclass]
+other = "存储类"
+
+[detail.pv.reclaim_policy]
+other = "回收策略"
+
+[detail.pv.access_modes]
+other = "访问模式"
+
+[detail.pv.volume_mode]
+other = "卷模式"
+
+[detail.pv.claim_info]
+other = "📦 声明信息"
+
+[detail.pv.bound_to]
+other = "绑定到"
+
+[detail.pv.not_bound]
+other = "<未绑定>"
+
+[detail.pv.source_info]
+other = "💾 来源信息"
+
+[detail.pv.type]
+other = "类型"
+
+[detail.pv.path]
+other = "路径"
+
+[detail.pv.server]
+other = "服务器"
+
+[detail.pv.lifecycle]
+other = "📅 生命周期"
+
+[detail.pv.age]
+other = "年龄"
+
+# ============================================================================
+# PVC 详情视图
+# ============================================================================
+[detail.pvc.no_selected]
+other = "未选择 PVC"
+
+[detail.pvc.title]
+other = "持久卷声明"
+
+[detail.pvc.basic_info]
+other = "📋 基本信息"
+
+[detail.pvc.namespace]
+other = "命名空间"
+
+[detail.pvc.status]
+other = "状态"
+
+[detail.pvc.volume]
+other = "卷"
+
+[detail.pvc.not_bound]
+other = "<未绑定>"
+
+[detail.pvc.capacity]
+other = "容量"
+
+[detail.pvc.unknown]
+other = "<未知>"
+
+[detail.pvc.storageclass]
+other = "存储类"
+
+[detail.pvc.none]
+other = "<无>"
+
+[detail.pvc.access_modes]
+other = "访问模式"
+
+[detail.pvc.volume_mode]
+other = "卷模式"
+
+[detail.pvc.spec]
+other = "📝 规格"
+
+[detail.pvc.requested]
+other = "请求"
+
+[detail.pvc.selector]
+other = "选择器"
+
+[detail.pvc.volume_name]
+other = "卷名称"
+
+[detail.pvc.lifecycle]
+other = "📅 生命周期"
+
+[detail.pvc.age]
+other = "年龄"
+
+[detail.pvc.conditions]
+other = "📊 条件"
+
+[detail.pvc.no_conditions]
+other = "无条件记录"
+
+[detail.pvc.condition.type]
+other = "类型"
+
+[detail.pvc.condition.status]
+other = "状态"
+
+[detail.pvc.condition.reason]
+other = "原因"
+
+[detail.pvc.condition.message]
+other = "消息"
+
+[detail.pvc.condition.since]
+other = "起始时间"
