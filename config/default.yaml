@@ -55,6 +55,9 @@ ui:
   # Maximum rows to display in tables
   max_rows: 100
 
+  # Number of log lines to fetch when viewing pod logs
+  log_tail_lines: 200
+
 filter:
   # Default namespace filter (empty means all)
   default_namespace: ""

@@ -109,6 +109,7 @@ type Model struct {
 	locale              string          // Current locale (en, zh, etc.)
 	version             string          // Application version
 	refreshInterval     time.Duration
+	logTailLines        int // Number of log lines to fetch
 	refreshCounter      int
 	width               int
 	height              int
@@ -290,7 +291,7 @@ func DefaultKeyMap() KeyMap {
 }
 
 // NewModel creates a new UI model
-func NewModel(dataProvider DataProvider, logger *zap.Logger, refreshInterval time.Duration, locale string, version string) *Model {
+func NewModel(dataProvider DataProvider, logger *zap.Logger, refreshInterval time.Duration, locale string, version string, logTailLines int) *Model {
 	return &Model{
 		dataProvider:     dataProvider,
 		logger:           logger,
@@ -298,6 +299,7 @@ func NewModel(dataProvider DataProvider, logger *zap.Logger, refreshInterval tim
 		locale:           locale,
 		version:          version,
 		refreshInterval:  refreshInterval,
+		logTailLines:     logTailLines,
 		currentView:      ViewOverview,
 		keys:             DefaultKeyMap(),
 		metricHistory:    make([]MetricSnapshot, 0, 10),
@@ -1677,7 +1679,7 @@ func (m *Model) fetchLogs() tea.Cmd {
 		}
 
 		ctx := context.Background()
-		logs, err := apiClient.GetPodLogs(ctx, pod.Namespace, pod.Name, container, 1000)
+		logs, err := apiClient.GetPodLogs(ctx, pod.Namespace, pod.Name, container, int64(m.logTailLines))
 		return logsMsg{logs: logs, err: err}
 	}
 }

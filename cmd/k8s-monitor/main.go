@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	// Version will be set by build flags, default to timestamp
-	Version = "dev-" + time.Now().Format("20060102-150405")
+	// Version will be set by build flags
+	Version = "dev"
 	// BuildTime will be set by build flags
 	BuildTime = "unknown"
 
@@ -38,7 +38,7 @@ for Kubernetes clusters. It provides real-time cluster health overview,
 node status, workload monitoring, and quick diagnostics.
 
 Built with ❤️  using Bubble Tea and client-go.`,
-	Version: Version,
+	Version: fmt.Sprintf("%s (built: %s)", Version, BuildTime),
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
 	},
@@ -80,6 +80,7 @@ func init() {
 	consoleCmd.Flags().BoolP("no-color", "", false, "disable color output")
 	consoleCmd.Flags().BoolP("insecure-kubelet", "", false, "skip TLS verification for kubelet metrics (use in test environments)")
 	consoleCmd.Flags().IntP("max-concurrent", "m", 10, "maximum concurrent kubelet queries (default: 10)")
+	consoleCmd.Flags().IntP("log-tail-lines", "", 200, "number of log lines to fetch (default: 200)")
 }
 
 func runConsole(cmd *cobra.Command, args []string) error {
@@ -130,8 +131,16 @@ func runConsole(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Create application instance
-	application, err := app.New(config, Version)
+	// Override log-tail-lines flag only if user explicitly specified it
+	if cmd.Flags().Changed("log-tail-lines") {
+		if logTailLines, _ := cmd.Flags().GetInt("log-tail-lines"); logTailLines > 0 {
+			config.LogTailLines = logTailLines
+		}
+	}
+
+	// Create application instance with full version info
+	fullVersion := fmt.Sprintf("%s (built: %s)", Version, BuildTime)
+	application, err := app.New(config, fullVersion)
 	if err != nil {
 		return fmt.Errorf("failed to create application: %w", err)
 	}

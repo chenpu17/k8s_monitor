@@ -82,7 +82,7 @@ func (a *App) Run() error {
 func (a *App) startUI() error {
 	a.logger.Info("Starting UI", zap.String("locale", a.config.Locale))
 
-	uiModel := ui.NewModel(a, a.logger, a.config.RefreshInterval, a.config.Locale, a.version)
+	uiModel := ui.NewModel(a, a.logger, a.config.RefreshInterval, a.config.Locale, a.version, a.config.LogTailLines)
 	p := tea.NewProgram(uiModel, tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {

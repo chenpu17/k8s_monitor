@@ -11,7 +11,7 @@ NC='\033[0m' # No Color
 
 # Variables
 VERSION=${VERSION:-"v0.1.0-dev"}
-BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
+BUILD_TIME=$(date '+%Y-%m-%d_%H:%M:%S_%Z')
 BUILD_DIR="./bin"
 
 echo -e "${GREEN}🔨 Building k8s-monitor${NC}"

@@ -3,7 +3,7 @@
 # Build variables
 BINARY_NAME=k8s-monitor
 VERSION?=v0.1.0-dev
-BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
+BUILD_TIME=$(shell date '+%Y-%m-%d_%H:%M:%S_%Z')
 LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)"
 
 # Go commands

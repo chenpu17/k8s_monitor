@@ -26,11 +26,12 @@ type Config struct {
 	MaxCacheEntries int           `mapstructure:"max_cache_entries"`
 
 	// UI configuration
-	ColorMode   string `mapstructure:"color_mode"`
-	DefaultView string `mapstructure:"default_view"`
-	MaxRows     int    `mapstructure:"max_rows"`
-	NoColor     bool   `mapstructure:"no_color"`
-	Locale      string `mapstructure:"locale"`
+	ColorMode    string `mapstructure:"color_mode"`
+	DefaultView  string `mapstructure:"default_view"`
+	MaxRows      int    `mapstructure:"max_rows"`
+	NoColor      bool   `mapstructure:"no_color"`
+	Locale       string `mapstructure:"locale"`
+	LogTailLines int    `mapstructure:"log_tail_lines"`
 
 	// Kubelet configuration
 	InsecureKubelet bool `mapstructure:"insecure_kubelet"`
@@ -59,6 +60,7 @@ func LoadConfig(configFile string) (*Config, error) {
 	viper.SetDefault("ui.max_rows", 100)
 	viper.SetDefault("ui.no_color", false)
 	viper.SetDefault("ui.locale", "en")
+	viper.SetDefault("ui.log_tail_lines", 200)
 
 	viper.SetDefault("kubelet.insecure", false)
 
@@ -103,6 +105,7 @@ func LoadConfig(configFile string) (*Config, error) {
 		MaxRows:         viper.GetInt("ui.max_rows"),
 		NoColor:         viper.GetBool("ui.no_color"),
 		Locale:          viper.GetString("ui.locale"),
+		LogTailLines:    viper.GetInt("ui.log_tail_lines"),
 		InsecureKubelet: viper.GetBool("kubelet.insecure"),
 		LogLevel:        viper.GetString("logging.level"),
 		LogFile:         viper.GetString("logging.file"),
@@ -132,6 +135,9 @@ func LoadConfig(configFile string) (*Config, error) {
 	}
 	if cfg.MaxRows <= 0 {
 		cfg.MaxRows = 100
+	}
+	if cfg.LogTailLines <= 0 {
+		cfg.LogTailLines = 200
 	}
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "info"
