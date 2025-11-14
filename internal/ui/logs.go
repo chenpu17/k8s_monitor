@@ -73,7 +73,8 @@ func (m *Model) renderLogs() string {
 	}
 
 	// Apply scroll offset with proper bounds checking
-	maxVisible := m.height - 10 // Reserve more space for header/footer/search
+	// Use consistent maxVisible calculation across the codebase
+	maxVisible := m.height - 8 // Reserve space for header/footer (consistent with Down/Up key handling)
 	if maxVisible < 1 {
 		maxVisible = 1
 	}

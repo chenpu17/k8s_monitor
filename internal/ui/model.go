@@ -1231,12 +1231,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case logsMsg:
+		// Only process log messages if still in logs mode
+		// This prevents race conditions when user exits logs mode but async fetch completes
+		if !m.logsMode {
+			return m, nil
+		}
+
 		if msg.err != nil {
 			m.logsError = msg.err.Error()
 			m.containerLogs = ""
 		} else {
 			m.logsError = ""
-			oldLogs := m.containerLogs
+			wasEmpty := m.containerLogs == ""
 			m.containerLogs = msg.logs
 
 			// Limit log size to prevent performance issues
@@ -1251,28 +1257,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.logsLastUpdate = time.Now() // Update refresh timestamp
 
-			// Only reset scroll offset when first entering logs mode
-			wasInLogsMode := m.logsMode
-			m.logsMode = true
-
-			if !wasInLogsMode {
-				// First time entering logs mode: start at bottom (show latest logs)
-				m.logsAutoScroll = true // Enable auto-scroll by default
-
-				// Calculate bottom position
-				logLines := strings.Split(m.containerLogs, "\n")
-				maxVisible := m.height - 8
-				if maxVisible < 1 {
-					maxVisible = 1
-				}
-				totalLines := len(logLines)
-				maxScroll := totalLines - maxVisible
-				if maxScroll < 0 {
-					maxScroll = 0
-				}
-				m.logsScrollOffset = maxScroll // Start at bottom
+			// Initialize scroll position when first receiving logs
+			if wasEmpty && m.containerLogs != "" {
+				m.initLogsScrollPosition()
 			} else if m.logsAutoScroll {
-				// Auto-scroll to bottom if enabled
+				// Only auto-scroll if enabled and not first time
 				// Calculate the new bottom position
 				logLines := strings.Split(m.containerLogs, "\n")
 				maxVisible := m.height - 8
@@ -1286,10 +1275,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.logsScrollOffset = maxScroll
 			}
-			// If logs changed, we're receiving updates
-			_ = oldLogs // Keep for potential future use
 
-			// Start auto-refresh if this is the first time entering logs mode
+			// Start auto-refresh if not already running
 			if !m.logsAutoRefresh {
 				m.logsAutoRefresh = true
 				return m, m.startLogsRefresh()
@@ -1689,6 +1676,27 @@ func (m *Model) startLogsRefresh() tea.Cmd {
 	return tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
 		return logsRefreshTickMsg(t)
 	})
+}
+
+// initLogsScrollPosition initializes the scroll position when first entering logs mode
+func (m *Model) initLogsScrollPosition() {
+	if m.containerLogs == "" {
+		return
+	}
+
+	// Calculate bottom position to show latest logs
+	logLines := strings.Split(m.containerLogs, "\n")
+	maxVisible := m.height - 8
+	if maxVisible < 1 {
+		maxVisible = 1
+	}
+	totalLines := len(logLines)
+	maxScroll := totalLines - maxVisible
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	m.logsScrollOffset = maxScroll // Start at bottom
+	m.logsAutoScroll = true         // Enable auto-scroll by default
 }
 
 // handleFilterNavigation handles navigation in filter mode
