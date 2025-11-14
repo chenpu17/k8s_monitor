@@ -962,6 +962,9 @@ other = "应用"
 [keys.logs]
 other = "日志"
 
+[keys.actions]
+other = "操作"
+
 [keys.views]
 other = "视图"
 

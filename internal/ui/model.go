@@ -473,6 +473,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.jobPodSelectedIndex < displayCount && m.jobPodSelectedIndex < len(jobPods) {
 					m.selectedPod = jobPods[m.jobPodSelectedIndex]
 					m.currentView = ViewPodDetail
+					m.detailMode = true  // BUGFIX: Must set detailMode to true for "l" key to work
 					m.fromJobDetail = true
 					m.detailScrollOffset = 0
 				}
@@ -1524,6 +1525,10 @@ func (m *Model) renderFooter() string {
 		// Add logs key binding for pod detail view
 		if m.currentView == ViewPodDetail {
 			bindings = append(bindings, RenderKeyBinding("l", m.T("keys.logs")))
+		}
+		// Add actions key binding for pod and node detail views
+		if m.currentView == ViewPodDetail || m.currentView == ViewNodeDetail {
+			bindings = append(bindings, RenderKeyBinding("a", m.T("keys.actions")))
 		}
 	} else {
 		bindings = append(bindings, RenderKeyBinding("1-8", m.T("keys.views")))

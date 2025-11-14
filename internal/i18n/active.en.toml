@@ -962,6 +962,9 @@ other = "apply"
 [keys.logs]
 other = "logs"
 
+[keys.actions]
+other = "actions"
+
 [keys.views]
 other = "views"
 
