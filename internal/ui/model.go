@@ -769,13 +769,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if len(selectedPod.ContainerStates) == 1 {
 						m.selectedPod = selectedPod
 						m.selectedContainer = selectedPod.ContainerStates[0].Name
+						m.logsMode = true // Enter logs mode
 						return m, m.fetchLogs()
 					}
 
 					// For multiple containers, select the first container by default
 					m.selectedPod = selectedPod
 					m.selectedContainer = selectedPod.ContainerStates[0].Name
-					return m, m.fetchLogs()
+					m.logsMode = true // Enter logs mode
+						return m, m.fetchLogs()
 				}
 				return m, nil
 			}
@@ -789,13 +791,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// If single container, fetch logs directly
 				if len(m.selectedPod.ContainerStates) == 1 {
 					m.selectedContainer = m.selectedPod.ContainerStates[0].Name
+					m.logsMode = true // Enter logs mode
 					return m, m.fetchLogs()
 				}
 
 				// For multiple containers, select the first container by default
 				// TODO: In future, implement container selection UI
 				m.selectedContainer = m.selectedPod.ContainerStates[0].Name
-				return m, m.fetchLogs()
+				m.logsMode = true // Enter logs mode
+					return m, m.fetchLogs()
 			}
 			return m, nil
 
