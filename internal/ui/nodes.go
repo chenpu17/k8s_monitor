@@ -62,7 +62,7 @@ func (m *Model) renderNodesHeader(nodes []*model.NodeData) string {
 	case SortByName:
 		sortInfo = m.T("columns.name")
 	case SortByCPU:
-		sortInfo = "CPU"
+		sortInfo = m.T("columns.cpu")
 	case SortByMemory:
 		sortInfo = m.T("columns.memory")
 	case SortByPods:
@@ -104,7 +104,7 @@ func (m *Model) renderNodesList(nodes []*model.NodeData) string {
 		padRight(m.T("columns.name"), colName),
 		padRight(m.T("columns.status"), colStatus),
 		padRight(m.T("columns.roles"), colRoles),
-		padRight("CPU", colCPU),
+		padRight(m.T("columns.cpu"), colCPU),
 		padRight(m.T("columns.memory"), colMemory),
 		padRight(m.T("columns.rx"), colRx),
 		padRight(m.T("columns.tx"), colTx),

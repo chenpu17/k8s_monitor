@@ -233,13 +233,13 @@ func (m *Model) renderStatefulSetPods(sts *model.StatefulSetData) string {
 	)
 
 	headerRow := fmt.Sprintf("  %s  %s  %s  %s  %s  %s  %s",
-		padRight("POD NAME", colName),
-		padRight("PHASE", colPhase),
-		padRight("CPU", colCPU),
-		padRight("MEMORY", colMemory),
-		padRight("RX ↓", colRx),
-		padRight("TX ↑", colTx),
-		padRight("RESTARTS", colRestarts),
+		padRight(m.T("columns.pod_name"), colName),
+		padRight(m.T("columns.phase"), colPhase),
+		padRight(m.T("columns.cpu"), colCPU),
+		padRight(m.T("columns.memory"), colMemory),
+		padRight(m.T("columns.rx"), colRx),
+		padRight(m.T("columns.tx"), colTx),
+		padRight(m.T("columns.restarts"), colRestarts),
 	)
 	info = append(info, StyleTextMuted.Render(headerRow))
 

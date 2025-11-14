@@ -286,6 +286,12 @@ other = "POD IP"
 [columns.node]
 other = "NODE"
 
+[columns.pod_name]
+other = "POD NAME"
+
+[columns.phase]
+other = "PHASE"
+
 # ============================================================================
 # Status Values
 # ============================================================================

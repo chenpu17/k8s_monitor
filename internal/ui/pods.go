@@ -118,7 +118,7 @@ func (m *Model) renderPodsList(pods []*model.PodData) string {
 		padRight(m.T("columns.name"), colName),
 		padRight(m.T("columns.namespace"), colNamespace),
 		padRight(m.T("columns.status"), colStatus),
-		padRight("CPU", colCPU),
+		padRight(m.T("columns.cpu"), colCPU),
 		padRight(m.T("columns.memory"), colMemory),
 		padRight(m.T("columns.rx"), colRx),
 		padRight(m.T("columns.tx"), colTx),

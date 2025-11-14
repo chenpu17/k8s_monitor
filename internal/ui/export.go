@@ -154,7 +154,15 @@ func (m *Model) exportNodesCSV(exportDir, filename string) error {
 	defer writer.Flush()
 
 	// Write header
-	header := []string{"Name", "Status", "Roles", "CPU", "Memory", "Pods", "Age"}
+	header := []string{
+		m.T("columns.name"),
+		m.T("columns.status"),
+		m.T("columns.roles"),
+		m.T("columns.cpu"),
+		m.T("columns.memory"),
+		m.T("columns.pods"),
+		m.T("columns.age"),
+	}
 	if err := writer.Write(header); err != nil {
 		return err
 	}
@@ -223,7 +231,16 @@ func (m *Model) exportPodsCSV(exportDir, filename string) error {
 	defer writer.Flush()
 
 	// Write header
-	header := []string{"Namespace", "Name", "Phase", "Node", "CPU", "Memory", "Restarts", "Age"}
+	header := []string{
+		m.T("columns.namespace"),
+		m.T("columns.name"),
+		m.T("columns.phase"),
+		m.T("columns.node"),
+		m.T("columns.cpu"),
+		m.T("columns.memory"),
+		m.T("columns.restarts"),
+		m.T("columns.age"),
+	}
 	if err := writer.Write(header); err != nil {
 		return err
 	}
