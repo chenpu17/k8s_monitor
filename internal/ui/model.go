@@ -369,10 +369,67 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				msg.Type == tea.KeyDelete ||
 				msg.Type == tea.KeySpace
 
-			// If not a special key, skip all shortcut processing and go to text input
+			// Handle backspace and space before checking other special keys
+			if msg.Type == tea.KeyBackspace || msg.Type == tea.KeyDelete {
+				if m.logsSearchMode && len(m.logsSearchText) > 0 {
+					m.logsSearchText = m.logsSearchText[:len(m.logsSearchText)-1]
+					m.logsScrollOffset = 0
+					return m, nil
+				}
+				if m.searchMode && len(m.searchText) > 0 {
+					m.searchText = m.searchText[:len(m.searchText)-1]
+					m.scrollOffset = 0
+					m.selectedIndex = 0
+					return m, nil
+				}
+				return m, nil
+			}
+
+			if msg.Type == tea.KeySpace {
+				if m.logsSearchMode {
+					m.logsSearchText += " "
+					m.logsScrollOffset = 0
+					return m, nil
+				}
+				if m.searchMode {
+					m.searchText += " "
+					m.scrollOffset = 0
+					m.selectedIndex = 0
+					return m, nil
+				}
+				return m, nil
+			}
+
+			// If not a special key, handle as text input directly
 			if !isSpecialKey {
-				// Fall through to default case for text input handling
-				break
+				// Handle text input for logs search mode
+				if m.logsSearchMode {
+					if len(msg.String()) == 1 {
+						char := msg.String()
+						// Allow most printable characters for log search
+						if char >= " " && char <= "~" {
+							m.logsSearchText += char
+							m.logsScrollOffset = 0
+							return m, nil
+						}
+					}
+				}
+				// Handle text input for normal search mode
+				if m.searchMode {
+					if len(msg.String()) == 1 {
+						char := msg.String()
+						// Allow alphanumeric, dash, underscore, dot
+						if (char >= "a" && char <= "z") || (char >= "A" && char <= "Z") ||
+							(char >= "0" && char <= "9") || char == "-" || char == "_" || char == "." {
+							m.searchText += char
+							m.scrollOffset = 0
+							m.selectedIndex = 0
+							return m, nil
+						}
+					}
+				}
+				// If we get here, it's not a printable character we handle
+				return m, nil
 			}
 		}
 
@@ -1531,9 +1588,17 @@ func (m *Model) renderFooter() string {
 	}
 
 	// Different key bindings for different modes
-	if m.logsMode {
+	if m.logsSearchMode {
+		// Logs search mode - show search-specific bindings
+		bindings = append(bindings, RenderKeyBinding("text", m.T("keys.type_to_search")))
+		bindings = append(bindings, RenderKeyBinding("backspace", m.T("keys.delete")))
+		bindings = append(bindings, RenderKeyBinding("esc", m.T("keys.cancel")))
 		bindings = append(bindings, RenderKeyBinding("↑/↓", m.T("keys.scroll")))
 		bindings = append(bindings, RenderKeyBinding("PgUp/PgDn", m.T("keys.page")))
+	} else if m.logsMode {
+		bindings = append(bindings, RenderKeyBinding("↑/↓", m.T("keys.scroll")))
+		bindings = append(bindings, RenderKeyBinding("PgUp/PgDn", m.T("keys.page")))
+		bindings = append(bindings, RenderKeyBinding("/", m.T("keys.search")))
 		bindings = append(bindings, RenderKeyBinding("esc", m.T("keys.back")))
 	} else if m.searchMode {
 		bindings = append(bindings, RenderKeyBinding("text", m.T("keys.type_to_search")))
