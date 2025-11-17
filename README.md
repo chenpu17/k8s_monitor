@@ -1,46 +1,28 @@
 # k8s-monitor
 
+[English](README.md) | [中文](README_zh.md)
+
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> A lightweight, read-only CLI monitoring console for Kubernetes clusters
+> A lightweight, read-only terminal UI monitoring tool for Kubernetes clusters
 
 ## 📋 Overview
 
-k8s-monitor is a terminal-based monitoring tool for Kubernetes clusters, designed for operations engineers who need quick insights into cluster health via SSH. It provides:
+k8s-monitor is a terminal-based monitoring tool for Kubernetes clusters, designed for operations engineers who need quick insights into cluster health via SSH. It provides real-time monitoring with an intuitive keyboard-driven interface.
 
-- **🎯 One-screen Overview**: Cluster-wide resource usage with visual progress bars
-- **📊 Resource Monitoring**: CPU/Memory capacity, requests, limits, and actual usage
-- **📈 Utilization Metrics**: Automatic calculation of request and usage percentages
-- **🔍 Quick Diagnostics**: Automatic detection of CrashLoops, failed pods, node pressure
-- **🛡️ Read-only**: No cluster modifications, safe to use in production
+![k8s-monitor Demo](images/k8s-monitor.gif)
+
+### Key Features
+
+- **🎯 Comprehensive Views**: 8 specialized views covering all cluster resources
+- **📊 Resource Monitoring**: Real-time CPU/Memory/Network metrics with visual progress bars
+- **📈 Trend Analysis**: Historical metrics tracking with trend indicators
+- **🔍 Smart Diagnostics**: Automatic detection of CrashLoops, failed pods, node pressure
+- **📝 Log Viewer**: View and search pod logs in real-time
+- **🛡️ Read-only**: Safe to use in production - no cluster modifications
 - **⚡ Fast & Lightweight**: Single binary, minimal dependencies
-
-### 🆕 v0.1.1 Highlights
-
-**详细的集群资源视图**：
-- 显示集群总 CPU 容量（如 `172.0 cores`）、可分配量、请求量、实际使用量
-- 显示集群总内存容量（如 `688.2Gi`）、可分配量、请求量、实际使用量
-- 彩色进度条实时可视化资源利用率
-- 自动汇总所有节点和 Pod 的资源指标
-
-```
-📊 Cluster Resources
-
-CPU (cores):
-  Capacity:    172.0
-  Allocatable: 168.0
-  Requested:   45.2 (26.9%)
-  ████████░░░░░░░░░░░░░░░░░░░░    <-- 彩色进度条
-
-Memory:
-  Capacity:    688.2Gi
-  Allocatable: 671.5Gi
-  Requested:   123.4Gi (18.4%)
-  █████░░░░░░░░░░░░░░░░░░░░░░░
-```
-
-详见 [docs/RESOURCE_MONITORING.md](docs/RESOURCE_MONITORING.md)
+- **🌍 i18n Support**: English and Chinese interface
 
 ## 🚀 Quick Start
 
@@ -76,44 +58,79 @@ k8s-monitor console --context my-cluster
 # Monitor specific namespace
 k8s-monitor console --namespace production
 
+# Set language (en/zh)
+k8s-monitor console --locale zh
+
 # See all options
 k8s-monitor --help
 ```
 
 ## ✨ Features
 
-### v0.1.1 (Latest)
-- ✅ **详细资源监控**: 集群级别的 CPU/Memory 容量、分配、使用情况
-- ✅ **可视化进度条**: 彩色进度条显示资源利用率（自动根据 90%/75%/50% 着色）
-- ✅ **Pod 容量监控**: 显示集群最多可运行的 Pod 数和当前使用情况
-- ✅ **请求量统计**: 汇总所有 Pod 的 resource requests 和 limits
-- ✅ **实际使用量**: 从 kubelet metrics 获取真实的 CPU/Memory 使用情况
-- ✅ **利用率计算**: 自动计算请求利用率和使用利用率百分比
+### Core Functionality (v0.1.1)
 
-### v0.1 MVP (Complete ✅)
-- ✅ **Overview view**: Cluster health summary, node/pod statistics, recent events
-- ✅ **Node view**: Detailed node metrics, resource usage, pod distribution
-- ✅ **Pod view**: Pod list with namespace, status, restart count
-- ✅ **Detail views**: Deep dive into node and pod information
-- ✅ **Fast navigation**: Number keys (1/2/3) for instant view switching
-- ✅ **Interactive filtering**: Filter pods by namespace with live preview
-- ✅ **vim-style navigation**: j/k for up/down, Enter/Esc for drilling down/up
-- ✅ **Manual refresh**: R key to refresh data on demand
-- ✅ **Auto-refresh**: Background refresh with configurable interval
-- ✅ **Color-coded status**: Visual indicators for Ready/NotReady/Pending/Failed
+#### 📊 Cluster Overview
+- Cluster-wide resource summary (CPU, Memory, Pods)
+- Color-coded progress bars for capacity, allocatable, requests, and usage
+- Automatic utilization percentage calculation
+- Recent events and alerts summary
 
-### v0.2 (Planned)
-- ⏳ **Pod logs viewing**: View container logs from the TUI
-- ⏳ **Resource editing**: Quick edits via kubectl edit integration
-- ⏳ **Advanced filtering**: Filter by labels, status, and custom queries
-- ⏳ **Search functionality**: Quick search across all resources
-- ⏳ **Performance metrics**: CPU/Memory usage trends over time
+#### 🖥️ Node Monitoring
+- Real-time node metrics (CPU, Memory, Network)
+- Pod distribution per node
+- Node conditions and taints
+- Sorting by name, CPU, memory, or pod count
+- Trend indicators for resource usage
 
-### v0.3+ (Future)
-- ⏳ **Multi-cluster support**: Switch between multiple clusters
-- ⏳ **Historical data**: Track metrics over time with trends
-- ⏳ **Alerts and notifications**: Custom alert rules
-- ⏳ **Plugin system**: Extensible architecture for custom views
+#### 📦 Pod Management
+- Pod list with status, restarts, resource usage
+- Filter by namespace, status, or search by name
+- Container-level details
+- Resource requests and limits tracking
+- Network metrics per pod
+
+#### ⚙️ Workload Management
+- Jobs, Deployments, StatefulSets, DaemonSets, CronJobs
+- Status tracking and replica counts
+- Detailed resource specifications
+- Navigation to related pods
+
+#### 🌐 Network View
+- Services with type, cluster IP, and ports
+- Endpoint tracking
+- Network traffic monitoring (RX/TX rates)
+
+#### 💾 Storage View
+- PersistentVolumes and PersistentVolumeClaims
+- Capacity, status, and access modes
+- Storage class information
+
+#### 📋 Events & Alerts
+- Kubernetes events with filtering (Warning/Normal)
+- System-generated health alerts
+- Event search and sorting
+
+#### 📝 Pod Logs
+- Real-time log viewing with auto-refresh
+- Log search with highlighting
+- Auto-scroll to latest logs
+- Support for multi-container pods
+
+#### 🎬 Action Menu
+- Quick actions for pods and nodes
+- Execute kubectl commands
+- Copy resource information to clipboard
+
+### Advanced Features
+
+- **Vim-style Navigation**: `j/k` for up/down, `Enter` for details, `Esc` to go back
+- **Fast View Switching**: Number keys `1-8` for instant navigation
+- **Flexible Filtering**: Filter by namespace, status, labels
+- **Full-text Search**: Search resources by name
+- **Data Export**: Export view data to CSV/JSON
+- **Auto-refresh**: Configurable background refresh interval
+- **Metric History**: 10-snapshot sliding window for trend calculation
+- **Network Rate Calculation**: 20-second time-based sliding window for stable metrics
 
 ## 🎮 Keyboard Shortcuts
 
@@ -122,32 +139,47 @@ k8s-monitor --help
 |-----|--------|
 | `q` / `Ctrl+C` | Quit application |
 | `r` | Manual refresh |
-| `1` | Switch to Overview view |
-| `2` | Switch to Node view |
-| `3` | Switch to Pod view |
+| `1-8` | Switch to specific view (1=Overview, 2=Nodes, 3=Pods, etc.) |
 | `Tab` | Cycle through views |
-| `?` | Show help (future) |
 
 ### List View Keys
 | Key | Action |
 |-----|--------|
 | `↑` / `k` | Move selection up |
 | `↓` / `j` | Move selection down |
+| `PgUp` / `Ctrl+U` | Page up |
+| `PgDn` / `Ctrl+D` | Page down |
 | `Enter` | View details |
-| `f` | Open filter panel (Pod view only) |
-| `c` | Clear filter (Pod view only) |
+| `f` | Open filter panel |
+| `c` | Clear all filters |
+| `s` | Cycle sort order |
+| `/` | Search by name |
+| `e` | Export current view data |
 
 ### Detail View Keys
 | Key | Action |
 |-----|--------|
+| `↑` / `↓` | Scroll content |
+| `PgUp` / `PgDn` | Page up/down |
 | `Esc` / `Backspace` | Back to list view |
+| `l` | View logs (Pod detail only) |
+| `a` | Open action menu (Pod/Node detail) |
 
-### Filter Mode Keys
+### Logs View Keys
 | Key | Action |
 |-----|--------|
-| `↑` / `↓` | Select namespace |
+| `↑` / `↓` | Scroll logs |
+| `PgUp` / `PgDn` | Page up/down |
+| `/` | Search in logs |
+| `Esc` | Exit logs view |
+
+### Search/Filter Mode Keys
+| Key | Action |
+|-----|--------|
+| `text` | Type to filter |
+| `Backspace` | Delete character |
+| `Esc` | Cancel |
 | `Enter` | Apply filter |
-| `Esc` | Cancel filter |
 
 ## ⚙️ Configuration
 
@@ -162,53 +194,87 @@ Example configuration:
 cluster:
   kubeconfig: ~/.kube/config
   context: ""
+  namespace: ""
 
 refresh:
-  interval: 10s
-  timeout: 5s
+  interval: 2s        # Auto-refresh interval
+  cache_ttl: 10s      # Cache time-to-live
+
+performance:
+  max_concurrent: 10  # Max concurrent kubelet queries
+  log_tail_lines: 200 # Number of log lines to fetch
 
 ui:
-  color_mode: auto
+  locale: en          # Interface language (en/zh)
+  color_mode: auto    # Color mode (auto/always/never)
   default_view: overview
 
 logging:
-  level: info
+  level: info         # Log level (debug/info/warn/error)
   file: /tmp/k8s-monitor.log
-```
 
-See [config/default.yaml](config/default.yaml) for all options.
+# For test environments only - skip kubelet TLS verification
+# insecure_kubelet: false
+```
 
 ## 🏗️ Architecture
 
 ```
-CLI Interface (Bubble Tea)
-    ↓
-Application Core (Data Manager, View Manager)
-    ↓
-Data Sources (API Server, kubelet, Metrics Server)
-    ↓
-Kubernetes Cluster
+┌─────────────────────────────────────┐
+│    CLI Interface (Bubble Tea)       │
+│         User Interaction            │
+└─────────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────┐
+│      Application Core               │
+│  ┌──────────┐    ┌──────────┐      │
+│  │   View   │    │   Data   │      │
+│  │  Manager │    │ Manager  │      │
+│  └──────────┘    └──────────┘      │
+└─────────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────┐
+│      Data Source Layer              │
+│  ┌──────────┐    ┌──────────┐      │
+│  │   API    │    │ Kubelet  │      │
+│  │  Server  │    │  Client  │      │
+│  └──────────┘    └──────────┘      │
+│         ↓              ↓            │
+│  ┌─────────────────────────┐       │
+│  │    Cache & Refresh      │       │
+│  └─────────────────────────┘       │
+└─────────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────┐
+│      Kubernetes Cluster             │
+└─────────────────────────────────────┘
 ```
 
-- **UI Layer**: Terminal rendering with [Bubble Tea](https://github.com/charmbracelet/bubbletea)
-- **Application Core**: Business logic, data aggregation, caching
-- **Data Sources**: client-go for API Server, HTTP client for kubelet Summary API
+**Key Components:**
+- **UI Layer**: Terminal rendering with [Bubble Tea](https://github.com/charmbracelet/bubbletea) (Elm architecture)
+- **Application Core**: Business logic, view management, state handling
+- **Data Sources**:
+  - API Server via [client-go](https://github.com/kubernetes/client-go)
+  - Kubelet Summary API for real-time metrics
+- **Cache Layer**: TTL-based caching with background refresh
 
 ## 📖 Documentation
 
+- [CLAUDE.md](CLAUDE.md) - Developer guide for working with this codebase
 - [Product Plan](docs/product_plan.md) - Product vision and roadmap
 - [Technical Design](docs/technical_design.md) - Architecture and implementation details
 - [Development Plan](docs/development_plan.md) - Development progress tracking
+- [Resource Monitoring](docs/RESOURCE_MONITORING.md) - Detailed resource monitoring guide
 
 ## 🛠️ Development
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.21+ (Go 1.24+ recommended)
 - Access to a Kubernetes cluster (for testing)
-- kubectl configured
+- kubectl configured with valid kubeconfig
 
-### Build
+### Build Commands
 
 ```bash
 # Install dependencies
@@ -217,33 +283,65 @@ make deps
 # Build binary
 make build
 
-# Run tests
+# Run tests with coverage
 make test
+
+# Run linters
+make lint
+
+# Format code
+make fmt
+
+# Run all checks (format, vet, test)
+make check
+
+# Build for multiple platforms
+make build-all
 
 # Run locally
 make run
+
+# Clean build artifacts
+make clean
 ```
 
 ### Project Structure
 
 ```
 k8s-monitor/
-├── cmd/k8s-monitor/     # Main entry point
-├── internal/            # Private application code
-│   ├── app/             # Application core
-│   ├── ui/              # UI layer (views, components)
-│   ├── datasource/      # Data source clients
-│   ├── model/           # Data models
-│   └── utils/           # Utilities
-├── pkg/                 # Public libraries
-├── config/              # Configuration files
-├── docs/                # Documentation
-└── scripts/             # Build scripts
+├── cmd/k8s-monitor/        # Main entry point
+├── internal/               # Private application code
+│   ├── app/                # Application core (config, lifecycle)
+│   ├── ui/                 # UI layer (Bubble Tea models and views)
+│   ├── datasource/         # Data source clients (API Server, Kubelet)
+│   ├── cache/              # Cache and refresh logic
+│   ├── model/              # Data models
+│   ├── i18n/               # Internationalization
+│   └── diagnostic/         # Diagnostic utilities
+├── config/                 # Configuration files
+├── docs/                   # Documentation
+├── images/                 # Screenshots and demos
+└── scripts/                # Build and utility scripts
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+make test
+
+# Run unit tests only
+make test-unit
+
+# Generate coverage report
+make test-coverage
 ```
 
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests.
+
+### How to Contribute
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
@@ -251,7 +349,30 @@ Contributions are welcome! Please feel free to submit issues and pull requests.
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-Please follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+### Commit Convention
+
+Please follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+- `feat:` new feature
+- `fix:` bug fix
+- `refactor:` code refactoring
+- `docs:` documentation changes
+- `test:` test additions/modifications
+- `chore:` maintenance tasks
+
+## 🗺️ Roadmap
+
+### v0.2 (In Progress)
+- [ ] Multi-cluster support
+- [ ] Custom alert rules
+- [ ] Historical metrics graphs
+- [ ] Resource editing via kubectl integration
+- [ ] Advanced label filtering
+
+### v0.3+ (Future)
+- [ ] Plugin system for custom views
+- [ ] Metrics aggregation over time
+- [ ] Export to monitoring systems
+- [ ] Configuration profiles
 
 ## 📝 License
 
@@ -260,29 +381,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - [Bubble Tea](https://github.com/charmbracelet/bubbletea) - Excellent TUI framework
+- [Lip Gloss](https://github.com/charmbracelet/lipgloss) - Terminal styling
 - [client-go](https://github.com/kubernetes/client-go) - Kubernetes Go client
 - [Cobra](https://github.com/spf13/cobra) - CLI framework
+- [Viper](https://github.com/spf13/viper) - Configuration management
 
-## 📊 Status
+## 📧 Contact
 
-**Current Version**: v0.1.0 (MVP)
-
-**Development Status**: ✅ Day 9 Complete - Ready for Release
-
-- ✅ Project initialization
-- ✅ CLI framework (Cobra + Viper + Zap)
-- ✅ API Server client (client-go)
-- ✅ Kubelet client (Summary API)
-- ✅ Cache layer + background refresh
-- ✅ **Overview view**: Cluster summary, node/pod stats, recent events
-- ✅ **Node view**: Node list, resource usage, detail view
-- ✅ **Pod view**: Pod list, namespace filtering, detail view
-- ✅ **Detail views**: Node details, Pod details, container info
-- ✅ **Fast navigation**: Number keys 1/2/3 for quick view switching
-- ✅ **Interactive filtering**: Namespace filter with live preview
-- ✅ **vim-style navigation**: j/k for up/down, Enter for details, Esc to go back
-
-**Next Steps**: Documentation and integration testing (Day 10)
+For questions, suggestions, or issues, please [open an issue](https://github.com/yourusername/k8s-monitor/issues) on GitHub.
 
 ---
 
