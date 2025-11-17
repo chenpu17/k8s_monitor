@@ -759,7 +759,8 @@ func (m *Model) renderCPUDetails(summary *model.ClusterSummary) string {
 		content = append(content, "")
 	}
 
-	return StyleBorder.Width(20).Height(minLines + 2).Render(strings.Join(content, "\n"))
+	// Use consistent width across all panels
+	return StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(content, "\n"))
 }
 
 func (m *Model) renderMemoryDetails(summary *model.ClusterSummary) string {
@@ -780,7 +781,8 @@ func (m *Model) renderMemoryDetails(summary *model.ClusterSummary) string {
 		content = append(content, "")
 	}
 
-	return StyleBorder.Width(20).Height(minLines + 2).Render(strings.Join(content, "\n"))
+	// Use consistent width across all panels
+	return StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(content, "\n"))
 }
 
 func (m *Model) renderPodDetails(summary *model.ClusterSummary) string {
@@ -799,7 +801,8 @@ func (m *Model) renderPodDetails(summary *model.ClusterSummary) string {
 		content = append(content, "")
 	}
 
-	return StyleBorder.Width(18).Height(minLines + 2).Render(strings.Join(content, "\n"))
+	// Use consistent width across all panels
+	return StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(content, "\n"))
 }
 
 // renderClusterResources renders cluster-wide resource usage
@@ -961,7 +964,13 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 		)
 	}
 
-	servicesPanel := StyleBorder.Width(20).Render(strings.Join(servicesContent, "\n"))
+	// Pad to minimum height
+	minLines := 7
+	for len(servicesContent) < minLines {
+		servicesContent = append(servicesContent, "")
+	}
+
+	servicesPanel := StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(servicesContent, "\n"))
 
 	// Storage panel with utilization
 	storageContent := []string{
@@ -1003,7 +1012,12 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 		storageContent = append(storageContent, StyleTextMuted.Render("No PVCs"))
 	}
 
-	storagePanel := StyleBorder.Width(22).Render(strings.Join(storageContent, "\n"))
+	// Pad to minimum height
+	for len(storageContent) < minLines {
+		storageContent = append(storageContent, "")
+	}
+
+	storagePanel := StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(storageContent, "\n"))
 
 	// Workloads panel
 	workloadsContent := []string{
@@ -1027,7 +1041,12 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 		)
 	}
 
-	workloadsPanel := StyleBorder.Width(20).Render(strings.Join(workloadsContent, "\n"))
+	// Pad to minimum height
+	for len(workloadsContent) < minLines {
+		workloadsContent = append(workloadsContent, "")
+	}
+
+	workloadsPanel := StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(workloadsContent, "\n"))
 
 	// Network panel with rate information
 	networkContent := []string{
@@ -1090,7 +1109,12 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 		}
 	}
 
-	networkPanel := StyleBorder.Width(20).Render(strings.Join(networkContent, "\n"))
+	// Pad to minimum height
+	for len(networkContent) < minLines {
+		networkContent = append(networkContent, "")
+	}
+
+	networkPanel := StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(networkContent, "\n"))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, servicesPanel, storagePanel, workloadsPanel, networkPanel)
 }
