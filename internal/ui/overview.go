@@ -8,6 +8,15 @@ import (
 	"github.com/yourusername/k8s-monitor/internal/model"
 )
 
+const (
+	summaryPanelWidth          = 20
+	summaryPanelMinContentLine = 7
+	// Border draws 1 line on top and bottom, padding adds 1 line each by default.
+	summaryPanelExtraHeight = 4
+)
+
+var summaryPanelStyle = StyleBorder.Copy().Padding(1, 1)
+
 // formatCPU formats CPU millicores to a human-readable string
 func formatCPU(millicores int64) string {
 	if millicores == 0 {
@@ -167,6 +176,34 @@ func renderProgressBar(percent float64, width int) string {
 	return style.Render(bar)
 }
 
+func padContentLines(lines []string, target int) []string {
+	for len(lines) < target {
+		lines = append(lines, "")
+	}
+	return lines
+}
+
+func maxContentLines(target int, panels ...[]string) int {
+	maxLines := target
+	for _, p := range panels {
+		if len(p) > maxLines {
+			maxLines = len(p)
+		}
+	}
+	return maxLines
+}
+
+func renderSummaryPanel(lines []string, targetContentLines int) string {
+	if targetContentLines < summaryPanelMinContentLine {
+		targetContentLines = summaryPanelMinContentLine
+	}
+	lines = padContentLines(lines, targetContentLines)
+	return summaryPanelStyle.
+		Width(summaryPanelWidth).
+		Height(targetContentLines+summaryPanelExtraHeight).
+		Render(strings.Join(lines, "\n"))
+}
+
 // renderOverview renders the overview view with adaptive layout
 func (m *Model) renderOverview() string {
 	if m.clusterData == nil {
@@ -199,19 +236,27 @@ func (m *Model) renderOverview() string {
 	// Priority 2: Resource Details (compact horizontal layout)
 	// Only show if we have space or enable scrolling
 	if availableHeight > 20 || estimatedTotalLines <= availableHeight {
-		cpuPanel := m.renderCPUDetails(summary)
-		memoryPanel := m.renderMemoryDetails(summary)
-		podPanel := m.renderPodDetails(summary)
-		nodesPods := m.renderNodesAndPods(summary)
+		cpuLines := m.cpuDetailsLines(summary)
+		memoryLines := m.memoryDetailsLines(summary)
+		podLines := m.podDetailsLines(summary)
+		nodesLines := m.nodesAndPodsLines(summary)
 
 		// Compact Alert Panel (if there are any alerts) - show as small panel instead of top banner
-		var alertPanel string
+		var alertLines []string
 		if m.hasAlerts(summary) {
-			alertPanel = m.renderCompactAlertPanel(summary)
+			alertLines = m.compactAlertLines(summary)
 		} else {
 			// If no alerts, show events instead
-			alertPanel = m.renderEventSummary(summary)
+			alertLines = m.eventSummaryLines(summary)
 		}
+
+		targetLines := maxContentLines(summaryPanelMinContentLine, cpuLines, memoryLines, podLines, nodesLines, alertLines)
+
+		cpuPanel := renderSummaryPanel(cpuLines, targetLines)
+		memoryPanel := renderSummaryPanel(memoryLines, targetLines)
+		podPanel := renderSummaryPanel(podLines, targetLines)
+		nodesPods := renderSummaryPanel(nodesLines, targetLines)
+		alertPanel := renderSummaryPanel(alertLines, targetLines)
 
 		row2 := lipgloss.JoinHorizontal(
 			lipgloss.Top,
@@ -368,7 +413,7 @@ func (m *Model) renderAlertPanel(summary *model.ClusterSummary) string {
 }
 
 // renderCompactAlertPanel renders a compact alert panel for the overview
-func (m *Model) renderCompactAlertPanel(summary *model.ClusterSummary) string {
+func (m *Model) compactAlertLines(summary *model.ClusterSummary) []string {
 	var alerts []string
 	alerts = append(alerts, StyleDanger.Render("⚠️  Alerts"))
 	alerts = append(alerts, "")
@@ -408,19 +453,7 @@ func (m *Model) renderCompactAlertPanel(summary *model.ClusterSummary) string {
 		alerts = append(alerts, StyleStatusReady.Render("✓ No alerts"))
 	}
 
-	// Pad to minimum height to match other panels
-	minLines := 7
-	for len(alerts) < minLines {
-		alerts = append(alerts, "")
-	}
-
-	// If too many alerts, truncate
-	if len(alerts) > minLines {
-		alerts = alerts[:minLines]
-	}
-
-	// Use fixed Width and Height to ensure border closes properly
-	return StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(alerts, "\n"))
+	return alerts
 }
 
 // renderClusterLoadCompact renders a compact cluster load summary (most important metrics)
@@ -734,15 +767,15 @@ func (m *Model) renderClusterLoad(summary *model.ClusterSummary) string {
 
 // renderResourceDetails renders detailed resource capacity information
 func (m *Model) renderResourceDetails(summary *model.ClusterSummary) string {
-	cpuPanel := m.renderCPUDetails(summary)
-	memoryPanel := m.renderMemoryDetails(summary)
-	podPanel := m.renderPodDetails(summary)
+	cpuPanel := m.renderCPUDetails(summary, summaryPanelMinContentLine)
+	memoryPanel := m.renderMemoryDetails(summary, summaryPanelMinContentLine)
+	podPanel := m.renderPodDetails(summary, summaryPanelMinContentLine)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, cpuPanel, memoryPanel, podPanel)
 }
 
-func (m *Model) renderCPUDetails(summary *model.ClusterSummary) string {
-	content := []string{
+func (m *Model) cpuDetailsLines(summary *model.ClusterSummary) []string {
+	lines := []string{
 		StyleHeader.Render("💻 CPU"),
 		"",
 		fmt.Sprintf("%s   %s", m.T("overview.capacity"), StyleHighlight.Render(formatCPU(summary.CPUCapacity))),
@@ -750,21 +783,17 @@ func (m *Model) renderCPUDetails(summary *model.ClusterSummary) string {
 		fmt.Sprintf("%s %s", m.T("overview.requested"), formatCPU(summary.CPURequested)),
 	}
 	if summary.CPUUsed > 0 {
-		content = append(content, fmt.Sprintf("%s   %s", m.T("overview.actual"), StyleWarning.Render(formatCPU(summary.CPUUsed))))
+		lines = append(lines, fmt.Sprintf("%s   %s", m.T("overview.actual"), StyleWarning.Render(formatCPU(summary.CPUUsed))))
 	}
-
-	// Pad to minimum height to match other panels
-	minLines := 7
-	for len(content) < minLines {
-		content = append(content, "")
-	}
-
-	// Use consistent width across all panels
-	return StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(content, "\n"))
+	return lines
 }
 
-func (m *Model) renderMemoryDetails(summary *model.ClusterSummary) string {
-	content := []string{
+func (m *Model) renderCPUDetails(summary *model.ClusterSummary, targetContentLines int) string {
+	return renderSummaryPanel(m.cpuDetailsLines(summary), targetContentLines)
+}
+
+func (m *Model) memoryDetailsLines(summary *model.ClusterSummary) []string {
+	lines := []string{
 		StyleHeader.Render("🧠 Memory"),
 		"",
 		fmt.Sprintf("%s   %s", m.T("overview.capacity"), StyleHighlight.Render(formatMemory(summary.MemoryCapacity))),
@@ -772,21 +801,17 @@ func (m *Model) renderMemoryDetails(summary *model.ClusterSummary) string {
 		fmt.Sprintf("%s %s", m.T("overview.requested"), formatMemory(summary.MemoryRequested)),
 	}
 	if summary.MemoryUsed > 0 {
-		content = append(content, fmt.Sprintf("%s   %s", m.T("overview.actual"), StyleWarning.Render(formatMemory(summary.MemoryUsed))))
+		lines = append(lines, fmt.Sprintf("%s   %s", m.T("overview.actual"), StyleWarning.Render(formatMemory(summary.MemoryUsed))))
 	}
-
-	// Pad to minimum height to match other panels
-	minLines := 7
-	for len(content) < minLines {
-		content = append(content, "")
-	}
-
-	// Use consistent width across all panels
-	return StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(content, "\n"))
+	return lines
 }
 
-func (m *Model) renderPodDetails(summary *model.ClusterSummary) string {
-	content := []string{
+func (m *Model) renderMemoryDetails(summary *model.ClusterSummary, targetContentLines int) string {
+	return renderSummaryPanel(m.memoryDetailsLines(summary), targetContentLines)
+}
+
+func (m *Model) podDetailsLines(summary *model.ClusterSummary) []string {
+	return []string{
 		StyleHeader.Render("📦 Pods"),
 		"",
 		fmt.Sprintf("%s %s", m.T("overview.capacity"), StyleHighlight.Render(fmt.Sprintf("%d", summary.PodAllocatable))),
@@ -794,15 +819,10 @@ func (m *Model) renderPodDetails(summary *model.ClusterSummary) string {
 		fmt.Sprintf("%s %s", m.T("overview.pending"), StyleStatusPending.Render(fmt.Sprintf("%d", summary.PendingPods))),
 		fmt.Sprintf("%s %s", m.T("overview.failed"), StyleStatusNotReady.Render(fmt.Sprintf("%d", summary.FailedPods))),
 	}
+}
 
-	// Pad to minimum height to match other panels
-	minLines := 7
-	for len(content) < minLines {
-		content = append(content, "")
-	}
-
-	// Use consistent width across all panels
-	return StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(content, "\n"))
+func (m *Model) renderPodDetails(summary *model.ClusterSummary, targetContentLines int) string {
+	return renderSummaryPanel(m.podDetailsLines(summary), targetContentLines)
 }
 
 // renderClusterResources renders cluster-wide resource usage
@@ -907,47 +927,51 @@ func (m *Model) renderClusterResources(summary *model.ClusterSummary) string {
 }
 
 // renderNodesAndPods renders nodes and pods summary
-func (m *Model) renderNodesAndPods(summary *model.ClusterSummary) string {
-	content := []string{
+func (m *Model) nodesAndPodsLines(summary *model.ClusterSummary) []string {
+	return []string{
 		StyleHeader.Render("🖥️  Nodes"),
 		"",
 		fmt.Sprintf("Total:    %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalNodes))),
 		fmt.Sprintf("Ready:    %s", StyleStatusReady.Render(fmt.Sprintf("%d", summary.ReadyNodes))),
 		fmt.Sprintf("NotReady: %s", StyleStatusNotReady.Render(fmt.Sprintf("%d", summary.NotReadyNodes))),
 	}
-
-	// Pad to minimum height to match other panels
-	minLines := 7
-	for len(content) < minLines {
-		content = append(content, "")
-	}
-
-	return StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(content, "\n"))
 }
 
 // renderEventSummary renders event summary section
-func (m *Model) renderEventSummary(summary *model.ClusterSummary) string {
-	content := []string{
+func (m *Model) eventSummaryLines(summary *model.ClusterSummary) []string {
+	return []string{
 		StyleHeader.Render("⚠️  Events"),
 		"",
 		fmt.Sprintf("Total:   %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalEvents))),
 		fmt.Sprintf("Warning: %s", StyleWarning.Render(fmt.Sprintf("%d", summary.WarningEvents))),
 		fmt.Sprintf("Error:   %s", StyleDanger.Render(fmt.Sprintf("%d", summary.ErrorEvents))),
 	}
-
-	// Pad to minimum height to match other panels
-	minLines := 7
-	for len(content) < minLines {
-		content = append(content, "")
-	}
-
-	return StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(content, "\n"))
 }
 
 // renderServicesAndStorage renders services and storage statistics
 func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
-	// Services panel with health indicators
-	servicesContent := []string{
+	servicesContent := m.servicesPanelLines(summary)
+	storageContent := m.storagePanelLines(summary)
+	workloadsContent := m.workloadsPanelLines(summary)
+	networkContent := m.networkPanelLines(summary)
+
+	targetLines := maxContentLines(summaryPanelMinContentLine,
+		servicesContent,
+		storageContent,
+		workloadsContent,
+		networkContent,
+	)
+
+	servicesPanel := renderSummaryPanel(servicesContent, targetLines)
+	storagePanel := renderSummaryPanel(storageContent, targetLines)
+	workloadsPanel := renderSummaryPanel(workloadsContent, targetLines)
+	networkPanel := renderSummaryPanel(networkContent, targetLines)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, servicesPanel, storagePanel, workloadsPanel, networkPanel)
+}
+
+func (m *Model) servicesPanelLines(summary *model.ClusterSummary) []string {
+	lines := []string{
 		StyleHeader.Render("🔌 Services"),
 		"",
 		fmt.Sprintf("Total:   %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalServices))),
@@ -956,100 +980,89 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 		fmt.Sprintf("LoadBal: %s", fmt.Sprintf("%d", summary.LoadBalancerSvcs)),
 	}
 
-	// Add service health indicator
 	if summary.NoEndpointServices > 0 {
-		servicesContent = append(servicesContent,
+		lines = append(lines,
 			"",
 			StyleWarning.Render(fmt.Sprintf("NoEndpt: %d", summary.NoEndpointServices)),
 		)
 	}
 
-	// Pad to minimum height
-	minLines := 7
-	for len(servicesContent) < minLines {
-		servicesContent = append(servicesContent, "")
-	}
+	return lines
+}
 
-	servicesPanel := StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(servicesContent, "\n"))
-
-	// Storage panel with utilization
-	storageContent := []string{
+func (m *Model) storagePanelLines(summary *model.ClusterSummary) []string {
+	lines := []string{
 		StyleHeader.Render("💾 Storage"),
 		"",
 	}
 
 	if summary.TotalPVs > 0 {
-		storageContent = append(storageContent,
+		lines = append(lines,
 			fmt.Sprintf("PVs:  %s (%s)",
 				StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalPVs)),
 				formatMemory(summary.TotalStorageSize),
 			),
 			fmt.Sprintf("Bound: %s", StyleStatusReady.Render(fmt.Sprintf("%d", summary.BoundPVs))),
 		)
-		// Add storage utilization
 		if summary.StorageUsagePercent > 0 {
-			storageContent = append(storageContent,
+			lines = append(lines,
 				fmt.Sprintf("Used: %s", StyleHighlight.Render(formatPercentage(summary.StorageUsagePercent))),
 			)
 		}
 	} else {
-		storageContent = append(storageContent, StyleTextMuted.Render("No PVs"))
+		lines = append(lines, StyleTextMuted.Render("No PVs"))
 	}
 
 	if summary.TotalPVCs > 0 {
-		storageContent = append(storageContent,
+		lines = append(lines,
 			"",
 			fmt.Sprintf("PVCs: %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalPVCs))),
 			fmt.Sprintf("Bound: %s", StyleStatusReady.Render(fmt.Sprintf("%d", summary.BoundPVCs))),
 		)
-		// Highlight pending PVCs
 		if summary.PendingPVCs > 0 {
-			storageContent = append(storageContent,
+			lines = append(lines,
 				StyleWarning.Render(fmt.Sprintf("Pend: %d", summary.PendingPVCs)),
 			)
 		}
 	} else {
-		storageContent = append(storageContent, StyleTextMuted.Render("No PVCs"))
+		lines = append(lines, StyleTextMuted.Render("No PVCs"))
 	}
 
-	// Pad to minimum height
-	for len(storageContent) < minLines {
-		storageContent = append(storageContent, "")
-	}
+	return lines
+}
 
-	storagePanel := StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(storageContent, "\n"))
-
-	// Workloads panel
-	workloadsContent := []string{
+func (m *Model) workloadsPanelLines(summary *model.ClusterSummary) []string {
+	lines := []string{
 		StyleHeader.Render("📋 Workloads"),
 		"",
 	}
 
-	totalWorkloads := summary.TotalDeployments + summary.TotalStatefulSets + summary.TotalDaemonSets + summary.TotalJobs + summary.TotalCronJobs
+	totalWorkloads := summary.TotalDeployments +
+		summary.TotalStatefulSets +
+		summary.TotalDaemonSets +
+		summary.TotalJobs +
+		summary.TotalCronJobs
+
 	if totalWorkloads > 0 {
-		workloadsContent = append(workloadsContent,
-			fmt.Sprintf("Deploy:  %s", fmt.Sprintf("%d", summary.TotalDeployments)),
-			fmt.Sprintf("StatSet: %s", fmt.Sprintf("%d", summary.TotalStatefulSets)),
-			fmt.Sprintf("DaemSet: %s", fmt.Sprintf("%d", summary.TotalDaemonSets)),
-			fmt.Sprintf("Jobs:    %s", fmt.Sprintf("%d", summary.TotalJobs)),
-			fmt.Sprintf("Cron:    %s", fmt.Sprintf("%d", summary.TotalCronJobs)),
+		lines = append(lines,
+			fmt.Sprintf("Deploy:  %d", summary.TotalDeployments),
+			fmt.Sprintf("StatSet: %d", summary.TotalStatefulSets),
+			fmt.Sprintf("DaemSet: %d", summary.TotalDaemonSets),
+			fmt.Sprintf("Jobs:    %d", summary.TotalJobs),
+			fmt.Sprintf("Cron:    %d", summary.TotalCronJobs),
 		)
 	} else {
-		workloadsContent = append(workloadsContent,
+		lines = append(lines,
 			StyleTextMuted.Render("Limited detection"),
 			StyleTextMuted.Render("(based on labels)"),
 		)
 	}
 
-	// Pad to minimum height
-	for len(workloadsContent) < minLines {
-		workloadsContent = append(workloadsContent, "")
-	}
+	return lines
+}
 
-	workloadsPanel := StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(workloadsContent, "\n"))
-
-	// Network panel with rate information
-	networkContent := []string{
+func (m *Model) networkPanelLines(summary *model.ClusterSummary) []string {
+	lines := []string{
 		StyleHeader.Render("🌐 Network"),
 		"",
 	}
@@ -1058,14 +1071,12 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 	hasData := summary.NetworkRxBytes > 0 || summary.NetworkTxBytes > 0
 
 	if hasRate {
-		// Show rates prominently with /s suffix
-		networkContent = append(networkContent,
+		lines = append(lines,
 			fmt.Sprintf("RX: %s", StyleHighlight.Render(formatRate(summary.NetworkRxRate))),
 			fmt.Sprintf("TX: %s", StyleHighlight.Render(formatRate(summary.NetworkTxRate))),
 		)
-		// Show cumulative in muted style
 		if hasData {
-			networkContent = append(networkContent,
+			lines = append(lines,
 				"",
 				StyleTextMuted.Render("Cumulative:"),
 				StyleTextMuted.Render(fmt.Sprintf("  RX: %s", formatMemory(summary.NetworkRxBytes))),
@@ -1073,8 +1084,7 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 			)
 		}
 	} else if hasData {
-		// No rate yet, show cumulative with clear label
-		networkContent = append(networkContent,
+		lines = append(lines,
 			StyleTextMuted.Render("Cumulative:"),
 			fmt.Sprintf("RX: %s", StyleHighlight.Render(formatMemory(summary.NetworkRxBytes))),
 			fmt.Sprintf("TX: %s", StyleHighlight.Render(formatMemory(summary.NetworkTxBytes))),
@@ -1082,12 +1092,11 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 			StyleTextMuted.Render("(waiting for rate...)"),
 		)
 		if summary.TotalNodes > 0 && summary.NodesWithMetrics < summary.TotalNodes {
-			networkContent = append(networkContent,
+			lines = append(lines,
 				StyleWarning.Render(fmt.Sprintf("%d/%d nodes", summary.NodesWithMetrics, summary.TotalNodes)),
 			)
 		}
 	} else {
-		// No data at all
 		msg := "metrics unavailable"
 		if summary.TotalNodes > 0 {
 			msg += fmt.Sprintf(" (%d/%d nodes)", summary.NodesWithMetrics, summary.TotalNodes)
@@ -1095,13 +1104,11 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 		if summary.KubeletError != "" {
 			msg += fmt.Sprintf(" • %s", truncateText(summary.KubeletError, 40))
 		}
-		networkContent = append(networkContent,
-			StyleTextMuted.Render(msg),
-		)
+		lines = append(lines, StyleTextMuted.Render(msg))
 		if summary.KubeletError != "" {
 			hint := m.kubeletHint(detectKubeletHintKind(summary.KubeletError))
 			if hint != "" {
-				networkContent = append(networkContent,
+				lines = append(lines,
 					"",
 					StyleTextMuted.Render(hint),
 				)
@@ -1109,14 +1116,7 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 		}
 	}
 
-	// Pad to minimum height
-	for len(networkContent) < minLines {
-		networkContent = append(networkContent, "")
-	}
-
-	networkPanel := StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(networkContent, "\n"))
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, servicesPanel, storagePanel, workloadsPanel, networkPanel)
+	return lines
 }
 
 // Deprecated: old render functions kept for reference
