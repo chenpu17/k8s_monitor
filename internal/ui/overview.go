@@ -408,23 +408,19 @@ func (m *Model) renderCompactAlertPanel(summary *model.ClusterSummary) string {
 		alerts = append(alerts, StyleStatusReady.Render("✓ No alerts"))
 	}
 
-	// Pad to minimum height to match other panels (5 lines minimum: header + blank + 3 content)
-	minLines := 5
+	// Pad to minimum height to match other panels
+	minLines := 7
 	for len(alerts) < minLines {
 		alerts = append(alerts, "")
 	}
 
 	// If too many alerts, truncate
-	if len(alerts) > 10 {
-		alerts = alerts[:10]
-		remaining := alertCount - 8
-		if remaining > 0 {
-			alerts = append(alerts, StyleTextMuted.Render(fmt.Sprintf("+%d more", remaining)))
-		}
+	if len(alerts) > minLines {
+		alerts = alerts[:minLines]
 	}
 
-	// Use Width(22) with explicit padding to ensure border closes properly
-	return StyleBorder.Width(22).Render(strings.Join(alerts, "\n"))
+	// Use fixed Width and Height to ensure border closes properly
+	return StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(alerts, "\n"))
 }
 
 // renderClusterLoadCompact renders a compact cluster load summary (most important metrics)
@@ -756,7 +752,14 @@ func (m *Model) renderCPUDetails(summary *model.ClusterSummary) string {
 	if summary.CPUUsed > 0 {
 		content = append(content, fmt.Sprintf("%s   %s", m.T("overview.actual"), StyleWarning.Render(formatCPU(summary.CPUUsed))))
 	}
-	return StyleBorder.Width(20).Render(strings.Join(content, "\n"))
+
+	// Pad to minimum height to match other panels
+	minLines := 7
+	for len(content) < minLines {
+		content = append(content, "")
+	}
+
+	return StyleBorder.Width(20).Height(minLines + 2).Render(strings.Join(content, "\n"))
 }
 
 func (m *Model) renderMemoryDetails(summary *model.ClusterSummary) string {
@@ -770,7 +773,14 @@ func (m *Model) renderMemoryDetails(summary *model.ClusterSummary) string {
 	if summary.MemoryUsed > 0 {
 		content = append(content, fmt.Sprintf("%s   %s", m.T("overview.actual"), StyleWarning.Render(formatMemory(summary.MemoryUsed))))
 	}
-	return StyleBorder.Width(20).Render(strings.Join(content, "\n"))
+
+	// Pad to minimum height to match other panels
+	minLines := 7
+	for len(content) < minLines {
+		content = append(content, "")
+	}
+
+	return StyleBorder.Width(20).Height(minLines + 2).Render(strings.Join(content, "\n"))
 }
 
 func (m *Model) renderPodDetails(summary *model.ClusterSummary) string {
@@ -782,7 +792,14 @@ func (m *Model) renderPodDetails(summary *model.ClusterSummary) string {
 		fmt.Sprintf("%s %s", m.T("overview.pending"), StyleStatusPending.Render(fmt.Sprintf("%d", summary.PendingPods))),
 		fmt.Sprintf("%s %s", m.T("overview.failed"), StyleStatusNotReady.Render(fmt.Sprintf("%d", summary.FailedPods))),
 	}
-	return StyleBorder.Width(18).Render(strings.Join(content, "\n"))
+
+	// Pad to minimum height to match other panels
+	minLines := 7
+	for len(content) < minLines {
+		content = append(content, "")
+	}
+
+	return StyleBorder.Width(18).Height(minLines + 2).Render(strings.Join(content, "\n"))
 }
 
 // renderClusterResources renders cluster-wide resource usage
@@ -896,7 +913,13 @@ func (m *Model) renderNodesAndPods(summary *model.ClusterSummary) string {
 		fmt.Sprintf("NotReady: %s", StyleStatusNotReady.Render(fmt.Sprintf("%d", summary.NotReadyNodes))),
 	}
 
-	return StyleBorder.Width(22).Render(strings.Join(content, "\n"))
+	// Pad to minimum height to match other panels
+	minLines := 7
+	for len(content) < minLines {
+		content = append(content, "")
+	}
+
+	return StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(content, "\n"))
 }
 
 // renderEventSummary renders event summary section
@@ -909,7 +932,13 @@ func (m *Model) renderEventSummary(summary *model.ClusterSummary) string {
 		fmt.Sprintf("Error:   %s", StyleDanger.Render(fmt.Sprintf("%d", summary.ErrorEvents))),
 	}
 
-	return StyleBorder.Width(20).Render(strings.Join(content, "\n"))
+	// Pad to minimum height to match other panels
+	minLines := 7
+	for len(content) < minLines {
+		content = append(content, "")
+	}
+
+	return StyleBorder.Width(22).Height(minLines + 2).Render(strings.Join(content, "\n"))
 }
 
 // renderServicesAndStorage renders services and storage statistics
