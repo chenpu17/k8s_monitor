@@ -230,6 +230,101 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 					node.CabinetInfo))
 			}
 		}
+
+		// NPU Runtime Metrics (from k8s-monitor collector)
+		if len(node.NPUChips) > 0 {
+			info = append(info, "")
+			info = append(info, StyleTextSecondary.Render("  NPU Runtime Metrics"))
+
+			// Overall status
+			healthStyle := StyleStatusReady
+			if node.NPUHealthStatus == "Warning" {
+				healthStyle = StyleWarning
+			} else if node.NPUHealthStatus == "Unhealthy" {
+				healthStyle = StyleStatusNotReady
+			}
+			info = append(info, fmt.Sprintf("    %s: %s",
+				StyleTextMuted.Render("Health Status"),
+				healthStyle.Render(node.NPUHealthStatus)))
+
+			// Average utilization
+			info = append(info, fmt.Sprintf("    %s: %s",
+				StyleTextMuted.Render("AI Core Util"),
+				StyleHighlight.Render(fmt.Sprintf("%.1f%%", node.NPUUtilization))))
+
+			// HBM Memory
+			if node.NPUMemoryTotal > 0 {
+				memUsedGB := float64(node.NPUMemoryUsed) / (1024 * 1024 * 1024)
+				memTotalGB := float64(node.NPUMemoryTotal) / (1024 * 1024 * 1024)
+				info = append(info, fmt.Sprintf("    %s: %.1f / %.1f GiB (%.1f%%)",
+					StyleTextMuted.Render("HBM Memory"),
+					memUsedGB, memTotalGB, node.NPUMemoryUtil))
+			}
+
+			// Temperature and Power
+			info = append(info, fmt.Sprintf("    %s: %d W   %s: %d °C",
+				StyleTextMuted.Render("Total Power"),
+				node.NPUPower,
+				StyleTextMuted.Render("Avg Temp"),
+				node.NPUTemperature))
+
+			// Metrics timestamp
+			if !node.NPUMetricsTime.IsZero() {
+				info = append(info, fmt.Sprintf("    %s: %s",
+					StyleTextMuted.Render("Last Updated"),
+					node.NPUMetricsTime.Local().Format("15:04:05")))
+			}
+
+			// Per-chip detailed table
+			info = append(info, "")
+			info = append(info, StyleTextSecondary.Render("  NPU Chip Details"))
+			info = append(info, fmt.Sprintf("    %-5s %-5s %-8s %-8s %-8s %-8s %-15s",
+				"NPU", "Chip", "AICore", "Temp", "Power", "Health", "HBM"))
+			info = append(info, "    "+strings.Repeat("─", 60))
+
+			for _, chip := range node.NPUChips {
+				// Format HBM usage
+				hbmStr := fmt.Sprintf("%d/%d MB", chip.HBMUsed, chip.HBMTotal)
+				if chip.HBMTotal > 0 {
+					hbmPercent := float64(chip.HBMUsed) / float64(chip.HBMTotal) * 100
+					hbmStr = fmt.Sprintf("%d/%dMB (%.0f%%)", chip.HBMUsed, chip.HBMTotal, hbmPercent)
+				}
+
+				// Color coding for health
+				healthStr := chip.Health
+				switch chip.Health {
+				case "OK":
+					healthStr = StyleStatusReady.Render(chip.Health)
+				case "Warning":
+					healthStr = StyleWarning.Render(chip.Health)
+				default:
+					healthStr = StyleStatusNotReady.Render(chip.Health)
+				}
+
+				// Color coding for temperature
+				tempStr := fmt.Sprintf("%d°C", chip.Temp)
+				if chip.Temp >= 80 {
+					tempStr = StyleStatusNotReady.Render(tempStr)
+				} else if chip.Temp >= 70 {
+					tempStr = StyleWarning.Render(tempStr)
+				}
+
+				info = append(info, fmt.Sprintf("    %-5d %-5d %-8s %-8s %-8.1fW %-8s %s",
+					chip.NPUID,
+					chip.Chip,
+					fmt.Sprintf("%d%%", chip.AICore),
+					tempStr,
+					chip.Power,
+					healthStr,
+					hbmStr))
+			}
+		} else if node.NPUCapacity > 0 {
+			// NPU exists but no metrics from collector - show hint
+			info = append(info, "")
+			info = append(info, StyleTextMuted.Render("  NPU Runtime Metrics: Not available"))
+			info = append(info, StyleTextMuted.Render("    Deploy npu-collector DaemonSet for detailed NPU metrics"))
+			info = append(info, StyleTextMuted.Render("    See: kubectl apply -f deploy/k8s-monitor-npu-collector.yaml"))
+		}
 	}
 
 	// Network Traffic (if available)

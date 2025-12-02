@@ -235,6 +235,26 @@ type PodRestartInfo struct {
 	Reason       string // Last container termination reason
 }
 
+// NPUChipData represents detailed metrics for a single NPU chip
+type NPUChipData struct {
+	NPUID    int     `json:"npu"`       // NPU ID (0-7)
+	Chip     int     `json:"chip"`      // Chip number within NPU (0-1)
+	PhyID    int     `json:"phy_id"`    // Physical ID
+	BusID    string  `json:"bus_id"`    // PCIe Bus ID
+	Health   string  `json:"health"`    // Health status (OK, Warning, Error)
+	Power    float64 `json:"power"`     // Power consumption in Watts
+	Temp     int     `json:"temp"`      // Temperature in Celsius
+	AICore   int     `json:"aicore"`    // AI Core utilization percentage
+	HBMUsed  int64   `json:"hbm_used"`  // HBM memory used in MB
+	HBMTotal int64   `json:"hbm_total"` // HBM memory total in MB
+}
+
+// NPUMetricsData represents the full NPU metrics from node annotation
+type NPUMetricsData struct {
+	Timestamp time.Time      `json:"timestamp"`
+	Chips     []NPUChipData  `json:"chips"`
+}
+
 // NodeData represents a Kubernetes node with metrics
 type NodeData struct {
 	Name              string
@@ -302,6 +322,7 @@ type NodeData struct {
 	NPUErrorCount     int     // Number of NPU errors detected
 	NPUAICoreCount    int     // Number of AI cores per NPU
 	NPUMetricsTime    time.Time // Timestamp of last metrics update
+	NPUChips          []NPUChipData // Detailed per-chip metrics from collector
 
 	// Topology information (from node labels)
 	HyperNodeID    string // volcano.sh/hypernode

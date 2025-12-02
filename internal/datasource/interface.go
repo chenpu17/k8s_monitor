@@ -2,8 +2,10 @@ package datasource
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/yourusername/k8s-monitor/internal/model"
 	corev1 "k8s.io/api/core/v1"
@@ -197,6 +199,80 @@ func ConvertNode(node *corev1.Node) *model.NodeData {
 			if aiCoreCount, ok := node.Annotations["npu.huawei.com/aicore-count"]; ok {
 				if count, err := strconv.Atoi(aiCoreCount); err == nil {
 					nodeData.NPUAICoreCount = count
+				}
+			}
+		}
+
+		// Parse k8s-monitor NPU collector metrics (from DaemonSet)
+		if npuMetricsJSON, ok := node.Annotations["k8s-monitor.io/npu-metrics"]; ok {
+			var npuMetrics struct {
+				Timestamp string `json:"timestamp"`
+				Chips     []struct {
+					NPU     int     `json:"npu"`
+					Chip    int     `json:"chip"`
+					PhyID   int     `json:"phy_id"`
+					BusID   string  `json:"bus_id"`
+					Health  string  `json:"health"`
+					Power   float64 `json:"power"`
+					Temp    int     `json:"temp"`
+					AICore  int     `json:"aicore"`
+					HBMUsed int64   `json:"hbm_used"`
+					HBMTotal int64  `json:"hbm_total"`
+				} `json:"chips"`
+			}
+			if err := json.Unmarshal([]byte(npuMetricsJSON), &npuMetrics); err == nil {
+				// Parse timestamp
+				if ts, err := time.Parse(time.RFC3339, npuMetrics.Timestamp); err == nil {
+					nodeData.NPUMetricsTime = ts
+				}
+
+				// Convert to NPUChipData and calculate aggregate metrics
+				nodeData.NPUChips = make([]model.NPUChipData, len(npuMetrics.Chips))
+				var totalAICore, totalTemp, totalPower float64
+				var totalHBMUsed, totalHBMTotal int64
+				healthyCount := 0
+
+				for i, chip := range npuMetrics.Chips {
+					nodeData.NPUChips[i] = model.NPUChipData{
+						NPUID:    chip.NPU,
+						Chip:     chip.Chip,
+						PhyID:    chip.PhyID,
+						BusID:    chip.BusID,
+						Health:   chip.Health,
+						Power:    chip.Power,
+						Temp:     chip.Temp,
+						AICore:   chip.AICore,
+						HBMUsed:  chip.HBMUsed,
+						HBMTotal: chip.HBMTotal,
+					}
+					totalAICore += float64(chip.AICore)
+					totalTemp += float64(chip.Temp)
+					totalPower += chip.Power
+					totalHBMUsed += chip.HBMUsed
+					totalHBMTotal += chip.HBMTotal
+					if chip.Health == "OK" {
+						healthyCount++
+					}
+				}
+
+				// Calculate averages and totals for node-level metrics
+				if len(npuMetrics.Chips) > 0 {
+					nodeData.NPUUtilization = totalAICore / float64(len(npuMetrics.Chips))
+					nodeData.NPUTemperature = int(totalTemp / float64(len(npuMetrics.Chips)))
+					nodeData.NPUPower = int(totalPower)
+					nodeData.NPUMemoryUsed = totalHBMUsed * 1024 * 1024 // Convert MB to bytes
+					nodeData.NPUMemoryTotal = totalHBMTotal * 1024 * 1024 // Convert MB to bytes
+					if totalHBMTotal > 0 {
+						nodeData.NPUMemoryUtil = float64(totalHBMUsed) / float64(totalHBMTotal) * 100
+					}
+					// Set health status based on chip health
+					if healthyCount == len(npuMetrics.Chips) {
+						nodeData.NPUHealthStatus = "Healthy"
+					} else if healthyCount > 0 {
+						nodeData.NPUHealthStatus = "Warning"
+					} else {
+						nodeData.NPUHealthStatus = "Unhealthy"
+					}
 				}
 			}
 		}

@@ -1229,6 +1229,22 @@ func (m *Model) npuPanelLines(summary *model.ClusterSummary) []string {
 				fmt.Sprintf("Pods: %d nodes", summary.NPUNodesCount),
 			)
 		}
+
+		// Check if NPU detailed metrics are available from collector
+		hasDetailedMetrics := false
+		if m.clusterData != nil && len(m.clusterData.Nodes) > 0 {
+			for _, node := range m.clusterData.Nodes {
+				if len(node.NPUChips) > 0 {
+					hasDetailedMetrics = true
+					break
+				}
+			}
+		}
+		if !hasDetailedMetrics && summary.NPUNodesCount > 0 {
+			lines = append(lines, "")
+			lines = append(lines, StyleTextMuted.Render("Deploy collector"))
+			lines = append(lines, StyleTextMuted.Render("for chip metrics"))
+		}
 	} else {
 		lines = append(lines, StyleTextMuted.Render("No NPU nodes"))
 	}
