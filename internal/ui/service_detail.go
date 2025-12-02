@@ -151,7 +151,7 @@ func (m *Model) renderServiceEndpoints(svc *model.ServiceData) string {
 
 	endpointCount := svc.EndpointCount
 	if endpointCount == 0 {
-		info = append(info, StyleWarning.Render(fmt.Sprintf("  ⚠️  No ready endpoints (%d)", endpointCount)))
+		info = append(info, StyleWarning.Render(fmt.Sprintf("  ⚠  No ready endpoints (%d)", endpointCount)))
 		info = append(info, StyleTextMuted.Render("  This service has no pods backing it or pods are not ready"))
 	} else {
 		info = append(info, StyleStatusReady.Render(fmt.Sprintf("  ✓ %d ready endpoint(s)", endpointCount)))

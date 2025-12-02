@@ -17,6 +17,7 @@ k8s-monitor is a terminal-based monitoring tool for Kubernetes clusters, designe
 
 - **🎯 Comprehensive Views**: 8 specialized views covering all cluster resources
 - **📊 Resource Monitoring**: Real-time CPU/Memory/Network metrics with visual progress bars
+- **🚀 NPU Monitoring**: Huawei Ascend NPU support with detailed chip metrics
 - **📈 Trend Analysis**: Historical metrics tracking with trend indicators
 - **🔍 Smart Diagnostics**: Automatic detection of CrashLoops, failed pods, node pressure
 - **📝 Log Viewer**: View and search pod logs in real-time
@@ -81,6 +82,20 @@ k8s-monitor --help
 - Node conditions and taints
 - Sorting by name, CPU, memory, or pod count
 - Trend indicators for resource usage
+
+#### 🚀 NPU Monitoring (Huawei Ascend)
+- NPU capacity and allocation tracking
+- Per-chip detailed metrics:
+  - AI Core utilization
+  - Vector utilization
+  - HBM memory usage
+  - Temperature and power consumption
+  - Voltage and frequency
+  - Link status
+  - RoCE network statistics
+  - ECC error tracking
+- Topology information (SuperPod, HyperNode)
+- Integration with NPU-Exporter for runtime metrics
 
 #### 📦 Pod Management
 - Pod list with status, restarts, resource usage
@@ -213,9 +228,31 @@ logging:
   level: info         # Log level (debug/info/warn/error)
   file: /tmp/k8s-monitor.log
 
+# NPU monitoring (Huawei Ascend)
+# npu_exporter: ""    # Custom NPU-Exporter endpoint (default: auto-detect via K8s API proxy)
+
 # For test environments only - skip kubelet TLS verification
 # insecure_kubelet: false
 ```
+
+### NPU Monitoring Setup
+
+To enable NPU monitoring for Huawei Ascend accelerators:
+
+1. **Prerequisites**: NPU-Exporter must be deployed in your cluster
+   ```bash
+   # Check if NPU-Exporter is available
+   kubectl get svc -n kube-system npu-exporter
+   ```
+
+2. **Automatic Detection**: k8s-monitor automatically connects to NPU-Exporter via Kubernetes API proxy
+
+3. **Custom Endpoint** (optional): If NPU-Exporter is deployed in a different location
+   ```bash
+   k8s-monitor console --npu-exporter http://custom-npu-exporter:8082
+   ```
+
+**NPU-Exporter Image**: `swr.cn-north-12.myhuaweicloud.com/hwofficial/npu-exporter:2.3.2`
 
 ## 🏗️ Architecture
 
@@ -239,6 +276,11 @@ logging:
 │  │   API    │    │ Kubelet  │      │
 │  │  Server  │    │  Client  │      │
 │  └──────────┘    └──────────┘      │
+│        │              │             │
+│  ┌──────────┐    ┌──────────┐      │
+│  │  NPU     │    │  Volcano │      │
+│  │ Exporter │    │  Client  │      │
+│  └──────────┘    └──────────┘      │
 │         ↓              ↓            │
 │  ┌─────────────────────────┐       │
 │  │    Cache & Refresh      │       │
@@ -247,6 +289,7 @@ logging:
                  ↓
 ┌─────────────────────────────────────┐
 │      Kubernetes Cluster             │
+│  (API Server, Kubelet, NPU-Exporter)│
 └─────────────────────────────────────┘
 ```
 
@@ -256,6 +299,8 @@ logging:
 - **Data Sources**:
   - API Server via [client-go](https://github.com/kubernetes/client-go)
   - Kubelet Summary API for real-time metrics
+  - NPU-Exporter for Huawei Ascend NPU metrics (via K8s API proxy)
+  - Volcano client for HyperNode topology (optional)
 - **Cache Layer**: TTL-based caching with background refresh
 
 ## 📖 Documentation

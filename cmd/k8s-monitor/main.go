@@ -81,6 +81,7 @@ func init() {
 	consoleCmd.Flags().BoolP("insecure-kubelet", "", false, "skip TLS verification for kubelet metrics (use in test environments)")
 	consoleCmd.Flags().IntP("max-concurrent", "m", 10, "maximum concurrent kubelet queries (default: 10)")
 	consoleCmd.Flags().IntP("log-tail-lines", "", 200, "number of log lines to fetch (default: 200)")
+	consoleCmd.Flags().StringP("npu-exporter", "", "", "NPU-Exporter endpoint URL (e.g., http://npu-exporter.kube-system:8082)")
 }
 
 func runConsole(cmd *cobra.Command, args []string) error {
@@ -135,6 +136,13 @@ func runConsole(cmd *cobra.Command, args []string) error {
 	if cmd.Flags().Changed("log-tail-lines") {
 		if logTailLines, _ := cmd.Flags().GetInt("log-tail-lines"); logTailLines > 0 {
 			config.LogTailLines = logTailLines
+		}
+	}
+
+	// Override npu-exporter endpoint flag only if user explicitly specified it
+	if cmd.Flags().Changed("npu-exporter") {
+		if npuExporter, _ := cmd.Flags().GetString("npu-exporter"); npuExporter != "" {
+			config.NPUExporterEndpoint = npuExporter
 		}
 	}
 

@@ -371,6 +371,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 
+	// 忽略鼠标事件，防止滚轮触发高频重绘
+	case tea.MouseMsg:
+		return m, nil
+
 	case refreshTickMsg:
 		if m.quitting {
 			return m, nil

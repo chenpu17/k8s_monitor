@@ -17,16 +17,17 @@ const kubeletAccessCheckTTL = time.Minute
 // AggregatedDataSource combines API Server and kubelet data sources
 // It automatically handles fallback and data enrichment
 type AggregatedDataSource struct {
-	apiServer         DataSource
-	apiServerClient   *APIServerClient
-	kubeletClient     *KubeletClient
-	volcanoClient     *VolcanoClient
-	logger            *zap.Logger
-	mu                sync.RWMutex
-	maxConcurrent     int // Maximum concurrent kubelet queries
-	kubeletAccessMu   sync.RWMutex
-	kubeletAccess     *diagnostic.KubeletAccessStatus
-	kubeletSkipReason string
+	apiServer          DataSource
+	apiServerClient    *APIServerClient
+	kubeletClient      *KubeletClient
+	volcanoClient      *VolcanoClient
+	npuExporterClient  *NPUExporterClient
+	logger             *zap.Logger
+	mu                 sync.RWMutex
+	maxConcurrent      int // Maximum concurrent kubelet queries
+	kubeletAccessMu    sync.RWMutex
+	kubeletAccess      *diagnostic.KubeletAccessStatus
+	kubeletSkipReason  string
 }
 
 // NewAggregatedDataSource creates a new aggregated data source
@@ -49,6 +50,11 @@ func NewAggregatedDataSource(apiServer DataSource, kubeletClient *KubeletClient,
 // SetVolcanoClient sets the Volcano client for the data source
 func (a *AggregatedDataSource) SetVolcanoClient(volcanoClient *VolcanoClient) {
 	a.volcanoClient = volcanoClient
+}
+
+// SetNPUExporterClient sets the NPU-Exporter client for the data source
+func (a *AggregatedDataSource) SetNPUExporterClient(npuExporterClient *NPUExporterClient) {
+	a.npuExporterClient = npuExporterClient
 }
 
 // GetNodes retrieves nodes from API Server
@@ -159,6 +165,13 @@ func (a *AggregatedDataSource) GetClusterData(ctx context.Context, namespace str
 		} else {
 			a.clearKubeletSkipReason()
 			a.enrichWithKubeletMetrics(ctx, nodes, pods)
+		}
+	}
+
+	// Enrich with NPU-Exporter metrics if available
+	if a.npuExporterClient != nil {
+		if err := a.npuExporterClient.EnrichNodeData(ctx, nodes); err != nil {
+			a.logger.Warn("Failed to enrich NPU metrics from NPU-Exporter", zap.Error(err))
 		}
 	}
 
@@ -848,6 +861,11 @@ func (a *AggregatedDataSource) Close() error {
 	if a.kubeletClient != nil {
 		if err := a.kubeletClient.Close(); err != nil {
 			a.logger.Error("Failed to close kubelet client", zap.Error(err))
+		}
+	}
+	if a.npuExporterClient != nil {
+		if err := a.npuExporterClient.Close(); err != nil {
+			a.logger.Error("Failed to close NPU-Exporter client", zap.Error(err))
 		}
 	}
 	return nil

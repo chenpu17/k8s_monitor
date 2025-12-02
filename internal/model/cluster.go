@@ -247,6 +247,24 @@ type NPUChipData struct {
 	AICore   int     `json:"aicore"`    // AI Core utilization percentage
 	HBMUsed  int64   `json:"hbm_used"`  // HBM memory used in MB
 	HBMTotal int64   `json:"hbm_total"` // HBM memory total in MB
+
+	// Extended metrics from NPU-Exporter
+	VectorUtil       float64 `json:"vector_util"`        // Vector utilization percentage
+	Voltage          float64 `json:"voltage"`            // Voltage in V
+	AICoreFreq       int     `json:"aicore_freq"`        // AI Core frequency in MHz
+	LinkStatus       int     `json:"link_status"`        // Link status (1=up, 0=down)
+	LinkSpeed        int     `json:"link_speed"`         // Link speed
+	LinkUpNum        int     `json:"link_up_num"`        // Number of links up
+	NetworkStatus    int     `json:"network_status"`     // Network status
+	ErrorCode        int     `json:"error_code"`         // Error code
+	HBMEccSingleErr  int64   `json:"hbm_ecc_single"`     // HBM ECC single-bit errors
+	HBMEccDoubleErr  int64   `json:"hbm_ecc_double"`     // HBM ECC double-bit errors
+	RoCETxPkts       int64   `json:"roce_tx_pkts"`       // RoCE TX packets
+	RoCERxPkts       int64   `json:"roce_rx_pkts"`       // RoCE RX packets
+	RoCETxErrPkts    int64   `json:"roce_tx_err_pkts"`   // RoCE TX error packets
+	RoCERxErrPkts    int64   `json:"roce_rx_err_pkts"`   // RoCE RX error packets
+	BandwidthRx      float64 `json:"bandwidth_rx"`       // Bandwidth RX in MB/s
+	BandwidthTx      float64 `json:"bandwidth_tx"`       // Bandwidth TX in MB/s
 }
 
 // NPUMetricsData represents the full NPU metrics from node annotation

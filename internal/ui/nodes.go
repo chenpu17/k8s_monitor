@@ -53,7 +53,7 @@ func (m *Model) renderNodes() string {
 
 // renderNodesHeader renders the nodes view header
 func (m *Model) renderNodesHeader(nodes []*model.NodeData) string {
-	title := StyleHeader.Render("🖥️  " + m.T("views.nodes.title"))
+	title := StyleHeader.Render("💻  " + m.T("views.nodes.title"))
 	summary := fmt.Sprintf("%s: %d", m.T("common.total"), len(nodes))
 
 	// Add sort indicator

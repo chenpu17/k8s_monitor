@@ -36,6 +36,9 @@ type Config struct {
 	// Kubelet configuration
 	InsecureKubelet bool `mapstructure:"insecure_kubelet"`
 
+	// NPU-Exporter configuration
+	NPUExporterEndpoint string `mapstructure:"npu_exporter_endpoint"`
+
 	// Logging configuration
 	LogLevel string `mapstructure:"log_level"`
 	LogFile  string `mapstructure:"log_file"`
@@ -63,6 +66,8 @@ func LoadConfig(configFile string) (*Config, error) {
 	viper.SetDefault("ui.log_tail_lines", 200)
 
 	viper.SetDefault("kubelet.insecure", false)
+
+	viper.SetDefault("npu_exporter.endpoint", "")
 
 	viper.SetDefault("logging.level", "info")
 	viper.SetDefault("logging.file", "/tmp/k8s-monitor.log")
@@ -92,23 +97,24 @@ func LoadConfig(configFile string) (*Config, error) {
 	}
 
 	cfg := &Config{
-		Kubeconfig:      viper.GetString("cluster.kubeconfig"),
-		Context:         viper.GetString("cluster.context"),
-		Namespace:       viper.GetString("cluster.namespace"),
-		RefreshInterval: viper.GetDuration("refresh.interval"),
-		Timeout:         viper.GetDuration("refresh.timeout"),
-		MaxConcurrent:   viper.GetInt("refresh.max_concurrent"),
-		CacheTTL:        viper.GetDuration("cache.ttl"),
-		MaxCacheEntries: viper.GetInt("cache.max_entries"),
-		ColorMode:       viper.GetString("ui.color_mode"),
-		DefaultView:     viper.GetString("ui.default_view"),
-		MaxRows:         viper.GetInt("ui.max_rows"),
-		NoColor:         viper.GetBool("ui.no_color"),
-		Locale:          viper.GetString("ui.locale"),
-		LogTailLines:    viper.GetInt("ui.log_tail_lines"),
-		InsecureKubelet: viper.GetBool("kubelet.insecure"),
-		LogLevel:        viper.GetString("logging.level"),
-		LogFile:         viper.GetString("logging.file"),
+		Kubeconfig:          viper.GetString("cluster.kubeconfig"),
+		Context:             viper.GetString("cluster.context"),
+		Namespace:           viper.GetString("cluster.namespace"),
+		RefreshInterval:     viper.GetDuration("refresh.interval"),
+		Timeout:             viper.GetDuration("refresh.timeout"),
+		MaxConcurrent:       viper.GetInt("refresh.max_concurrent"),
+		CacheTTL:            viper.GetDuration("cache.ttl"),
+		MaxCacheEntries:     viper.GetInt("cache.max_entries"),
+		ColorMode:           viper.GetString("ui.color_mode"),
+		DefaultView:         viper.GetString("ui.default_view"),
+		MaxRows:             viper.GetInt("ui.max_rows"),
+		NoColor:             viper.GetBool("ui.no_color"),
+		Locale:              viper.GetString("ui.locale"),
+		LogTailLines:        viper.GetInt("ui.log_tail_lines"),
+		InsecureKubelet:     viper.GetBool("kubelet.insecure"),
+		NPUExporterEndpoint: viper.GetString("npu_exporter.endpoint"),
+		LogLevel:            viper.GetString("logging.level"),
+		LogFile:             viper.GetString("logging.file"),
 	}
 
 	// Normalise zero values in case configuration omitted units or left blank

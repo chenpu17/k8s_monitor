@@ -17,6 +17,7 @@ k8s-monitor 是一个基于终端的 Kubernetes 集群监控工具，专为需�
 
 - **🎯 全面视图**：8 个专门视图覆盖所有集群资源
 - **📊 资源监控**：实时 CPU/内存/网络指标，带可视化进度条
+- **🚀 NPU 监控**：华为昇腾 NPU 支持，提供详细芯片指标
 - **📈 趋势分析**：历史指标跟踪和趋势指示器
 - **🔍 智能诊断**：自动检测 CrashLoop、失败 Pod、节点压力
 - **📝 日志查看器**：实时查看和搜索 Pod 日志
@@ -81,6 +82,20 @@ k8s-monitor --help
 - 节点状态和污点
 - 按名称、CPU、内存或 Pod 数量排序
 - 资源使用趋势指示器
+
+#### 🚀 NPU 监控（华为昇腾）
+- NPU 容量和分配跟踪
+- 每个芯片的详细指标：
+  - AI Core 利用率
+  - Vector 利用率
+  - HBM 内存使用
+  - 温度和功耗
+  - 电压和频率
+  - 链路状态
+  - RoCE 网络统计
+  - ECC 错误跟踪
+- 拓扑信息（SuperPod、HyperNode）
+- 与 NPU-Exporter 集成获取运行时指标
 
 #### 📦 Pod 管理
 - Pod 列表显示状态、重启次数、资源使用
@@ -213,9 +228,31 @@ logging:
   level: info         # 日志级别（debug/info/warn/error）
   file: /tmp/k8s-monitor.log
 
+# NPU 监控（华为昇腾）
+# npu_exporter: ""    # 自定义 NPU-Exporter 端点（默认：通过 K8s API 代理自动检测）
+
 # 仅用于测试环境 - 跳过 kubelet TLS 验证
 # insecure_kubelet: false
 ```
+
+### NPU 监控配置
+
+启用华为昇腾加速器的 NPU 监控：
+
+1. **前置条件**：集群中必须部署 NPU-Exporter
+   ```bash
+   # 检查 NPU-Exporter 是否可用
+   kubectl get svc -n kube-system npu-exporter
+   ```
+
+2. **自动检测**：k8s-monitor 通过 Kubernetes API 代理自动连接 NPU-Exporter
+
+3. **自定义端点**（可选）：如果 NPU-Exporter 部署在不同位置
+   ```bash
+   k8s-monitor console --npu-exporter http://custom-npu-exporter:8082
+   ```
+
+**NPU-Exporter 镜像**：`swr.cn-north-12.myhuaweicloud.com/hwofficial/npu-exporter:2.3.2`
 
 ## 🏗️ 架构
 
@@ -239,6 +276,11 @@ logging:
 │  │   API    │    │ Kubelet  │      │
 │  │  Server  │    │  客户端  │      │
 │  └──────────┘    └──────────┘      │
+│        │              │             │
+│  ┌──────────┐    ┌──────────┐      │
+│  │   NPU    │    │ Volcano  │      │
+│  │ Exporter │    │  客户端  │      │
+│  └──────────┘    └──────────┘      │
 │         ↓              ↓            │
 │  ┌─────────────────────────┐       │
 │  │    缓存与刷新机制       │       │
@@ -247,6 +289,7 @@ logging:
                  ↓
 ┌─────────────────────────────────────┐
 │      Kubernetes 集群                │
+│ (API Server, Kubelet, NPU-Exporter) │
 └─────────────────────────────────────┘
 ```
 
@@ -256,6 +299,8 @@ logging:
 - **数据源**：
   - 通过 [client-go](https://github.com/kubernetes/client-go) 访问 API Server
   - Kubelet Summary API 获取实时指标
+  - NPU-Exporter 获取华为昇腾 NPU 指标（通过 K8s API 代理）
+  - Volcano 客户端获取 HyperNode 拓扑（可选）
 - **缓存层**：基于 TTL 的缓存和后台刷新
 
 ## 📖 文档

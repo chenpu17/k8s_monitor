@@ -10,7 +10,7 @@ import (
 
 const (
 	summaryPanelWidth          = 20
-	summaryPanelMinContentLine = 7
+	summaryPanelMinContentLine = 5
 	// Border draws 1 line on top and bottom, padding adds 1 line each by default.
 	summaryPanelExtraHeight = 4
 )
@@ -335,7 +335,7 @@ func (m *Model) hasAlerts(summary *model.ClusterSummary) bool {
 // renderAlertPanel renders critical alerts at the top
 func (m *Model) renderAlertPanel(summary *model.ClusterSummary) string {
 	alerts := []string{
-		StyleDanger.Render("⚠️  ALERTS"),
+		StyleHeader.Render("[🔔 Alerts]"),
 		"",
 	}
 
@@ -424,42 +424,42 @@ func (m *Model) renderAlertPanel(summary *model.ClusterSummary) string {
 // renderCompactAlertPanel renders a compact alert panel for the overview
 func (m *Model) compactAlertLines(summary *model.ClusterSummary) []string {
 	var alerts []string
-	alerts = append(alerts, StyleDanger.Render("⚠️  Alerts"))
+	alerts = append(alerts, StyleHeader.Render("[🔔 Alerts]"))
 	alerts = append(alerts, "")
 
 	alertCount := 0
 
 	// Node alerts
 	if summary.NotReadyNodes > 0 {
-		alerts = append(alerts, StyleDanger.Render(fmt.Sprintf("❌ %d NotReady", summary.NotReadyNodes)))
+		alerts = append(alerts, StyleDanger.Render(fmt.Sprintf("[X] %d NotReady", summary.NotReadyNodes)))
 		alertCount++
 	}
 	if summary.MemoryPressureNodes > 0 {
-		alerts = append(alerts, StyleWarning.Render(fmt.Sprintf("💾 %d MemPress", summary.MemoryPressureNodes)))
+		alerts = append(alerts, StyleWarning.Render(fmt.Sprintf("[M] %d MemPress", summary.MemoryPressureNodes)))
 		alertCount++
 	}
 	if summary.DiskPressureNodes > 0 {
-		alerts = append(alerts, StyleWarning.Render(fmt.Sprintf("💿 %d DiskPress", summary.DiskPressureNodes)))
+		alerts = append(alerts, StyleWarning.Render(fmt.Sprintf("[D] %d DiskPress", summary.DiskPressureNodes)))
 		alertCount++
 	}
 
 	// Pod anomaly alerts (most critical)
 	if summary.CrashLoopBackOffPods > 0 {
-		alerts = append(alerts, StyleDanger.Render(fmt.Sprintf("🔄 %d CrashLoop", summary.CrashLoopBackOffPods)))
+		alerts = append(alerts, StyleDanger.Render(fmt.Sprintf("[!] %d CrashLoop", summary.CrashLoopBackOffPods)))
 		alertCount++
 	}
 	if summary.ImagePullBackOffPods > 0 {
-		alerts = append(alerts, StyleDanger.Render(fmt.Sprintf("📦 %d ImgPull", summary.ImagePullBackOffPods)))
+		alerts = append(alerts, StyleDanger.Render(fmt.Sprintf("[I] %d ImgPull", summary.ImagePullBackOffPods)))
 		alertCount++
 	}
 	if summary.OOMKilledPods > 0 {
-		alerts = append(alerts, StyleDanger.Render(fmt.Sprintf("💥 %d OOMKill", summary.OOMKilledPods)))
+		alerts = append(alerts, StyleDanger.Render(fmt.Sprintf("[!] %d OOMKill", summary.OOMKilledPods)))
 		alertCount++
 	}
 
 	// If no alerts, show status
 	if alertCount == 0 {
-		alerts = append(alerts, StyleStatusReady.Render("✓ No alerts"))
+		alerts = append(alerts, StyleStatusReady.Render("[OK] No alerts"))
 	}
 
 	return alerts
@@ -785,7 +785,7 @@ func (m *Model) renderResourceDetails(summary *model.ClusterSummary) string {
 
 func (m *Model) cpuDetailsLines(summary *model.ClusterSummary) []string {
 	lines := []string{
-		StyleHeader.Render("💻 CPU"),
+		StyleHeader.Render("[⚡ CPU]"),
 		"",
 		fmt.Sprintf("%s   %s", m.T("overview.capacity"), StyleHighlight.Render(formatCPU(summary.CPUCapacity))),
 		fmt.Sprintf("%s %s", m.T("overview.allocatable"), formatCPU(summary.CPUAllocatable)),
@@ -803,7 +803,7 @@ func (m *Model) renderCPUDetails(summary *model.ClusterSummary, targetContentLin
 
 func (m *Model) memoryDetailsLines(summary *model.ClusterSummary) []string {
 	lines := []string{
-		StyleHeader.Render("🧠 Memory"),
+		StyleHeader.Render("[🧠 Memory]"),
 		"",
 		fmt.Sprintf("%s   %s", m.T("overview.capacity"), StyleHighlight.Render(formatMemory(summary.MemoryCapacity))),
 		fmt.Sprintf("%s %s", m.T("overview.allocatable"), formatMemory(summary.MemoryAllocatable)),
@@ -821,7 +821,7 @@ func (m *Model) renderMemoryDetails(summary *model.ClusterSummary, targetContent
 
 func (m *Model) podDetailsLines(summary *model.ClusterSummary) []string {
 	return []string{
-		StyleHeader.Render("📦 Pods"),
+		StyleHeader.Render("[📦 Pods]"),
 		"",
 		fmt.Sprintf("%s %s", m.T("overview.capacity"), StyleHighlight.Render(fmt.Sprintf("%d", summary.PodAllocatable))),
 		fmt.Sprintf("%s %s", m.T("overview.running"), StyleStatusRunning.Render(fmt.Sprintf("%d", summary.RunningPods))),
@@ -938,7 +938,7 @@ func (m *Model) renderClusterResources(summary *model.ClusterSummary) string {
 // renderNodesAndPods renders nodes and pods summary
 func (m *Model) nodesAndPodsLines(summary *model.ClusterSummary) []string {
 	return []string{
-		StyleHeader.Render("🖥️  Nodes"),
+		StyleHeader.Render("[💻 Nodes]"),
 		"",
 		fmt.Sprintf("Total:    %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalNodes))),
 		fmt.Sprintf("Ready:    %s", StyleStatusReady.Render(fmt.Sprintf("%d", summary.ReadyNodes))),
@@ -949,7 +949,7 @@ func (m *Model) nodesAndPodsLines(summary *model.ClusterSummary) []string {
 // renderEventSummary renders event summary section
 func (m *Model) eventSummaryLines(summary *model.ClusterSummary) []string {
 	return []string{
-		StyleHeader.Render("⚠️  Events"),
+		StyleHeader.Render("[📋 Events]"),
 		"",
 		fmt.Sprintf("Total:   %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalEvents))),
 		fmt.Sprintf("Warning: %s", StyleWarning.Render(fmt.Sprintf("%d", summary.WarningEvents))),
@@ -1321,7 +1321,7 @@ func (m *Model) renderClusterSummary(summary *model.ClusterSummary) string {
 
 func (m *Model) renderNodeSummary(summary *model.ClusterSummary) string {
 	content := []string{
-		StyleHeader.Render("🖥️  Nodes"),
+		StyleHeader.Render("💻  Nodes"),
 		"",
 		fmt.Sprintf("Ready:     %s", StyleStatusReady.Render(fmt.Sprintf("%d", summary.ReadyNodes))),
 		fmt.Sprintf("NotReady:  %s", StyleStatusNotReady.Render(fmt.Sprintf("%d", summary.NotReadyNodes))),

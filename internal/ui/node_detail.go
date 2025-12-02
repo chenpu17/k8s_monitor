@@ -81,7 +81,7 @@ func (m *Model) renderNodeDetail() string {
 
 // renderNodeDetailHeader renders the node detail view header
 func (m *Model) renderNodeDetailHeader(node *model.NodeData) string {
-	title := StyleHeader.Render(fmt.Sprintf("🖥️  %s: %s", m.T("detail.node.title"), node.Name))
+	title := StyleHeader.Render(fmt.Sprintf("💻  %s: %s", m.T("detail.node.title"), node.Name))
 	status := RenderStatus(node.Status)
 
 	return lipgloss.JoinHorizontal(
@@ -275,55 +275,214 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 					node.NPUMetricsTime.Local().Format("15:04:05")))
 			}
 
-			// Per-chip detailed table
+			// Check if we have extended metrics
+			hasExtendedMetrics := false
+			for _, chip := range node.NPUChips {
+				if chip.VectorUtil > 0 || chip.Voltage > 0 || chip.AICoreFreq > 0 {
+					hasExtendedMetrics = true
+					break
+				}
+			}
+
+			// Combined NPU Chip Details table
 			info = append(info, "")
 			info = append(info, StyleTextSecondary.Render("  NPU Chip Details"))
-			info = append(info, fmt.Sprintf("    %-5s %-5s %-8s %-8s %-8s %-8s %-15s",
-				"NPU", "Chip", "AICore", "Temp", "Power", "Health", "HBM"))
-			info = append(info, "    "+strings.Repeat("─", 60))
 
-			for _, chip := range node.NPUChips {
-				// Format HBM usage
-				hbmStr := fmt.Sprintf("%d/%d MB", chip.HBMUsed, chip.HBMTotal)
-				if chip.HBMTotal > 0 {
-					hbmPercent := float64(chip.HBMUsed) / float64(chip.HBMTotal) * 100
-					hbmStr = fmt.Sprintf("%d/%dMB (%.0f%%)", chip.HBMUsed, chip.HBMTotal, hbmPercent)
+			if hasExtendedMetrics {
+				// Column widths for extended metrics table
+			const (
+				colID     = 3
+				colAICore = 7
+				colVector = 7
+				colHBM    = 14
+				colTemp   = 6
+				colPower  = 6
+				colVolt   = 6
+				colFreq   = 7
+				colLink   = 4
+			)
+
+			// Extended header with all metrics - HBM next to AICore
+			info = append(info, fmt.Sprintf("    %s %s %s %s %s %s %s %s %s",
+				padRight("ID", colID),
+				padRight("AICore", colAICore),
+				padRight("Vector", colVector),
+				padRight("HBM", colHBM),
+				padRight("Temp", colTemp),
+				padRight("Power", colPower),
+				padRight("Volt", colVolt),
+				padRight("Freq", colFreq),
+				padRight("Link", colLink)))
+			info = append(info, "    "+strings.Repeat("─", colID+colAICore+colVector+colHBM+colTemp+colPower+colVolt+colFreq+colLink+8))
+
+				for _, chip := range node.NPUChips {
+					// Temperature with color coding
+					tempStr := fmt.Sprintf("%d°C", chip.Temp)
+					if chip.Temp >= 80 {
+						tempStr = StyleStatusNotReady.Render(tempStr)
+					} else if chip.Temp >= 70 {
+						tempStr = StyleWarning.Render(tempStr)
+					}
+
+					// Link status
+					linkStr := "Down"
+					if chip.LinkStatus == 1 {
+						linkStr = StyleStatusReady.Render("Up")
+					} else {
+						linkStr = StyleStatusNotReady.Render("Down")
+					}
+
+					// HBM usage with capacity (convert MB to GB for readability)
+					hbmStr := "-"
+					if chip.HBMTotal > 0 {
+						usedGB := float64(chip.HBMUsed) / 1024
+						totalGB := float64(chip.HBMTotal) / 1024
+						hbmPercent := float64(chip.HBMUsed) / float64(chip.HBMTotal) * 100
+						hbmStr = fmt.Sprintf("%.1f/%.0fG(%d%%)", usedGB, totalGB, int(hbmPercent))
+					}
+
+					// Health indicator in ID column
+					idStr := fmt.Sprintf("%d", chip.PhyID)
+					if chip.Health != "OK" && chip.Health != "" {
+						idStr = StyleWarning.Render(idStr)
+					}
+
+					info = append(info, fmt.Sprintf("    %s %s %s %s %s %s %s %s %s",
+						padRight(idStr, colID),
+						padRight(fmt.Sprintf("%d%%", chip.AICore), colAICore),
+						padRight(fmt.Sprintf("%.1f%%", chip.VectorUtil), colVector),
+						padRight(hbmStr, colHBM),
+						padRight(tempStr, colTemp),
+						padRight(fmt.Sprintf("%dW", int(chip.Power)), colPower),
+						padRight(fmt.Sprintf("%.2fV", chip.Voltage), colVolt),
+						padRight(fmt.Sprintf("%dMHz", chip.AICoreFreq), colFreq),
+						padRight(linkStr, colLink)))
+				}
+			} else {
+				// Basic header without extended metrics
+				const (
+					bColID     = 4
+					bColAICore = 8
+					bColTemp   = 8
+					bColPower  = 8
+					bColHealth = 8
+					bColHBM    = 15
+				)
+				info = append(info, fmt.Sprintf("    %s %s %s %s %s %s",
+					padRight("ID", bColID),
+					padRight("AICore", bColAICore),
+					padRight("Temp", bColTemp),
+					padRight("Power", bColPower),
+					padRight("Health", bColHealth),
+					padRight("HBM", bColHBM)))
+				info = append(info, "    "+strings.Repeat("─", bColID+bColAICore+bColTemp+bColPower+bColHealth+bColHBM+5))
+
+				for _, chip := range node.NPUChips {
+					// Format HBM usage
+					hbmStr := fmt.Sprintf("%d/%d MB", chip.HBMUsed, chip.HBMTotal)
+					if chip.HBMTotal > 0 {
+						hbmPercent := float64(chip.HBMUsed) / float64(chip.HBMTotal) * 100
+						hbmStr = fmt.Sprintf("%d/%dMB (%.0f%%)", chip.HBMUsed, chip.HBMTotal, hbmPercent)
+					}
+
+					// Color coding for health
+					healthStr := chip.Health
+					switch chip.Health {
+					case "OK":
+						healthStr = StyleStatusReady.Render(chip.Health)
+					case "Warning":
+						healthStr = StyleWarning.Render(chip.Health)
+					default:
+						healthStr = StyleStatusNotReady.Render(chip.Health)
+					}
+
+					// Color coding for temperature
+					tempStr := fmt.Sprintf("%d°C", chip.Temp)
+					if chip.Temp >= 80 {
+						tempStr = StyleStatusNotReady.Render(tempStr)
+					} else if chip.Temp >= 70 {
+						tempStr = StyleWarning.Render(tempStr)
+					}
+
+					info = append(info, fmt.Sprintf("    %s %s %s %s %s %s",
+						padRight(fmt.Sprintf("%d", chip.PhyID), bColID),
+						padRight(fmt.Sprintf("%d%%", chip.AICore), bColAICore),
+						padRight(tempStr, bColTemp),
+						padRight(fmt.Sprintf("%.1fW", chip.Power), bColPower),
+						padRight(healthStr, bColHealth),
+						hbmStr))
+				}
+			}
+
+			// RoCE and ECC Statistics (only if extended metrics available)
+			if hasExtendedMetrics {
+				// RoCE Network Statistics
+				var totalRoCETx, totalRoCERx, totalRoCETxErr, totalRoCERxErr int64
+				for _, chip := range node.NPUChips {
+					totalRoCETx += chip.RoCETxPkts
+					totalRoCERx += chip.RoCERxPkts
+					totalRoCETxErr += chip.RoCETxErrPkts
+					totalRoCERxErr += chip.RoCERxErrPkts
 				}
 
-				// Color coding for health
-				healthStr := chip.Health
-				switch chip.Health {
-				case "OK":
-					healthStr = StyleStatusReady.Render(chip.Health)
-				case "Warning":
-					healthStr = StyleWarning.Render(chip.Health)
-				default:
-					healthStr = StyleStatusNotReady.Render(chip.Health)
+				if totalRoCETx > 0 || totalRoCERx > 0 {
+					info = append(info, "")
+					info = append(info, StyleTextSecondary.Render("  RoCE Network Statistics"))
+					info = append(info, fmt.Sprintf("    %s: %s  %s: %s",
+						StyleTextMuted.Render("TX Packets"),
+						formatPacketCount(totalRoCETx),
+						StyleTextMuted.Render("RX Packets"),
+						formatPacketCount(totalRoCERx)))
+
+					// Show error packets with warning color if non-zero
+					txErrStyle := StyleTextMuted
+					rxErrStyle := StyleTextMuted
+					if totalRoCETxErr > 0 {
+						txErrStyle = StyleWarning
+					}
+					if totalRoCERxErr > 0 {
+						rxErrStyle = StyleWarning
+					}
+					info = append(info, fmt.Sprintf("    %s: %s  %s: %s",
+						StyleTextMuted.Render("TX Errors"),
+						txErrStyle.Render(formatPacketCount(totalRoCETxErr)),
+						StyleTextMuted.Render("RX Errors"),
+						rxErrStyle.Render(formatPacketCount(totalRoCERxErr))))
 				}
 
-				// Color coding for temperature
-				tempStr := fmt.Sprintf("%d°C", chip.Temp)
-				if chip.Temp >= 80 {
-					tempStr = StyleStatusNotReady.Render(tempStr)
-				} else if chip.Temp >= 70 {
-					tempStr = StyleWarning.Render(tempStr)
+				// ECC Error Statistics
+				var totalEccSingle, totalEccDouble int64
+				for _, chip := range node.NPUChips {
+					totalEccSingle += chip.HBMEccSingleErr
+					totalEccDouble += chip.HBMEccDoubleErr
 				}
 
-				info = append(info, fmt.Sprintf("    %-5d %-5d %-8s %-8s %-8.1fW %-8s %s",
-					chip.NPUID,
-					chip.Chip,
-					fmt.Sprintf("%d%%", chip.AICore),
-					tempStr,
-					chip.Power,
-					healthStr,
-					hbmStr))
+				if totalEccSingle > 0 || totalEccDouble > 0 {
+					info = append(info, "")
+					info = append(info, StyleTextSecondary.Render("  HBM ECC Error Statistics"))
+
+					singleStyle := StyleTextMuted
+					doubleStyle := StyleTextMuted
+					if totalEccSingle > 0 {
+						singleStyle = StyleWarning
+					}
+					if totalEccDouble > 0 {
+						doubleStyle = StyleStatusNotReady // Critical - double-bit errors are uncorrectable
+					}
+
+					info = append(info, fmt.Sprintf("    %s: %s (correctable)  %s: %s (uncorrectable)",
+						StyleTextMuted.Render("Single-bit"),
+						singleStyle.Render(fmt.Sprintf("%d", totalEccSingle)),
+						StyleTextMuted.Render("Double-bit"),
+						doubleStyle.Render(fmt.Sprintf("%d", totalEccDouble))))
+				}
 			}
 		} else if node.NPUCapacity > 0 {
-			// NPU exists but no metrics from collector - show hint
+			// NPU exists but no metrics from NPU-Exporter - show hint
 			info = append(info, "")
 			info = append(info, StyleTextMuted.Render("  NPU Runtime Metrics: Not available"))
-			info = append(info, StyleTextMuted.Render("    Deploy npu-collector DaemonSet for detailed NPU metrics"))
-			info = append(info, StyleTextMuted.Render("    See: kubectl apply -f deploy/k8s-monitor-npu-collector.yaml"))
+			info = append(info, StyleTextMuted.Render("    NPU-Exporter not reachable or not deployed in kube-system namespace"))
+			info = append(info, StyleTextMuted.Render("    Use --npu-exporter flag to specify a custom endpoint"))
 		}
 	}
 
@@ -472,4 +631,16 @@ func (m *Model) renderNodePodsInfo(node *model.NodeData) string {
 	}
 
 	return strings.Join(info, "\n")
+}
+
+// formatPacketCount formats a large packet count with K/M/G suffix
+func formatPacketCount(count int64) string {
+	if count >= 1_000_000_000 {
+		return fmt.Sprintf("%.2fG", float64(count)/1_000_000_000)
+	} else if count >= 1_000_000 {
+		return fmt.Sprintf("%.2fM", float64(count)/1_000_000)
+	} else if count >= 1_000 {
+		return fmt.Sprintf("%.1fK", float64(count)/1_000)
+	}
+	return fmt.Sprintf("%d", count)
 }

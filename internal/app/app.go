@@ -124,6 +124,20 @@ func (a *App) initDataSources() error {
 		a.dataSource.SetVolcanoClient(volcanoClient)
 	}
 
+	// Create NPU-Exporter client (optional - for Huawei Ascend NPU metrics)
+	npuExporterClient, err := datasource.NewNPUExporterClient(apiServer.GetConfig(), a.logger)
+	if err != nil {
+		a.logger.Warn("Failed to create NPU-Exporter client, NPU metrics from exporter disabled",
+			zap.Error(err),
+		)
+	} else {
+		// Set custom endpoint if configured
+		if a.config.NPUExporterEndpoint != "" {
+			npuExporterClient.SetEndpoint(a.config.NPUExporterEndpoint)
+		}
+		a.dataSource.SetNPUExporterClient(npuExporterClient)
+	}
+
 	// Create cache
 	a.cache = cache.NewTTLCache(a.config.CacheTTL, a.logger)
 
