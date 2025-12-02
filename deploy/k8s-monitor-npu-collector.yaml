@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: npu-metrics-collector
+  name: k8s-monitor-npu-collector
   namespace: kube-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: npu-metrics-collector
+  name: k8s-monitor-npu-collector
 rules:
 - apiGroups: [""]
   resources: ["nodes"]
@@ -16,20 +16,20 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: npu-metrics-collector
+  name: k8s-monitor-npu-collector
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: npu-metrics-collector
+  name: k8s-monitor-npu-collector
 subjects:
 - kind: ServiceAccount
-  name: npu-metrics-collector
+  name: k8s-monitor-npu-collector
   namespace: kube-system
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: npu-metrics-collector-script
+  name: k8s-monitor-npu-collector-script
   namespace: kube-system
 data:
   collect-metrics.sh: |
@@ -196,20 +196,20 @@ data:
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: npu-metrics-collector
+  name: k8s-monitor-npu-collector
   namespace: kube-system
   labels:
-    app: npu-metrics-collector
+    app: k8s-monitor-npu-collector
 spec:
   selector:
     matchLabels:
-      app: npu-metrics-collector
+      app: k8s-monitor-npu-collector
   template:
     metadata:
       labels:
-        app: npu-metrics-collector
+        app: k8s-monitor-npu-collector
     spec:
-      serviceAccountName: npu-metrics-collector
+      serviceAccountName: k8s-monitor-npu-collector
       # Only run on nodes with NPU
       nodeSelector:
         # Adjust this selector based on your cluster's NPU node labels
@@ -257,7 +257,7 @@ spec:
       volumes:
       - name: scripts
         configMap:
-          name: npu-metrics-collector-script
+          name: k8s-monitor-npu-collector-script
           defaultMode: 0755
       - name: npu-driver
         hostPath:

@@ -289,3 +289,4 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 - [client-go Documentation](https://github.com/kubernetes/client-go)
 - [Kubernetes API Reference](https://kubernetes.io/docs/reference/kubernetes-api/)
 - [Kubelet Summary API](https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/stats/v1alpha1/types.go)
+- git提交信息不要包含claude的信息

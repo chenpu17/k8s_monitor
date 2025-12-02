@@ -6,14 +6,14 @@
 
 ```bash
 # 部署到集群
-kubectl apply -f npu-metrics-collector.yaml
+kubectl apply -f k8s-monitor-npu-collector.yaml
 
 # 检查运行状态
-kubectl get daemonset -n kube-system npu-metrics-collector
-kubectl get pods -n kube-system -l app=npu-metrics-collector
+kubectl get daemonset -n kube-system k8s-monitor-npu-collector
+kubectl get pods -n kube-system -l app=k8s-monitor-npu-collector
 
 # 查看日志
-kubectl logs -n kube-system -l app=npu-metrics-collector -f
+kubectl logs -n kube-system -l app=k8s-monitor-npu-collector -f
 ```
 
 ## 验证
@@ -86,7 +86,7 @@ ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64:$LD_LIBRARY_PATH
 2. 更新 DaemonSet 使用自定义镜像：
 
 ```yaml
-image: your-registry/npu-metrics-collector:latest
+image: your-registry/k8s-monitor-npu-collector:latest
 ```
 
 ## 收集的指标
@@ -113,7 +113,7 @@ image: your-registry/npu-metrics-collector:latest
 ## 清理
 
 ```bash
-kubectl delete -f npu-metrics-collector.yaml
+kubectl delete -f k8s-monitor-npu-collector.yaml
 ```
 
 ## 故障排除
@@ -128,14 +128,14 @@ kubectl delete -f npu-metrics-collector.yaml
 
 2. 检查 RBAC 权限：
    ```bash
-   kubectl auth can-i patch nodes --as=system:serviceaccount:kube-system:npu-metrics-collector
+   kubectl auth can-i patch nodes --as=system:serviceaccount:kube-system:k8s-monitor-npu-collector
    ```
 
 ### 指标未更新
 
 1. 查看 Pod 日志：
    ```bash
-   kubectl logs -n kube-system -l app=npu-metrics-collector
+   kubectl logs -n kube-system -l app=k8s-monitor-npu-collector
    ```
 
 2. 手动测试 npu-smi：
