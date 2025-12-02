@@ -114,6 +114,16 @@ func (a *App) initDataSources() error {
 	// Create aggregated data source
 	a.dataSource = datasource.NewAggregatedDataSource(apiServer, kubeletClient, a.logger, a.config.MaxConcurrent)
 
+	// Create Volcano client (optional - will work without it)
+	volcanoClient, err := datasource.NewVolcanoClient(apiServer.GetConfig(), a.logger)
+	if err != nil {
+		a.logger.Warn("Failed to create Volcano client, Volcano features disabled",
+			zap.Error(err),
+		)
+	} else {
+		a.dataSource.SetVolcanoClient(volcanoClient)
+	}
+
 	// Create cache
 	a.cache = cache.NewTTLCache(a.config.CacheTTL, a.logger)
 

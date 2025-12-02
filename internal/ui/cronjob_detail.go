@@ -53,14 +53,15 @@ func (m *Model) renderCronJobDetail() string {
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
-	if m.detailScrollOffset > maxScroll {
-		m.detailScrollOffset = maxScroll
+	detailScrollOffset := m.detailScrollOffset
+	if detailScrollOffset > maxScroll {
+		detailScrollOffset = maxScroll
 	}
-	if m.detailScrollOffset < 0 {
-		m.detailScrollOffset = 0
+	if detailScrollOffset < 0 {
+		detailScrollOffset = 0
 	}
 
-	startIdx := m.detailScrollOffset
+	startIdx := detailScrollOffset
 	if startIdx >= totalLines {
 		startIdx = totalLines - 1
 		if startIdx < 0 {

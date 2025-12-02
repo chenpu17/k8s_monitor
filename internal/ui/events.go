@@ -102,19 +102,22 @@ func (m *Model) renderEventsList(events []*model.EventData) string {
 
 	totalEvents := len(events)
 
-	// Clamp scroll offset to valid range to prevent panic when event count shrinks
+	// Calculate scroll bounds (read-only, don't modify state in View)
 	maxScroll := totalEvents - maxVisible
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
-	if m.scrollOffset > maxScroll {
-		m.scrollOffset = maxScroll
+
+	// Use clamped scroll offset for display only
+	scrollOffset := m.scrollOffset
+	if scrollOffset > maxScroll {
+		scrollOffset = maxScroll
 	}
-	if m.scrollOffset < 0 {
-		m.scrollOffset = 0
+	if scrollOffset < 0 {
+		scrollOffset = 0
 	}
 
-	startIdx := m.scrollOffset
+	startIdx := scrollOffset
 	endIdx := startIdx + maxVisible
 	if endIdx > totalEvents {
 		endIdx = totalEvents

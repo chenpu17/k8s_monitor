@@ -286,6 +286,9 @@ other = "POD IP"
 [columns.node]
 other = "节点"
 
+[columns.ip]
+other = "IP"
+
 [columns.pod_name]
 other = "POD 名称"
 
@@ -547,6 +550,9 @@ other = "📦 {{.Count}} 个 Pod 镜像拉取失败"
 
 [alerts.full.oom_killed]
 other = "💥 {{.Count}} 个 Pod 被 OOM 终止"
+
+[alerts.threshold]
+other = "阈值"
 
 # ============================================================================
 # Kubelet 提示
@@ -1119,6 +1125,9 @@ other = "接收:   "
 [detail.node.network_tx_label]
 other = "发送:   "
 
+[detail.node.npu_label]
+other = "NPU:    "
+
 [detail.node.snapshots]
 other = "（基于 {{.Count}} 个快照）"
 
@@ -1277,6 +1286,21 @@ other = "未找到守护进程集"
 [workloads.no_cronjobs]
 other = "未找到定时任务"
 
+[workloads.jobs.success_rate]
+other = "任务成功率"
+
+[workloads.jobs.avg_duration]
+other = "平均耗时"
+
+[workloads.jobs.active_count]
+other = "活跃任务"
+
+[workloads.volcano.avg_duration]
+other = "Volcano平均"
+
+[workloads.volcano.running]
+other = "Volcano运行中"
+
 
 # ============================================================================
 # Job 详情视图
@@ -1358,6 +1382,30 @@ other = "↑/↓ 选择 Pod • Enter 查看详情 • l 查看日志 • Esc �
 
 [detail.job.phase]
 other = "阶段"
+
+[detail.job.efficiency]
+other = "效率"
+
+[detail.job.performance]
+other = "📈 性能分析"
+
+[detail.job.success_rate]
+other = "成功率"
+
+[detail.job.progress]
+other = "完成进度"
+
+[detail.job.throughput]
+other = "吞吐量"
+
+[detail.job.per_hour]
+other = "每小时"
+
+[detail.job.per_minute]
+other = "每分钟"
+
+[detail.job.eta]
+other = "预计完成"
 
 
 # ============================================================================
@@ -1527,3 +1575,429 @@ other = "消息"
 
 [detail.pvc.condition.since]
 other = "起始时间"
+
+# ============================================================================
+# NPU（昇腾 AI 加速器）相关
+# ============================================================================
+[columns.npu]
+other = "NPU"
+
+[npu.title]
+other = "NPU（昇腾）"
+
+[npu.total]
+other = "总量"
+
+[npu.allocated]
+other = "已分配"
+
+[npu.usage]
+other = "使用率"
+
+[npu.chip_type]
+other = "芯片类型"
+
+[npu.device_type]
+other = "设备类型"
+
+[npu.driver_version]
+other = "驱动版本"
+
+[npu.resource_name]
+other = "资源名称"
+
+[npu.topology]
+other = "拓扑信息"
+
+[npu.superpod_id]
+other = "超节点 ID"
+
+[npu.hypernode_id]
+other = "HyperNode ID"
+
+[npu.cabinet]
+other = "机柜"
+
+[npu.no_npu_nodes]
+other = "无 NPU 节点"
+
+[npu.details]
+other = "NPU 详情"
+
+# SuperPod 超节点拓扑部分
+[topology.superpod.title]
+other = "🔷 超节点拓扑结构"
+
+[topology.superpod.nodes]
+other = "节点"
+
+# ============================================================================
+# 超节点拓扑视图（独立标签页）
+# ============================================================================
+[views.topology.name]
+other = "拓扑"
+
+[topology.title]
+other = "🔷 超节点拓扑结构"
+
+[topology.loading]
+other = "正在加载拓扑数据..."
+
+[topology.no_superpods]
+other = "集群中未发现超节点"
+
+[topology.total_superpods]
+other = "超节点数"
+
+[topology.total_nodes]
+other = "节点数"
+
+[topology.total_npu]
+other = "NPU 总量"
+
+[topology.col_superpod_id]
+other = "超节点 ID"
+
+[topology.col_nodes]
+other = "节点数"
+
+[topology.col_npu_per_node]
+other = "每节点 NPU"
+
+[topology.col_total_npu]
+other = "NPU 总量"
+
+[topology.col_node_ips]
+other = "节点 IP"
+
+[topology.scroll_indicator]
+other = "（显示 {{.Start}}-{{.End}}，共 {{.Total}}）"
+
+[topology.help_text]
+other = "↑/↓ 选择 • Enter 查看详情 • Esc 返回"
+
+[topology.no_selected]
+other = "未选择超节点"
+
+[topology.superpod_detail]
+other = "超节点详情"
+
+[topology.section_basic_info]
+other = "📋 基本信息"
+
+[topology.superpod_id]
+other = "超节点 ID"
+
+[topology.node_count]
+other = "节点数量"
+
+[topology.npu_per_node]
+other = "每节点 NPU"
+
+[topology.npu_utilization]
+other = "NPU 使用率"
+
+[topology.section_nodes]
+other = "🖥️  超节点中的节点"
+
+[topology.no_nodes]
+other = "此超节点中没有节点"
+
+[topology.col_npu_allocated]
+other = "已分配"
+
+[topology.col_npu_capacity]
+other = "容量"
+
+[topology.section_volcano_jobs]
+other = "🔥 此超节点上的 Volcano 任务"
+
+[topology.more_jobs]
+other = "个任务"
+
+[topology.section_network]
+other = "🌐 网络统计"
+
+[topology.network_rx]
+other = "总接收"
+
+[topology.network_tx]
+other = "总发送"
+
+[topology.network_total]
+other = "总带宽"
+
+# NPU 详情列（表头简短版本）
+[topology.npu_util_short]
+other = "NPU%"
+
+[topology.hbm_util_short]
+other = "HBM%"
+
+[topology.temp_short]
+other = "温度"
+
+[topology.health_short]
+other = "健康"
+
+# NPU 详情部分
+[topology.section_npu_details]
+other = "🔧 NPU 详情（前 3 个节点）"
+
+[topology.ai_cores]
+other = "AI 核心数"
+
+[topology.hbm_memory]
+other = "HBM 显存"
+
+[topology.power]
+other = "功耗"
+
+[topology.errors]
+other = "错误数"
+
+[topology.more_nodes]
+other = "个节点"
+
+# ============================================================================
+# Volcano 调度器相关
+# ============================================================================
+[workloads.volcanojobs.title]
+other = "Volcano 任务"
+
+[workloads.volcanojobs.stats]
+other = "总计: {{.Total}} • {{.Running}} • {{.Pending}} • {{.Completed}}"
+
+[workloads.volcanojobs.stats_running]
+other = "运行中: {{.Count}}"
+
+[workloads.volcanojobs.stats_pending]
+other = "等待中: {{.Count}}"
+
+[workloads.volcanojobs.stats_completed]
+other = "已完成: {{.Count}}"
+
+[workloads.no_volcanojobs]
+other = "未发现 Volcano 任务"
+
+[columns.queue]
+other = "队列"
+
+[columns.replicas]
+other = "副本数"
+
+# ============================================================================
+# Volcano Job 详情视图
+# ============================================================================
+[detail.volcanojob.no_selected]
+other = "未选择 Volcano 任务"
+
+[detail.volcanojob.title]
+other = "Volcano 任务"
+
+[detail.volcanojob.basic_info]
+other = "📋 基本信息"
+
+[detail.volcanojob.queue]
+other = "队列"
+
+[detail.volcanojob.min_available]
+other = "最小可用数"
+
+[detail.volcanojob.replicas]
+other = "副本数"
+
+[detail.volcanojob.npu_requested]
+other = "NPU 请求"
+
+[detail.volcanojob.npu_total]
+other = "NPU 总量"
+
+[detail.volcanojob.duration]
+other = "持续时间"
+
+[detail.volcanojob.still_running]
+other = "运行中"
+
+[detail.volcanojob.start_time]
+other = "开始时间"
+
+[detail.volcanojob.completion_time]
+other = "完成时间"
+
+[detail.volcanojob.resource_summary]
+other = "📊 资源摘要"
+
+[detail.volcanojob.network_bandwidth]
+other = "网络带宽"
+
+[detail.volcanojob.pods_header]
+other = "📦 Volcano 任务 Pod"
+
+[detail.volcanojob.no_pod_info]
+other = "无 Pod 信息"
+
+[detail.volcanojob.no_pods]
+other = "未找到此 Volcano 任务的 Pod"
+
+[detail.volcanojob.pods_total]
+other = "📦 Volcano 任务 Pod（共 {{.Total}} 个）"
+
+[detail.volcanojob.pods_running]
+other = "{{.Count}} 个运行中"
+
+[detail.volcanojob.pods_pending]
+other = "{{.Count}} 个等待中"
+
+[detail.volcanojob.pods_succeeded]
+other = "{{.Count}} 个成功"
+
+[detail.volcanojob.pods_failed]
+other = "{{.Count}} 个失败"
+
+[detail.volcanojob.pods_detail]
+other = "Pod 详情"
+
+[detail.volcanojob.more_pods]
+other = "... 以及另外 {{.Extra}} 个 Pod（显示前 {{.Shown}} 个优先级最高的）"
+
+[detail.volcanojob.help_text]
+other = "↑/↓ 选择 Pod • Enter 查看详情 • l 查看日志 • Esc 返回"
+
+[detail.volcanojob.queue_wait_time]
+other = "队列等待时间"
+
+[detail.volcanojob.still_waiting]
+other = "仍在等待"
+
+[detail.volcanojob.task_breakdown]
+other = "📋 任务分解"
+
+[detail.volcanojob.task_name]
+other = "任务"
+
+[detail.volcanojob.task_replicas]
+other = "副本"
+
+[detail.volcanojob.npu_efficiency]
+other = "NPU 效率"
+
+[detail.volcanojob.npu_per_replica]
+other = "每副本"
+
+# ============================================================================
+# Volcano 队列视图
+# ============================================================================
+[views.queues.name]
+other = "队列"
+
+[views.queues.title]
+other = "📋 Volcano 队列"
+
+[views.queues.no_queues]
+other = "未发现 Volcano 队列"
+
+[views.queues.stats]
+other = "总队列数：{{.Total}} • 运行中任务：{{.Running}} • 等待中任务：{{.Pending}}"
+
+[views.queues.weight]
+other = "权重"
+
+[views.queues.jobs]
+other = "任务(运/等)"
+
+# ============================================================================
+# 队列详情视图
+# ============================================================================
+[detail.queue.no_selected]
+other = "未选择队列"
+
+[detail.queue.title]
+other = "Volcano 队列"
+
+[detail.queue.basic_info]
+other = "📋 基本信息"
+
+[detail.queue.state]
+other = "状态"
+
+[detail.queue.weight]
+other = "权重"
+
+[detail.queue.parent]
+other = "父队列"
+
+[detail.queue.reclaimable]
+other = "可回收"
+
+[detail.queue.resources]
+other = "📊 资源配额"
+
+[detail.queue.allocated]
+other = "已分配："
+
+[detail.queue.quota]
+other = "配额："
+
+[detail.queue.guarantee]
+other = "保障："
+
+[detail.queue.job_stats]
+other = "📈 任务统计"
+
+[detail.queue.running_jobs]
+other = "运行中任务"
+
+[detail.queue.pending_jobs]
+other = "等待中任务"
+
+[detail.queue.completed_jobs]
+other = "已完成任务"
+
+[detail.queue.failed_jobs]
+other = "失败任务"
+
+[detail.queue.lifecycle]
+other = "📅 生命周期"
+
+[detail.queue.wait_time_stats]
+other = "⏱️  等待时间统计"
+
+[detail.queue.avg_wait_time]
+other = "平均等待"
+
+[detail.queue.sample_jobs]
+other = "样本数"
+
+[detail.queue.min_wait]
+other = "最短"
+
+[detail.queue.max_wait]
+other = "最长"
+
+[detail.queue.current_pending_wait]
+other = "当前排队平均"
+
+[detail.queue.jobs_waiting]
+other = "个任务排队中"
+
+# ============================================================================
+# 通用术语
+# ============================================================================
+[common.yes]
+other = "是"
+
+[common.no]
+other = "否"
+
+[common.of]
+other = "共"
+
+[common.total]
+other = "总计"
+
+[common.sort]
+other = "排序"
+
+[common.filtered_by]
+other = "过滤条件"

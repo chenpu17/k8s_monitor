@@ -2,6 +2,8 @@ package datasource
 
 import (
 	"context"
+	"strconv"
+	"strings"
 
 	"github.com/yourusername/k8s-monitor/internal/model"
 	corev1 "k8s.io/api/core/v1"
@@ -85,6 +87,124 @@ func ConvertNode(node *corev1.Node) *model.NodeData {
 		case corev1.NodePIDPressure:
 			nodeData.PIDPressure = cond.Status == corev1.ConditionTrue
 		}
+	}
+
+	// Extract NPU (Ascend AI accelerator) information from capacity/allocatable
+	// Look for resources like "huawei.com/ascend-1980", "huawei.com/Ascend910", etc.
+	for resourceName, quantity := range node.Status.Capacity {
+		resName := string(resourceName)
+		if strings.Contains(resName, "huawei.com/") && strings.Contains(strings.ToLower(resName), "ascend") {
+			nodeData.NPUCapacity = quantity.Value()
+			nodeData.NPUResourceName = resName
+			break
+		}
+	}
+	for resourceName, quantity := range node.Status.Allocatable {
+		resName := string(resourceName)
+		if strings.Contains(resName, "huawei.com/") && strings.Contains(strings.ToLower(resName), "ascend") {
+			nodeData.NPUAllocatable = quantity.Value()
+			break
+		}
+	}
+
+	// Extract NPU device info from node labels
+	if node.Labels != nil {
+		// NPU chip type: node.kubernetes.io/npu.chip.name
+		if chipType, ok := node.Labels["node.kubernetes.io/npu.chip.name"]; ok {
+			nodeData.NPUChipType = chipType
+		}
+		// NPU device type: accelerator/huawei-npu
+		if deviceType, ok := node.Labels["accelerator/huawei-npu"]; ok {
+			nodeData.NPUDeviceType = deviceType
+		}
+		// NPU driver version: os.modelarts.node/npu.firmware.driver.version
+		if driverVersion, ok := node.Labels["os.modelarts.node/npu.firmware.driver.version"]; ok {
+			nodeData.NPUDriverVersion = driverVersion
+		}
+		// AI Core count from label
+		if aiCoreCount, ok := node.Labels["npu.huawei.com/aicore-count"]; ok {
+			if count, err := strconv.Atoi(aiCoreCount); err == nil {
+				nodeData.NPUAICoreCount = count
+			}
+		}
+
+		// Topology information (Volcano HyperNode)
+		if hyperNodeID, ok := node.Labels["volcano.sh/hypernode"]; ok {
+			nodeData.HyperNodeID = hyperNodeID
+		}
+		if hyperClusterID, ok := node.Labels["volcano.sh/hypercluster"]; ok {
+			nodeData.HyperClusterID = hyperClusterID
+		}
+		// SuperPod ID: os.modelarts.node/superpod.id
+		if superPodID, ok := node.Labels["os.modelarts.node/superpod.id"]; ok {
+			nodeData.SuperPodID = superPodID
+		}
+		// Cabinet info: cce.kubectl.kubernetes.io/cabinet
+		if cabinetInfo, ok := node.Labels["cce.kubectl.kubernetes.io/cabinet"]; ok {
+			nodeData.CabinetInfo = cabinetInfo
+		}
+	}
+
+	// Extract NPU runtime metrics from annotations (set by device-plugin or npu-exporter)
+	if node.Annotations != nil {
+		// NPU utilization (AI Core utilization percentage)
+		if util, ok := node.Annotations["npu.huawei.com/utilization"]; ok {
+			if val, err := strconv.ParseFloat(util, 64); err == nil {
+				nodeData.NPUUtilization = val
+			}
+		}
+		// HBM (High Bandwidth Memory) total
+		if hbmTotal, ok := node.Annotations["npu.huawei.com/hbm-total"]; ok {
+			nodeData.NPUMemoryTotal = parseMemoryValue(hbmTotal)
+		}
+		// HBM used
+		if hbmUsed, ok := node.Annotations["npu.huawei.com/hbm-used"]; ok {
+			nodeData.NPUMemoryUsed = parseMemoryValue(hbmUsed)
+		}
+		// HBM utilization percentage
+		if hbmUtil, ok := node.Annotations["npu.huawei.com/hbm-utilization"]; ok {
+			if val, err := strconv.ParseFloat(hbmUtil, 64); err == nil {
+				nodeData.NPUMemoryUtil = val
+			}
+		} else if nodeData.NPUMemoryTotal > 0 {
+			// Calculate from total and used if utilization not directly provided
+			nodeData.NPUMemoryUtil = float64(nodeData.NPUMemoryUsed) / float64(nodeData.NPUMemoryTotal) * 100
+		}
+		// NPU temperature
+		if temp, ok := node.Annotations["npu.huawei.com/temperature"]; ok {
+			if val, err := strconv.Atoi(temp); err == nil {
+				nodeData.NPUTemperature = val
+			}
+		}
+		// NPU power consumption
+		if power, ok := node.Annotations["npu.huawei.com/power"]; ok {
+			if val, err := strconv.Atoi(power); err == nil {
+				nodeData.NPUPower = val
+			}
+		}
+		// NPU health status
+		if health, ok := node.Annotations["npu.huawei.com/health"]; ok {
+			nodeData.NPUHealthStatus = health
+		}
+		// NPU error count
+		if errCount, ok := node.Annotations["npu.huawei.com/error-count"]; ok {
+			if val, err := strconv.Atoi(errCount); err == nil {
+				nodeData.NPUErrorCount = val
+			}
+		}
+		// AI Core count from annotation (fallback)
+		if nodeData.NPUAICoreCount == 0 {
+			if aiCoreCount, ok := node.Annotations["npu.huawei.com/aicore-count"]; ok {
+				if count, err := strconv.Atoi(aiCoreCount); err == nil {
+					nodeData.NPUAICoreCount = count
+				}
+			}
+		}
+	}
+
+	// Set default health status if NPU exists but no health annotation
+	if nodeData.NPUCapacity > 0 && nodeData.NPUHealthStatus == "" {
+		nodeData.NPUHealthStatus = "Healthy"
 	}
 
 	return nodeData
@@ -194,6 +314,16 @@ func ConvertPod(pod *corev1.Pod) *model.PodData {
 			if mem := container.Resources.Requests.Memory(); mem != nil {
 				podData.MemoryRequest += mem.Value()
 			}
+			// Extract NPU requests (Ascend AI accelerators)
+			for resourceName, quantity := range container.Resources.Requests {
+				resName := string(resourceName)
+				if strings.Contains(resName, "huawei.com/") && strings.Contains(strings.ToLower(resName), "ascend") {
+					podData.NPURequest += quantity.Value()
+					if podData.NPUResourceName == "" {
+						podData.NPUResourceName = resName
+					}
+				}
+			}
 		}
 		if container.Resources.Limits != nil {
 			if cpu := container.Resources.Limits.Cpu(); cpu != nil {
@@ -246,4 +376,47 @@ func ConvertEvent(event *corev1.Event) *model.EventData {
 		InvolvedNamespace: event.InvolvedObject.Namespace,
 		Source:            event.Source.Component,
 	}
+}
+
+// parseMemoryValue parses memory value strings like "64Gi", "32G", "65536Mi" to bytes
+func parseMemoryValue(value string) int64 {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+
+	// Try to parse as plain number first
+	if v, err := strconv.ParseInt(value, 10, 64); err == nil {
+		return v
+	}
+
+	// Handle suffixes
+	multiplier := int64(1)
+	numStr := value
+
+	if strings.HasSuffix(value, "Gi") {
+		multiplier = 1024 * 1024 * 1024
+		numStr = strings.TrimSuffix(value, "Gi")
+	} else if strings.HasSuffix(value, "G") {
+		multiplier = 1000 * 1000 * 1000
+		numStr = strings.TrimSuffix(value, "G")
+	} else if strings.HasSuffix(value, "Mi") {
+		multiplier = 1024 * 1024
+		numStr = strings.TrimSuffix(value, "Mi")
+	} else if strings.HasSuffix(value, "M") {
+		multiplier = 1000 * 1000
+		numStr = strings.TrimSuffix(value, "M")
+	} else if strings.HasSuffix(value, "Ki") {
+		multiplier = 1024
+		numStr = strings.TrimSuffix(value, "Ki")
+	} else if strings.HasSuffix(value, "K") {
+		multiplier = 1000
+		numStr = strings.TrimSuffix(value, "K")
+	}
+
+	if v, err := strconv.ParseFloat(numStr, 64); err == nil {
+		return int64(v * float64(multiplier))
+	}
+
+	return 0
 }

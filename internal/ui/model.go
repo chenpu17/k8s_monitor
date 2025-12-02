@@ -32,6 +32,8 @@ const (
 	ViewStorage
 	ViewEvents
 	ViewAlerts
+	ViewQueues   // Volcano Queues view (AI/HPC)
+	ViewTopology // SuperPod Topology view (Ascend NPU)
 	ViewNodeDetail
 	ViewPodDetail
 	ViewEventDetail
@@ -43,6 +45,9 @@ const (
 	ViewCronJobDetail
 	ViewPVDetail
 	ViewPVCDetail
+	ViewVolcanoJobDetail
+	ViewQueueDetail
+	ViewTopologyDetail // SuperPod detail view
 )
 
 // SortField represents the field to sort by
@@ -72,6 +77,11 @@ type MetricSnapshot struct {
 	NodeMetrics map[string]*NodeMetric // key: node name
 	PodMetrics  map[string]*PodMetric  // key: namespace/name
 	Timestamp   time.Time
+
+	// Cluster-wide NPU summary
+	ClusterNPUCapacity   int64 // Total NPU capacity across all nodes
+	ClusterNPUAllocated  int64 // Total NPUs allocated to pods
+	ClusterNPUAllocatable int64 // Total allocatable NPUs
 }
 
 // NodeMetric stores historical metrics for a node
@@ -81,6 +91,11 @@ type NodeMetric struct {
 	NetworkRxBytes int64
 	NetworkTxBytes int64
 	Timestamp      time.Time // Kubelet-provided timestamp for accurate rate calculation
+
+	// NPU metrics (Ascend AI accelerators)
+	NPUCapacity   int64 // Total NPU capacity on this node
+	NPUAllocated  int64 // NPUs allocated to pods on this node
+	NPUAllocatable int64 // Allocatable NPUs on this node
 }
 
 // PodMetric stores historical metrics for a pod
@@ -134,10 +149,15 @@ type Model struct {
 	selectedCronJob     *model.CronJobData     // Currently selected cronjob for detail view
 	selectedPV          *model.PVData          // Currently selected PV for detail view
 	selectedPVC         *model.PVCData         // Currently selected PVC for detail view
+	selectedVolcanoJob  *model.VolcanoJobData  // Currently selected Volcano job for detail view
+	selectedQueue       *model.QueueData       // Currently selected Volcano queue for detail view
+	selectedSuperPod    *SuperPodInfo          // Currently selected SuperPod for detail view
 
 	// Job pod selection state
-	jobPodSelectedIndex int  // Selected pod index in job detail view
-	fromJobDetail       bool // True when navigating from job detail to pod detail
+	jobPodSelectedIndex         int  // Selected pod index in job detail view
+	volcanoJobPodSelectedIndex  int  // Selected pod index in volcano job detail view
+	fromJobDetail               bool // True when navigating from job detail to pod detail
+	fromVolcanoJobDetail        bool // True when navigating from volcano job detail to pod detail
 
 	// Filter state
 	filterMode      bool   // True when in filter mode
@@ -518,11 +538,37 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case msg.String() == "9":
+			// Only switch to Queues view if Volcano is available
+			if !m.detailMode && m.hasVolcanoQueues() {
+				m.currentView = ViewQueues
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+			}
+			return m, nil
+
+		case msg.String() == "0":
+			// Only switch to Topology view if SuperPod info is available
+			if !m.detailMode && m.hasSuperPodTopology() {
+				m.currentView = ViewTopology
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+			}
+			return m, nil
+
 		case key.Matches(msg, m.keys.Tab):
 			// Tab key switches views in list mode
 			if !m.detailMode {
-				m.currentView = (m.currentView + 1) % 8 // Cycle through 8 views
-				m.scrollOffset = 0                      // Reset scroll when switching views
+				// Determine max views based on available features
+				maxViews := 8 // Base: Overview, Nodes, Pods, Workloads, Network, Storage, Events, Alerts
+				if m.hasVolcanoQueues() {
+					maxViews = 9 // Include ViewQueues
+				}
+				if m.hasSuperPodTopology() {
+					maxViews = 10 // Include ViewTopology
+				}
+				m.currentView = (m.currentView + 1) % ViewType(maxViews)
+				m.scrollOffset = 0 // Reset scroll when switching views
 				m.selectedIndex = 0
 			}
 			return m, nil
@@ -559,6 +605,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.currentView = ViewPodDetail
 					m.detailMode = true  // BUGFIX: Must set detailMode to true for "l" key to work
 					m.fromJobDetail = true
+					m.detailScrollOffset = 0
+				}
+				return m, nil
+			}
+			if m.detailMode && m.currentView == ViewVolcanoJobDetail && m.selectedVolcanoJob != nil {
+				// Navigate from Volcano Job detail to Pod detail
+				volcanoJobPods := m.getVolcanoJobPods(m.selectedVolcanoJob)
+				// Limit to max 50 pods displayed
+				displayCount := len(volcanoJobPods)
+				const maxDisplay = 50
+				if displayCount > maxDisplay {
+					displayCount = maxDisplay
+				}
+				if m.volcanoJobPodSelectedIndex < displayCount && m.volcanoJobPodSelectedIndex < len(volcanoJobPods) {
+					m.selectedPod = volcanoJobPods[m.volcanoJobPodSelectedIndex]
+					m.currentView = ViewPodDetail
+					m.detailMode = true
+					m.fromVolcanoJobDetail = true
 					m.detailScrollOffset = 0
 				}
 				return m, nil
@@ -604,7 +668,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case ViewWorkloads:
 					// Determine which workload section contains the selected index
 					currentItemIndex := 0
-					sectionOrder := []string{"job", "service", "deployment", "statefulset", "daemonset", "cronjob"}
+					sectionOrder := []string{"volcanojob", "job", "service", "deployment", "statefulset", "daemonset", "cronjob"}
 
 					for _, sectionType := range sectionOrder {
 						section, exists := m.workloadSections[sectionType]
@@ -618,6 +682,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 							// Route to appropriate detail view based on section type
 							switch sectionType {
+							case "volcanojob":
+								if itemIndexInSection < len(m.clusterData.VolcanoJobs) {
+									m.selectedVolcanoJob = m.clusterData.VolcanoJobs[itemIndexInSection]
+									m.currentView = ViewVolcanoJobDetail
+									m.detailMode = true
+									m.detailScrollOffset = 0
+									m.volcanoJobPodSelectedIndex = 0
+								}
 							case "job":
 								if itemIndexInSection < len(m.clusterData.Jobs) {
 									m.selectedJob = m.clusterData.Jobs[itemIndexInSection]
@@ -682,6 +754,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						pvcIndex := m.selectedIndex - totalPVs
 						m.selectedPVC = m.clusterData.PVCs[pvcIndex]
 						m.currentView = ViewPVCDetail
+						m.detailMode = true
+						m.detailScrollOffset = 0
+					}
+				case ViewQueues:
+					// Queue view - select queue for detail
+					if m.selectedIndex < len(m.clusterData.Queues) {
+						m.selectedQueue = m.clusterData.Queues[m.selectedIndex]
+						m.currentView = ViewQueueDetail
+						m.detailMode = true
+						m.detailScrollOffset = 0
+					}
+				case ViewTopology:
+					// Topology view - select SuperPod for detail
+					superPods := m.getSuperPodTopology()
+					if m.selectedIndex < len(superPods) {
+						m.selectedSuperPod = &superPods[m.selectedIndex]
+						m.currentView = ViewTopologyDetail
 						m.detailMode = true
 						m.detailScrollOffset = 0
 					}
@@ -750,6 +839,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 
+				// Special handling for navigating back from Pod detail to Volcano Job detail
+				if m.currentView == ViewPodDetail && m.fromVolcanoJobDetail {
+					m.currentView = ViewVolcanoJobDetail
+					m.fromVolcanoJobDetail = false
+					m.detailScrollOffset = 0
+					m.selectedPod = nil
+					// Keep m.selectedVolcanoJob intact
+					return m, nil
+				}
+
 				switch m.currentView {
 				case ViewNodeDetail:
 					m.currentView = ViewNodes
@@ -760,6 +859,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case ViewJobDetail:
 					m.currentView = ViewWorkloads
 					m.jobPodSelectedIndex = 0 // Reset selection
+				case ViewVolcanoJobDetail:
+					m.currentView = ViewWorkloads
+					m.volcanoJobPodSelectedIndex = 0 // Reset selection
 				case ViewServiceDetail:
 					m.currentView = ViewWorkloads
 				case ViewDeploymentDetail:
@@ -774,6 +876,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.currentView = ViewStorage
 				case ViewPVCDetail:
 					m.currentView = ViewStorage
+				case ViewQueueDetail:
+					m.currentView = ViewQueues
+				case ViewTopologyDetail:
+					m.currentView = ViewTopology
 				}
 				m.detailMode = false
 				m.detailScrollOffset = 0 // Reset detail scroll offset
@@ -788,6 +894,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selectedCronJob = nil
 				m.selectedPV = nil
 				m.selectedPVC = nil
+				m.selectedVolcanoJob = nil
+				m.selectedQueue = nil
+				m.selectedSuperPod = nil
 				m.scrollOffset = 0
 				m.selectedIndex = 0 // Reset selected index when returning from detail view
 
@@ -1006,6 +1115,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, nil
 				}
+				// Navigate pods in Volcano Job detail view
+				if m.currentView == ViewVolcanoJobDetail && m.selectedVolcanoJob != nil {
+					volcanoJobPods := m.getVolcanoJobPods(m.selectedVolcanoJob)
+					// Limit to max 50 pods displayed
+					displayCount := len(volcanoJobPods)
+					const maxDisplay = 50
+					if displayCount > maxDisplay {
+						displayCount = maxDisplay
+					}
+					if len(volcanoJobPods) > 0 && m.volcanoJobPodSelectedIndex > 0 {
+						m.volcanoJobPodSelectedIndex--
+					}
+					return m, nil
+				}
 				// Scroll up in detail view
 				if m.detailScrollOffset > 0 {
 					m.detailScrollOffset--
@@ -1095,6 +1218,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					if len(jobPods) > 0 && m.jobPodSelectedIndex < displayCount-1 {
 						m.jobPodSelectedIndex++
+					}
+					return m, nil
+				}
+				// Navigate pods in Volcano Job detail view
+				if m.currentView == ViewVolcanoJobDetail && m.selectedVolcanoJob != nil {
+					volcanoJobPods := m.getVolcanoJobPods(m.selectedVolcanoJob)
+					// Limit to max 50 pods displayed
+					displayCount := len(volcanoJobPods)
+					const maxDisplay = 50
+					if displayCount > maxDisplay {
+						displayCount = maxDisplay
+					}
+					if len(volcanoJobPods) > 0 && m.volcanoJobPodSelectedIndex < displayCount-1 {
+						m.volcanoJobPodSelectedIndex++
 					}
 					return m, nil
 				}
@@ -1516,12 +1653,22 @@ func (m *Model) View() string {
 		content = m.renderDaemonSetDetail()
 	case ViewCronJobDetail:
 		content = m.renderCronJobDetail()
+	case ViewVolcanoJobDetail:
+		content = m.renderVolcanoJobDetail()
 	case ViewStorage:
 		content = m.renderStorage()
 	case ViewPVDetail:
 		content = m.renderPVDetail()
 	case ViewPVCDetail:
 		content = m.renderPVCDetail()
+	case ViewQueues:
+		content = m.renderQueues()
+	case ViewQueueDetail:
+		content = m.renderQueueDetail()
+	case ViewTopology:
+		content = m.renderTopology()
+	case ViewTopologyDetail:
+		content = m.renderSuperPodDetail()
 	}
 
 	// Render footer
@@ -1617,10 +1764,11 @@ func (m *Model) getMaxIndex() int {
 		}
 		return 0
 	case ViewWorkloads:
-		// Sum all selectable workloads
+		// Sum all selectable workloads including Volcano jobs
 		total := len(m.clusterData.Services) + len(m.clusterData.Jobs) +
 			len(m.clusterData.Deployments) + len(m.clusterData.StatefulSets) +
-			len(m.clusterData.DaemonSets) + len(m.clusterData.CronJobs)
+			len(m.clusterData.DaemonSets) + len(m.clusterData.CronJobs) +
+			len(m.clusterData.VolcanoJobs)
 		return total
 	case ViewNetwork:
 		// For network view, use services count as the scrollable items
@@ -1628,6 +1776,12 @@ func (m *Model) getMaxIndex() int {
 	case ViewStorage:
 		// Storage view shows PVs and PVCs
 		return len(m.clusterData.PVs) + len(m.clusterData.PVCs)
+	case ViewQueues:
+		// Queue view shows Volcano queues
+		return len(m.clusterData.Queues)
+	case ViewTopology:
+		// Topology view shows SuperPods
+		return len(m.getSuperPodTopology())
 	default:
 		return 0
 	}
@@ -1732,6 +1886,16 @@ func (m *Model) renderViewTabs() string {
 		{6, "views.storage.name", ViewStorage},
 		{7, "views.events.name", ViewEvents},
 		{8, "views.alerts.name", ViewAlerts},
+	}
+
+	// Add Queues tab if Volcano is available
+	if m.hasVolcanoQueues() {
+		tabs = append(tabs, viewTab{9, "views.queues.name", ViewQueues})
+	}
+
+	// Add Topology tab if SuperPod info is available
+	if m.hasSuperPodTopology() {
+		tabs = append(tabs, viewTab{0, "views.topology.name", ViewTopology})
 	}
 
 	var tabParts []string
@@ -2031,6 +2195,22 @@ func (m *Model) getFilteredNodes() []*model.NodeData {
 	return filtered
 }
 
+// clusterHasNPU returns true if the cluster has any nodes with NPU
+func (m *Model) clusterHasNPU() bool {
+	if m.clusterData == nil || m.clusterData.Summary == nil {
+		return false
+	}
+	return m.clusterData.Summary.NPUCapacity > 0
+}
+
+// hasVolcanoQueues returns true if Volcano queues are available
+func (m *Model) hasVolcanoQueues() bool {
+	if m.clusterData == nil {
+		return false
+	}
+	return len(m.clusterData.Queues) > 0
+}
+
 // renderSearchPanel renders the search panel
 func (m *Model) renderSearchPanel() string {
 	var lines []string
@@ -2059,7 +2239,8 @@ func (m *Model) recordMetricSnapshot(data *model.ClusterData) {
 		Timestamp:   time.Now(),
 	}
 
-	// Record node metrics
+	// Record node metrics and accumulate cluster-wide NPU stats
+	var clusterNPUCapacity, clusterNPUAllocated, clusterNPUAllocatable int64
 	for _, node := range data.Nodes {
 		// Use kubelet-provided timestamp if available, otherwise fallback to snapshot time
 		ts := node.NetworkTimestamp
@@ -2072,8 +2253,22 @@ func (m *Model) recordMetricSnapshot(data *model.ClusterData) {
 			NetworkRxBytes: node.NetworkRxBytes,
 			NetworkTxBytes: node.NetworkTxBytes,
 			Timestamp:      ts,
+			// NPU metrics
+			NPUCapacity:    node.NPUCapacity,
+			NPUAllocated:   node.NPUAllocated,
+			NPUAllocatable: node.NPUAllocatable,
 		}
+
+		// Accumulate cluster-wide NPU stats
+		clusterNPUCapacity += node.NPUCapacity
+		clusterNPUAllocated += node.NPUAllocated
+		clusterNPUAllocatable += node.NPUAllocatable
 	}
+
+	// Set cluster-wide NPU summary
+	snapshot.ClusterNPUCapacity = clusterNPUCapacity
+	snapshot.ClusterNPUAllocated = clusterNPUAllocated
+	snapshot.ClusterNPUAllocatable = clusterNPUAllocatable
 
 	// Record pod metrics
 	for _, pod := range data.Pods {
@@ -2767,4 +2962,124 @@ func (m *Model) calculateClusterNetworkRate() (float64, float64) {
 	}
 
 	return totalRxRate, totalTxRate
+}
+
+// ============================================================================
+// NPU Trend/History Functions
+// ============================================================================
+
+// getNodeNPUAllocatedHistory returns NPU allocation history for a node
+func (m *Model) getNodeNPUAllocatedHistory(nodeName string) []float64 {
+	var history []float64
+	for _, snapshot := range m.metricHistory {
+		if metric, ok := snapshot.NodeMetrics[nodeName]; ok {
+			history = append(history, float64(metric.NPUAllocated))
+		}
+	}
+	return history
+}
+
+// getNodeNPUUtilizationHistory returns NPU utilization percentage history for a node
+func (m *Model) getNodeNPUUtilizationHistory(nodeName string) []float64 {
+	var history []float64
+	for _, snapshot := range m.metricHistory {
+		if metric, ok := snapshot.NodeMetrics[nodeName]; ok {
+			if metric.NPUAllocatable > 0 {
+				util := float64(metric.NPUAllocated) / float64(metric.NPUAllocatable) * 100
+				history = append(history, util)
+			} else {
+				history = append(history, 0)
+			}
+		}
+	}
+	return history
+}
+
+// getClusterNPUAllocatedHistory returns cluster-wide NPU allocation history
+func (m *Model) getClusterNPUAllocatedHistory() []float64 {
+	var history []float64
+	for _, snapshot := range m.metricHistory {
+		history = append(history, float64(snapshot.ClusterNPUAllocated))
+	}
+	return history
+}
+
+// getClusterNPUUtilizationHistory returns cluster-wide NPU utilization percentage history
+func (m *Model) getClusterNPUUtilizationHistory() []float64 {
+	var history []float64
+	for _, snapshot := range m.metricHistory {
+		if snapshot.ClusterNPUAllocatable > 0 {
+			util := float64(snapshot.ClusterNPUAllocated) / float64(snapshot.ClusterNPUAllocatable) * 100
+			history = append(history, util)
+		} else {
+			history = append(history, 0)
+		}
+	}
+	return history
+}
+
+// calculateNodeNPUTrend calculates NPU allocation trend for a node
+func (m *Model) calculateNodeNPUTrend(nodeName string, currentNPU int64) Trend {
+	if len(m.metricHistory) < 3 {
+		return TrendStable // Not enough data
+	}
+
+	// Get historical values (excluding the most recent snapshot which is current)
+	var historicalValues []int64
+	for i := 0; i < len(m.metricHistory)-1; i++ {
+		if metric, ok := m.metricHistory[i].NodeMetrics[nodeName]; ok {
+			historicalValues = append(historicalValues, metric.NPUAllocated)
+		}
+	}
+
+	if len(historicalValues) == 0 {
+		return TrendStable
+	}
+
+	// Calculate average of historical values
+	var sum int64
+	for _, val := range historicalValues {
+		sum += val
+	}
+	avg := sum / int64(len(historicalValues))
+
+	// Determine trend (any change in NPU allocation is significant)
+	if currentNPU > avg {
+		return TrendUp
+	} else if currentNPU < avg {
+		return TrendDown
+	}
+	return TrendStable
+}
+
+// calculateClusterNPUTrend calculates cluster-wide NPU allocation trend
+func (m *Model) calculateClusterNPUTrend(currentNPU int64) Trend {
+	if len(m.metricHistory) < 3 {
+		return TrendStable // Not enough data
+	}
+
+	// Get historical values
+	var historicalValues []int64
+	for i := 0; i < len(m.metricHistory)-1; i++ {
+		historicalValues = append(historicalValues, m.metricHistory[i].ClusterNPUAllocated)
+	}
+
+	if len(historicalValues) == 0 {
+		return TrendStable
+	}
+
+	// Calculate average
+	var sum int64
+	for _, val := range historicalValues {
+		sum += val
+	}
+	avg := sum / int64(len(historicalValues))
+
+	// Determine trend (any change in NPU allocation is significant)
+	if currentNPU > avg {
+		return TrendUp
+	} else if currentNPU < avg {
+		return TrendDown
+	}
+	return TrendStable
 }

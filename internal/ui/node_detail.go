@@ -50,14 +50,15 @@ func (m *Model) renderNodeDetail() string {
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
-	if m.detailScrollOffset > maxScroll {
-		m.detailScrollOffset = maxScroll
+	detailScrollOffset := m.detailScrollOffset
+	if detailScrollOffset > maxScroll {
+		detailScrollOffset = maxScroll
 	}
-	if m.detailScrollOffset < 0 {
-		m.detailScrollOffset = 0
+	if detailScrollOffset < 0 {
+		detailScrollOffset = 0
 	}
 
-	startIdx := m.detailScrollOffset
+	startIdx := detailScrollOffset
 	endIdx := startIdx + maxVisible
 	if endIdx > totalLines {
 		endIdx = totalLines
@@ -173,6 +174,64 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 			podPercent))
 	}
 
+	// NPU (Ascend AI accelerator)
+	if node.NPUCapacity > 0 {
+		npuPercent := "0.0%"
+		if node.NPUAllocatable > 0 {
+			npuPercent = fmt.Sprintf("%.1f%%", float64(node.NPUAllocated)*100.0/float64(node.NPUAllocatable))
+		}
+		info = append(info, fmt.Sprintf("  %s: %d / %d (%s)",
+			StyleTextSecondary.Render("NPU"),
+			node.NPUAllocated,
+			node.NPUAllocatable,
+			npuPercent))
+
+		// NPU details
+		info = append(info, "")
+		info = append(info, StyleTextSecondary.Render("  NPU Details"))
+		if node.NPUChipType != "" {
+			info = append(info, fmt.Sprintf("    %s: %s",
+				StyleTextMuted.Render("Chip Type"),
+				node.NPUChipType))
+		}
+		if node.NPUDeviceType != "" {
+			info = append(info, fmt.Sprintf("    %s: %s",
+				StyleTextMuted.Render("Device Type"),
+				node.NPUDeviceType))
+		}
+		if node.NPUDriverVersion != "" {
+			info = append(info, fmt.Sprintf("    %s: %s",
+				StyleTextMuted.Render("Driver Version"),
+				node.NPUDriverVersion))
+		}
+		if node.NPUResourceName != "" {
+			info = append(info, fmt.Sprintf("    %s: %s",
+				StyleTextMuted.Render("Resource Name"),
+				node.NPUResourceName))
+		}
+
+		// Topology information
+		if node.HyperNodeID != "" || node.SuperPodID != "" {
+			info = append(info, "")
+			info = append(info, StyleTextSecondary.Render("  Topology"))
+			if node.SuperPodID != "" {
+				info = append(info, fmt.Sprintf("    %s: %s",
+					StyleTextMuted.Render("SuperPod ID"),
+					node.SuperPodID))
+			}
+			if node.HyperNodeID != "" {
+				info = append(info, fmt.Sprintf("    %s: %s",
+					StyleTextMuted.Render("HyperNode ID"),
+					truncate(node.HyperNodeID, 36)))
+			}
+			if node.CabinetInfo != "" {
+				info = append(info, fmt.Sprintf("    %s: %s",
+					StyleTextMuted.Render("Cabinet"),
+					node.CabinetInfo))
+			}
+		}
+	}
+
 	// Network Traffic (if available)
 	if node.NetworkRxBytes > 0 || node.NetworkTxBytes > 0 {
 		info = append(info, "")
@@ -227,6 +286,17 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 			info = append(info, fmt.Sprintf("  %s %s",
 				StyleTextMuted.Render(m.T("detail.node.network_tx_label")),
 				sparkline))
+		}
+
+		// NPU utilization trends (if node has NPU)
+		if node.NPUCapacity > 0 {
+			npuHistory := m.getNodeNPUUtilizationHistory(node.Name)
+			if len(npuHistory) >= 2 {
+				sparkline := RenderSparkline(npuHistory, 40)
+				info = append(info, fmt.Sprintf("  %s %s",
+					StyleTextMuted.Render(m.T("detail.node.npu_label")),
+					sparkline))
+			}
 		}
 
 		info = append(info, StyleTextMuted.Render("  "+m.TF("detail.node.snapshots", map[string]interface{}{

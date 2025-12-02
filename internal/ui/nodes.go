@@ -76,17 +76,74 @@ func (m *Model) renderNodesHeader(nodes []*model.NodeData) string {
 		summary += fmt.Sprintf(" • %s: %s %s", m.T("common.sort"), sortInfo, arrow)
 	}
 
-	return lipgloss.JoinHorizontal(
+	headerLine := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		title,
 		"  ",
 		StyleTextSecondary.Render(summary),
 	)
+
+	// Add NPU cluster-level summary if cluster has NPU nodes
+	if m.clusterData != nil && m.clusterData.Summary != nil {
+		clusterSummary := m.clusterData.Summary
+		if clusterSummary.NPUCapacity > 0 {
+			npuSummary := m.renderNPUClusterSummary(clusterSummary)
+			if npuSummary != "" {
+				return headerLine + "\n" + npuSummary
+			}
+		}
+	}
+
+	return headerLine
+}
+
+// renderNPUClusterSummary renders NPU cluster-level summary for nodes view
+func (m *Model) renderNPUClusterSummary(summary *model.ClusterSummary) string {
+	var parts []string
+
+	// NPU allocation: allocated / total
+	allocStyle := StyleStatusReady
+	if summary.NPUUtilization >= 90 {
+		allocStyle = StyleWarning
+	} else if summary.NPUUtilization >= 100 {
+		allocStyle = StyleStatusNotReady
+	}
+	parts = append(parts, fmt.Sprintf("%s: %s",
+		m.T("npu.allocated"),
+		allocStyle.Render(fmt.Sprintf("%d/%d", summary.NPUAllocated, summary.NPUAllocatable))))
+
+	// NPU utilization percentage
+	utilStyle := StyleStatusReady
+	if summary.NPUUtilization < 50 {
+		utilStyle = StyleTextMuted // Underutilizing
+	} else if summary.NPUUtilization >= 90 {
+		utilStyle = StyleWarning
+	}
+	parts = append(parts, fmt.Sprintf("%s: %s",
+		m.T("npu.usage"),
+		utilStyle.Render(formatPercentage(summary.NPUUtilization))))
+
+	// NPU nodes count
+	parts = append(parts, fmt.Sprintf("%s: %d",
+		m.T("common.nodes"),
+		summary.NPUNodesCount))
+
+	// NPU chip type if available
+	if summary.NPUChipType != "" {
+		parts = append(parts, fmt.Sprintf("%s: %s",
+			m.T("npu.chip_type"),
+			StyleHighlight.Render(summary.NPUChipType)))
+	}
+
+	return StyleTextMuted.Render("  🧮 NPU: ") + strings.Join(parts, " • ")
 }
 
 // renderNodesList renders the list of nodes
 func (m *Model) renderNodesList(nodes []*model.NodeData) string {
 	var rows []string
+
+	// Check if cluster has NPU nodes
+	hasNPU := m.clusterHasNPU()
 
 	// Table header - define fixed column widths
 	const (
@@ -98,20 +155,39 @@ func (m *Model) renderNodesList(nodes []*model.NodeData) string {
 		colRx     = 11 // Network RX bandwidth
 		colTx     = 11 // Network TX bandwidth
 		colPods   = 10
+		colNPU    = 12 // NPU usage column
 	)
 
-	headerRow := fmt.Sprintf("%s  %s  %s  %s  %s  %s  %s  %s",
-		padRight(m.T("columns.name"), colName),
-		padRight(m.T("columns.status"), colStatus),
-		padRight(m.T("columns.roles"), colRoles),
-		padRight(m.T("columns.cpu"), colCPU),
-		padRight(m.T("columns.memory"), colMemory),
-		padRight(m.T("columns.rx"), colRx),
-		padRight(m.T("columns.tx"), colTx),
-		padRight(m.T("columns.pods"), colPods),
-	)
+	var headerRow string
+	var separatorWidth int
+	if hasNPU {
+		headerRow = fmt.Sprintf("%s  %s  %s  %s  %s  %s  %s  %s  %s",
+			padRight(m.T("columns.name"), colName),
+			padRight(m.T("columns.status"), colStatus),
+			padRight(m.T("columns.roles"), colRoles),
+			padRight(m.T("columns.cpu"), colCPU),
+			padRight(m.T("columns.memory"), colMemory),
+			padRight("NPU", colNPU),
+			padRight(m.T("columns.rx"), colRx),
+			padRight(m.T("columns.tx"), colTx),
+			padRight(m.T("columns.pods"), colPods),
+		)
+		separatorWidth = colName + colStatus + colRoles + colCPU + colMemory + colNPU + colRx + colTx + colPods + 16
+	} else {
+		headerRow = fmt.Sprintf("%s  %s  %s  %s  %s  %s  %s  %s",
+			padRight(m.T("columns.name"), colName),
+			padRight(m.T("columns.status"), colStatus),
+			padRight(m.T("columns.roles"), colRoles),
+			padRight(m.T("columns.cpu"), colCPU),
+			padRight(m.T("columns.memory"), colMemory),
+			padRight(m.T("columns.rx"), colRx),
+			padRight(m.T("columns.tx"), colTx),
+			padRight(m.T("columns.pods"), colPods),
+		)
+		separatorWidth = colName + colStatus + colRoles + colCPU + colMemory + colRx + colTx + colPods + 14
+	}
 	rows = append(rows, StyleHeader.Render(headerRow))
-	rows = append(rows, strings.Repeat("─", colName+colStatus+colRoles+colCPU+colMemory+colRx+colTx+colPods+14))
+	rows = append(rows, strings.Repeat("─", separatorWidth))
 
 	// Calculate visible range based on scroll
 	maxVisible := m.height - 10
@@ -144,7 +220,7 @@ func (m *Model) renderNodesList(nodes []*model.NodeData) string {
 	// Node rows with selection highlighting
 	for i, node := range visibleNodes {
 		absoluteIndex := startIdx + i
-		row := m.renderNodeRow(node, colName, colStatus, colRoles, colCPU, colMemory, colRx, colTx, colPods)
+		row := m.renderNodeRow(node, colName, colStatus, colRoles, colCPU, colMemory, colNPU, colRx, colTx, colPods, hasNPU)
 
 		// Highlight selected row
 		if absoluteIndex == m.selectedIndex {
@@ -158,7 +234,7 @@ func (m *Model) renderNodesList(nodes []*model.NodeData) string {
 }
 
 // renderNodeRow renders a single node row
-func (m *Model) renderNodeRow(node *model.NodeData, colName, colStatus, colRoles, colCPU, colMemory, colRx, colTx, colPods int) string {
+func (m *Model) renderNodeRow(node *model.NodeData, colName, colStatus, colRoles, colCPU, colMemory, colNPU, colRx, colTx, colPods int, hasNPU bool) string {
 	// Node name
 	name := truncate(node.Name, colName)
 
@@ -198,6 +274,16 @@ func (m *Model) renderNodeRow(node *model.NodeData, colName, colStatus, colRoles
 	}
 	memUsage = truncate(memUsage, colMemory)
 
+	// NPU usage (only for nodes with NPU)
+	var npuUsage string
+	if hasNPU {
+		if node.NPUCapacity > 0 {
+			npuUsage = fmt.Sprintf("%d/%d", node.NPUAllocated, node.NPUAllocatable)
+		} else {
+			npuUsage = "-"
+		}
+	}
+
 	// Network RX (download/receive)
 	rxRate := m.calculateNodeNetworkRxRate(node.Name)
 	rxStr := formatNetworkRate(rxRate)
@@ -222,6 +308,20 @@ func (m *Model) renderNodeRow(node *model.NodeData, colName, colStatus, colRoles
 
 	// Pod count
 	podCount := fmt.Sprintf("%d/%d", node.PodCount, node.PodAllocatable)
+
+	if hasNPU {
+		return fmt.Sprintf("%s  %s  %s  %s  %s  %s  %s  %s  %s",
+			padRight(name, colName),
+			padRight(status, colStatus),
+			padRight(roles, colRoles),
+			padRight(cpuUsage, colCPU),
+			padRight(memUsage, colMemory),
+			padRight(npuUsage, colNPU),
+			padRight(rxStr, colRx),
+			padRight(txStr, colTx),
+			padRight(podCount, colPods),
+		)
+	}
 
 	return fmt.Sprintf("%s  %s  %s  %s  %s  %s  %s  %s",
 		padRight(name, colName),

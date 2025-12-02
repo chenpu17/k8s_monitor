@@ -286,6 +286,9 @@ other = "POD IP"
 [columns.node]
 other = "NODE"
 
+[columns.ip]
+other = "IP"
+
 [columns.pod_name]
 other = "POD NAME"
 
@@ -547,6 +550,9 @@ other = "📦 {{.Count}} Pod(s) with ImagePullBackOff"
 
 [alerts.full.oom_killed]
 other = "💥 {{.Count}} Pod(s) OOMKilled"
+
+[alerts.threshold]
+other = "threshold"
 
 # ============================================================================
 # Kubelet Hints
@@ -1119,6 +1125,9 @@ other = "Net RX: "
 [detail.node.network_tx_label]
 other = "Net TX: "
 
+[detail.node.npu_label]
+other = "NPU:    "
+
 [detail.node.snapshots]
 other = "(Based on {{.Count}} snapshots)"
 
@@ -1277,6 +1286,21 @@ other = "No daemonsets found"
 [workloads.no_cronjobs]
 other = "No cronjobs found"
 
+[workloads.jobs.success_rate]
+other = "Job Success"
+
+[workloads.jobs.avg_duration]
+other = "Avg Duration"
+
+[workloads.jobs.active_count]
+other = "Active Jobs"
+
+[workloads.volcano.avg_duration]
+other = "Volcano Avg"
+
+[workloads.volcano.running]
+other = "Volcano Running"
+
 
 
 # ============================================================================
@@ -1359,6 +1383,30 @@ other = "↑/↓ to select pod • Enter to view details • l to view logs • 
 
 [detail.job.phase]
 other = "Phase"
+
+[detail.job.efficiency]
+other = "Efficiency"
+
+[detail.job.performance]
+other = "📈 Performance Analysis"
+
+[detail.job.success_rate]
+other = "Success Rate"
+
+[detail.job.progress]
+other = "Progress"
+
+[detail.job.throughput]
+other = "Throughput"
+
+[detail.job.per_hour]
+other = "per hour"
+
+[detail.job.per_minute]
+other = "per minute"
+
+[detail.job.eta]
+other = "ETA"
 
 
 # ============================================================================
@@ -1528,3 +1576,429 @@ other = "Message"
 
 [detail.pvc.condition.since]
 other = "Since"
+
+# ============================================================================
+# NPU (Ascend AI Accelerator) Related
+# ============================================================================
+[columns.npu]
+other = "NPU"
+
+[npu.title]
+other = "NPU (Ascend)"
+
+[npu.total]
+other = "Total"
+
+[npu.allocated]
+other = "Allocated"
+
+[npu.usage]
+other = "Usage"
+
+[npu.chip_type]
+other = "Chip Type"
+
+[npu.device_type]
+other = "Device Type"
+
+[npu.driver_version]
+other = "Driver Version"
+
+[npu.resource_name]
+other = "Resource Name"
+
+[npu.topology]
+other = "Topology"
+
+[npu.superpod_id]
+other = "SuperPod ID"
+
+[npu.hypernode_id]
+other = "HyperNode ID"
+
+[npu.cabinet]
+other = "Cabinet"
+
+[npu.no_npu_nodes]
+other = "No NPU nodes"
+
+[npu.details]
+other = "NPU Details"
+
+# SuperPod Topology Section
+[topology.superpod.title]
+other = "🔷 SuperPod Topology"
+
+[topology.superpod.nodes]
+other = " nodes"
+
+# ============================================================================
+# SuperPod Topology View (Dedicated Tab)
+# ============================================================================
+[views.topology.name]
+other = "Topology"
+
+[topology.title]
+other = "🔷 SuperPod Topology"
+
+[topology.loading]
+other = "Loading topology data..."
+
+[topology.no_superpods]
+other = "No SuperPods found in the cluster"
+
+[topology.total_superpods]
+other = "SuperPods"
+
+[topology.total_nodes]
+other = "Nodes"
+
+[topology.total_npu]
+other = "Total NPU"
+
+[topology.col_superpod_id]
+other = "SUPERPOD ID"
+
+[topology.col_nodes]
+other = "NODES"
+
+[topology.col_npu_per_node]
+other = "NPU/NODE"
+
+[topology.col_total_npu]
+other = "TOTAL NPU"
+
+[topology.col_node_ips]
+other = "NODE IPs"
+
+[topology.scroll_indicator]
+other = "(showing {{.Start}}-{{.End}} of {{.Total}})"
+
+[topology.help_text]
+other = "↑/↓ to select • Enter to view details • Esc to go back"
+
+[topology.no_selected]
+other = "No SuperPod selected"
+
+[topology.superpod_detail]
+other = "SuperPod Detail"
+
+[topology.section_basic_info]
+other = "📋 Basic Information"
+
+[topology.superpod_id]
+other = "SuperPod ID"
+
+[topology.node_count]
+other = "Node Count"
+
+[topology.npu_per_node]
+other = "NPU per Node"
+
+[topology.npu_utilization]
+other = "NPU Utilization"
+
+[topology.section_nodes]
+other = "🖥️  Nodes in SuperPod"
+
+[topology.no_nodes]
+other = "No nodes found in this SuperPod"
+
+[topology.col_npu_allocated]
+other = "ALLOC"
+
+[topology.col_npu_capacity]
+other = "CAPACITY"
+
+[topology.section_volcano_jobs]
+other = "🔥 Volcano Jobs on this SuperPod"
+
+[topology.more_jobs]
+other = "more jobs"
+
+[topology.section_network]
+other = "🌐 Network Statistics"
+
+[topology.network_rx]
+other = "Total RX"
+
+[topology.network_tx]
+other = "Total TX"
+
+[topology.network_total]
+other = "Total Bandwidth"
+
+# NPU Detail Columns (short versions for table headers)
+[topology.npu_util_short]
+other = "NPU%"
+
+[topology.hbm_util_short]
+other = "HBM%"
+
+[topology.temp_short]
+other = "TEMP"
+
+[topology.health_short]
+other = "HEALTH"
+
+# NPU Details Section
+[topology.section_npu_details]
+other = "🔧 NPU Details (Top 3 Nodes)"
+
+[topology.ai_cores]
+other = "AI Cores"
+
+[topology.hbm_memory]
+other = "HBM Memory"
+
+[topology.power]
+other = "Power"
+
+[topology.errors]
+other = "Errors"
+
+[topology.more_nodes]
+other = "more nodes"
+
+# ============================================================================
+# Volcano Scheduler Related
+# ============================================================================
+[workloads.volcanojobs.title]
+other = "Volcano Jobs"
+
+[workloads.volcanojobs.stats]
+other = "Total: {{.Total}} • {{.Running}} • {{.Pending}} • {{.Completed}}"
+
+[workloads.volcanojobs.stats_running]
+other = "Running: {{.Count}}"
+
+[workloads.volcanojobs.stats_pending]
+other = "Pending: {{.Count}}"
+
+[workloads.volcanojobs.stats_completed]
+other = "Completed: {{.Count}}"
+
+[workloads.no_volcanojobs]
+other = "No Volcano jobs found"
+
+[columns.queue]
+other = "QUEUE"
+
+[columns.replicas]
+other = "REPLICAS"
+
+# ============================================================================
+# Volcano Job Detail View
+# ============================================================================
+[detail.volcanojob.no_selected]
+other = "No Volcano job selected"
+
+[detail.volcanojob.title]
+other = "Volcano Job"
+
+[detail.volcanojob.basic_info]
+other = "📋 Basic Information"
+
+[detail.volcanojob.queue]
+other = "Queue"
+
+[detail.volcanojob.min_available]
+other = "Min Available"
+
+[detail.volcanojob.replicas]
+other = "Replicas"
+
+[detail.volcanojob.npu_requested]
+other = "NPU Requested"
+
+[detail.volcanojob.npu_total]
+other = "NPU Total"
+
+[detail.volcanojob.duration]
+other = "Duration"
+
+[detail.volcanojob.still_running]
+other = "still running"
+
+[detail.volcanojob.start_time]
+other = "Start Time"
+
+[detail.volcanojob.completion_time]
+other = "Completion Time"
+
+[detail.volcanojob.resource_summary]
+other = "📊 Resource Summary"
+
+[detail.volcanojob.network_bandwidth]
+other = "Network Bandwidth"
+
+[detail.volcanojob.pods_header]
+other = "📦 Volcano Job Pods"
+
+[detail.volcanojob.no_pod_info]
+other = "No pod information available"
+
+[detail.volcanojob.no_pods]
+other = "No pods found for this Volcano job"
+
+[detail.volcanojob.pods_total]
+other = "📦 Volcano Job Pods ({{.Total}} total)"
+
+[detail.volcanojob.pods_running]
+other = "{{.Count}} running"
+
+[detail.volcanojob.pods_pending]
+other = "{{.Count}} pending"
+
+[detail.volcanojob.pods_succeeded]
+other = "{{.Count}} succeeded"
+
+[detail.volcanojob.pods_failed]
+other = "{{.Count}} failed"
+
+[detail.volcanojob.pods_detail]
+other = "Pods Detail"
+
+[detail.volcanojob.more_pods]
+other = "... and {{.Extra}} more pods (showing top {{.Shown}} by priority)"
+
+[detail.volcanojob.help_text]
+other = "↑/↓ to select pod • Enter to view details • l to view logs • Esc to go back"
+
+[detail.volcanojob.queue_wait_time]
+other = "Queue Wait Time"
+
+[detail.volcanojob.still_waiting]
+other = "still waiting"
+
+[detail.volcanojob.task_breakdown]
+other = "📋 Task Breakdown"
+
+[detail.volcanojob.task_name]
+other = "TASK"
+
+[detail.volcanojob.task_replicas]
+other = "REPLICAS"
+
+[detail.volcanojob.npu_efficiency]
+other = "NPU Efficiency"
+
+[detail.volcanojob.npu_per_replica]
+other = "per replica"
+
+# ============================================================================
+# Volcano Queue View
+# ============================================================================
+[views.queues.name]
+other = "Queues"
+
+[views.queues.title]
+other = "📋 Volcano Queues"
+
+[views.queues.no_queues]
+other = "No Volcano queues found"
+
+[views.queues.stats]
+other = "Total Queues: {{.Total}} • Running Jobs: {{.Running}} • Pending Jobs: {{.Pending}}"
+
+[views.queues.weight]
+other = "WEIGHT"
+
+[views.queues.jobs]
+other = "JOBS(R/P)"
+
+# ============================================================================
+# Queue Detail View
+# ============================================================================
+[detail.queue.no_selected]
+other = "No queue selected"
+
+[detail.queue.title]
+other = "Volcano Queue"
+
+[detail.queue.basic_info]
+other = "📋 Basic Information"
+
+[detail.queue.state]
+other = "State"
+
+[detail.queue.weight]
+other = "Weight"
+
+[detail.queue.parent]
+other = "Parent Queue"
+
+[detail.queue.reclaimable]
+other = "Reclaimable"
+
+[detail.queue.resources]
+other = "📊 Resource Quotas"
+
+[detail.queue.allocated]
+other = "Allocated:"
+
+[detail.queue.quota]
+other = "Quota:"
+
+[detail.queue.guarantee]
+other = "Guarantee:"
+
+[detail.queue.job_stats]
+other = "📈 Job Statistics"
+
+[detail.queue.running_jobs]
+other = "Running Jobs"
+
+[detail.queue.pending_jobs]
+other = "Pending Jobs"
+
+[detail.queue.completed_jobs]
+other = "Completed Jobs"
+
+[detail.queue.failed_jobs]
+other = "Failed Jobs"
+
+[detail.queue.lifecycle]
+other = "📅 Lifecycle"
+
+[detail.queue.wait_time_stats]
+other = "⏱️  Wait Time Statistics"
+
+[detail.queue.avg_wait_time]
+other = "Avg Wait"
+
+[detail.queue.sample_jobs]
+other = "samples"
+
+[detail.queue.min_wait]
+other = "Min"
+
+[detail.queue.max_wait]
+other = "Max"
+
+[detail.queue.current_pending_wait]
+other = "Current Pending Avg"
+
+[detail.queue.jobs_waiting]
+other = "jobs waiting"
+
+# ============================================================================
+# Common Terms
+# ============================================================================
+[common.yes]
+other = "Yes"
+
+[common.no]
+other = "No"
+
+[common.of]
+other = "of"
+
+[common.total]
+other = "Total"
+
+[common.sort]
+other = "Sort"
+
+[common.filtered_by]
+other = "filtered by"

@@ -38,8 +38,23 @@ func (m *Model) renderEventDetail() string {
 		maxVisible = 1
 	}
 
+	// Use local variable to avoid state mutation in View
+	detailScrollOffset := m.detailScrollOffset
+
+	// Clamp scroll offset to valid range
 	totalLines := len(allLines)
-	startIdx := m.detailScrollOffset
+	maxScroll := totalLines - maxVisible
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if detailScrollOffset > maxScroll {
+		detailScrollOffset = maxScroll
+	}
+	if detailScrollOffset < 0 {
+		detailScrollOffset = 0
+	}
+
+	startIdx := detailScrollOffset
 	if startIdx >= totalLines {
 		startIdx = totalLines - 1
 		if startIdx < 0 {

@@ -8,18 +8,24 @@ import (
 
 // ClusterData represents the overall cluster state
 type ClusterData struct {
-	Nodes       []*NodeData
-	Pods        []*PodData
-	Events      []*EventData
-	Services    []*ServiceData
-	PVs         []*PVData
-	PVCs        []*PVCData
-	Deployments []*DeploymentData
+	Nodes        []*NodeData
+	Pods         []*PodData
+	Events       []*EventData
+	Services     []*ServiceData
+	PVs          []*PVData
+	PVCs         []*PVCData
+	Deployments  []*DeploymentData
 	StatefulSets []*StatefulSetData
-	DaemonSets  []*DaemonSetData
-	Jobs        []*JobData
-	CronJobs    []*CronJobData
-	Summary     *ClusterSummary
+	DaemonSets   []*DaemonSetData
+	Jobs         []*JobData
+	CronJobs     []*CronJobData
+	Summary      *ClusterSummary
+
+	// Volcano scheduler data
+	VolcanoJobs    []*VolcanoJobData
+	HyperNodes     []*HyperNodeData
+	Queues         []*QueueData
+	VolcanoSummary *VolcanoSummary
 }
 
 // ClusterSummary provides high-level cluster metrics
@@ -125,23 +131,78 @@ type ClusterSummary struct {
 	CPULimitUtilization float64 // CPULimited / CPUAllocatable * 100
 	MemLimitUtilization float64 // MemoryLimited / MemoryAllocatable * 100
 
+	// NPU statistics (Ascend AI accelerators)
+	NPUCapacity    int64   // Total NPU capacity across all nodes
+	NPUAllocatable int64   // Total allocatable NPUs
+	NPUAllocated   int64   // Total NPUs allocated to pods
+	NPUUtilization float64 // NPUAllocated / NPUAllocatable * 100
+	NPUNodesCount  int     // Number of nodes with NPU
+
+	// NPU type information
+	NPUResourceName string // e.g., "huawei.com/ascend-1980"
+	NPUChipType     string // e.g., "Ascend910", "Ascend310"
+
+	// Topology information (Volcano HyperNode)
+	HyperClusterID   string // volcano.sh/hypercluster
+	HyperNodeCount   int    // Number of HyperNodes (Tier 1)
+	SuperPodCount    int    // Number of SuperPods
+
 	LastRefreshTime time.Time
 
 	// Alerts collected from cluster state
 	Alerts []Alert
 }
 
+// AlertType identifies the specific type of alert for i18n and actions
+type AlertType string
+
+const (
+	// Node alert types
+	AlertTypeNodeNotReady       AlertType = "node_not_ready"
+	AlertTypeNodeMemoryPressure AlertType = "node_memory_pressure"
+	AlertTypeNodeDiskPressure   AlertType = "node_disk_pressure"
+	AlertTypeNodePIDPressure    AlertType = "node_pid_pressure"
+	AlertTypeNodeCPUCritical    AlertType = "node_cpu_critical"
+	AlertTypeNodeCPUHigh        AlertType = "node_cpu_high"
+	AlertTypeNodeMemoryCritical AlertType = "node_memory_critical"
+	AlertTypeNodeMemoryHigh     AlertType = "node_memory_high"
+
+	// Pod alert types
+	AlertTypePodOOMKilled         AlertType = "pod_oom_killed"
+	AlertTypePodCrashLoopBackOff  AlertType = "pod_crash_loop"
+	AlertTypePodImagePullBackOff  AlertType = "pod_image_pull"
+	AlertTypePodHighRestarts      AlertType = "pod_high_restarts"
+	AlertTypePodPendingTooLong    AlertType = "pod_pending_long"
+	AlertTypePodFailed            AlertType = "pod_failed"
+	AlertTypePodEvicted           AlertType = "pod_evicted"
+	AlertTypePodUnschedulable     AlertType = "pod_unschedulable"
+
+	// Service alert types
+	AlertTypeServiceNoEndpoints AlertType = "service_no_endpoints"
+
+	// Storage alert types
+	AlertTypePVCPendingTooLong AlertType = "pvc_pending_long"
+	AlertTypePVCNearCapacity   AlertType = "pvc_near_capacity"
+
+	// Resource alert types
+	AlertTypeClusterCPUCritical    AlertType = "cluster_cpu_critical"
+	AlertTypeClusterMemoryCritical AlertType = "cluster_memory_critical"
+	AlertTypeClusterPodCapacity    AlertType = "cluster_pod_capacity"
+)
+
 // Alert represents a resource alert
 type Alert struct {
-	Severity     AlertSeverity // Critical, Warning, Info
-	Category     string        // Resource, Pod, Node, Storage, Network, Service
-	ResourceType string        // Node, Pod, PVC, Service, etc.
-	ResourceName string
-	Namespace    string // Empty for cluster-scoped resources
-	Message      string
-	Value        string // e.g., "95.2%", "3 restarts"
-	Threshold    string // e.g., "80%"
-	Timestamp    time.Time
+	Severity          AlertSeverity // Critical, Warning, Info
+	Category          string        // Resource, Pod, Node, Storage, Network, Service
+	AlertType         AlertType     // Specific alert type for i18n and actions
+	ResourceType      string        // Node, Pod, PVC, Service, etc.
+	ResourceName      string
+	Namespace         string // Empty for cluster-scoped resources
+	Message           string
+	Value             string // e.g., "95.2%", "3 restarts"
+	Threshold         string // e.g., "80%"
+	RecommendedAction string // Suggested action to resolve the alert
+	Timestamp         time.Time
 }
 
 // AlertSeverity represents the severity level of an alert
@@ -218,6 +279,35 @@ type NodeData struct {
 	// Metrics availability
 	HasKubeletMetrics bool
 	KubeletError      string
+
+	// NPU (Ascend AI accelerator) information
+	NPUCapacity     int64  // Total NPU capacity on this node
+	NPUAllocatable  int64  // Allocatable NPUs on this node
+	NPUAllocated    int64  // NPUs currently allocated to pods on this node
+	NPUResourceName string // Resource name, e.g., "huawei.com/ascend-1980"
+
+	// NPU device information (from node labels/annotations)
+	NPUChipType      string // e.g., "Ascend910" from node.kubernetes.io/npu.chip.name
+	NPUDeviceType    string // e.g., "ascend-snt9c" from accelerator/huawei-npu
+	NPUDriverVersion string // e.g., "7.7.0.9.220-25.2.1" from os.modelarts.node/npu.firmware.driver.version
+
+	// NPU runtime metrics (from annotations or external metrics)
+	NPUUtilization    float64 // AI Core utilization percentage (0-100)
+	NPUMemoryTotal    int64   // HBM total in bytes
+	NPUMemoryUsed     int64   // HBM used in bytes
+	NPUMemoryUtil     float64 // HBM utilization percentage (0-100)
+	NPUTemperature    int     // NPU temperature in Celsius
+	NPUPower          int     // NPU power consumption in Watts
+	NPUHealthStatus   string  // Health status: "Healthy", "Warning", "Unhealthy"
+	NPUErrorCount     int     // Number of NPU errors detected
+	NPUAICoreCount    int     // Number of AI cores per NPU
+	NPUMetricsTime    time.Time // Timestamp of last metrics update
+
+	// Topology information (from node labels)
+	HyperNodeID    string // volcano.sh/hypernode
+	HyperClusterID string // volcano.sh/hypercluster
+	SuperPodID     string // os.modelarts.node/superpod.id
+	CabinetInfo    string // cce.kubectl.kubernetes.io/cabinet
 }
 
 // PodData represents a Kubernetes pod with status
@@ -247,6 +337,10 @@ type PodData struct {
 	CPULimit      int64
 	MemoryRequest int64 // bytes
 	MemoryLimit   int64
+
+	// NPU requests (Ascend AI accelerators)
+	NPURequest      int64  // Number of NPUs requested
+	NPUResourceName string // Resource name, e.g., "huawei.com/ascend-1980"
 
 	// Usage metrics (from kubelet)
 	CPUUsage         int64
@@ -440,4 +534,123 @@ type CronJobData struct {
 	Labels            map[string]string
 	Annotations       map[string]string
 	CreationTimestamp time.Time
+}
+
+// ============================================================================
+// Volcano Scheduler Data Models
+// ============================================================================
+
+// VolcanoJobData represents a Volcano Job (vcjob)
+type VolcanoJobData struct {
+	Name              string
+	Namespace         string
+	Status            string // Running, Completed, Pending, Failed, Aborted, Terminating
+	Queue             string
+	MinAvailable      int32
+	Replicas          int32 // Total task replicas
+	Running           int32
+	Succeeded         int32
+	Failed            int32
+	Pending           int32
+	NPURequested      int64  // Total NPU requested by this job
+	NPUResourceName   string // e.g., "huawei.com/ascend-1980"
+	CreationTimestamp time.Time
+	StartTime         time.Time
+	CompletionTime    time.Time
+	Duration          time.Duration
+	Labels            map[string]string
+	Annotations       map[string]string
+
+	// HyperJob info (if created by HyperJob)
+	HyperJobName  string // volcano.sh/hyperjob-name
+	HyperJobIndex string // volcano.sh/hyperjob-replicatedjob-index
+
+	// Tasks info
+	Tasks []VolcanoTaskData
+}
+
+// VolcanoTaskData represents a task in a Volcano Job
+type VolcanoTaskData struct {
+	Name         string
+	Replicas     int32
+	MinAvailable int32
+	NPURequest   int64 // NPU per replica
+}
+
+// HyperNodeData represents a Volcano HyperNode (network topology)
+type HyperNodeData struct {
+	Name      string
+	Tier      int    // 1 = SuperPod level, 2 = HyperCluster level
+	NodeCount int    // Number of physical nodes
+	Members   []HyperNodeMember
+	Labels    map[string]string
+
+	// Aggregated NPU info
+	TotalNPU     int64
+	AllocatedNPU int64
+}
+
+// HyperNodeMember represents a member of a HyperNode
+type HyperNodeMember struct {
+	Type string // "Node" or "HyperNode"
+	Name string
+}
+
+// QueueData represents a Volcano Queue
+type QueueData struct {
+	Name              string
+	Parent            string
+	State             string // Open, Closed, Unknown
+	Weight            int32
+	Reclaimable       bool
+	CreationTimestamp time.Time
+
+	// Deserved resources (quotas)
+	CPUDeserved    int64  // millicores
+	MemoryDeserved int64  // bytes
+	NPUDeserved    int64  // NPU count
+	PodDeserved    int64  // Pod count limit
+
+	// Allocated resources (current usage from status)
+	CPUAllocated    int64 // millicores
+	MemoryAllocated int64 // bytes
+	NPUAllocated    int64 // NPU count
+	PodAllocated    int64 // Pod count
+
+	// Guaranteed resources (minimum guarantee)
+	CPUGuarantee    int64
+	MemoryGuarantee int64
+	NPUGuarantee    int64
+
+	// NPU resource name (e.g., "huawei.com/ascend-1980")
+	NPUResourceName string
+
+	// Job statistics (calculated from Volcano jobs)
+	RunningJobs   int32
+	PendingJobs   int32
+	CompletedJobs int32
+	FailedJobs    int32
+	TotalJobs     int32
+}
+
+// VolcanoSummary provides Volcano-specific metrics
+type VolcanoSummary struct {
+	// Job statistics
+	TotalJobs     int
+	RunningJobs   int
+	CompletedJobs int
+	PendingJobs   int
+	FailedJobs    int
+
+	// Queue statistics
+	TotalQueues int
+
+	// HyperNode topology
+	TotalHyperNodes int
+	Tier1Nodes      int // SuperPod level
+	Tier2Nodes      int // HyperCluster level
+
+	// NPU usage by Volcano jobs
+	NPURequestedByJobs int64
+	NPURunningByJobs   int64
 }

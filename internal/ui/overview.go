@@ -276,6 +276,15 @@ func (m *Model) renderOverview() string {
 		allLines = append(allLines, strings.Split(servicesInfo, "\n")...)
 	}
 
+	// Priority 4: SuperPod Topology (only if cluster has NPU nodes with SuperPod info)
+	if summary.NPUCapacity > 0 && summary.SuperPodCount > 0 {
+		topologyInfo := m.renderSuperPodTopology()
+		if topologyInfo != "" {
+			allLines = append(allLines, "")
+			allLines = append(allLines, strings.Split(topologyInfo, "\n")...)
+		}
+	}
+
 	// Apply scroll offset for vertical scrolling
 	maxVisible := availableHeight
 	totalLines := len(allLines)
@@ -955,19 +964,48 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 	workloadsContent := m.workloadsPanelLines(summary)
 	networkContent := m.networkPanelLines(summary)
 
-	targetLines := maxContentLines(summaryPanelMinContentLine,
-		servicesContent,
-		storageContent,
-		workloadsContent,
-		networkContent,
-	)
+	// Include NPU panel if cluster has NPU nodes
+	var npuContent []string
+	hasNPU := summary.NPUCapacity > 0
+	if hasNPU {
+		npuContent = m.npuPanelLines(summary)
+	}
+
+	// Include Volcano panel if Volcano is available
+	var volcanoContent []string
+	hasVolcano := m.clusterData != nil && m.clusterData.VolcanoSummary != nil
+	if hasVolcano {
+		volcanoContent = m.volcanoPanelLines(summary)
+	}
+
+	panelsToCompare := [][]string{servicesContent, storageContent, workloadsContent, networkContent}
+	if hasNPU {
+		panelsToCompare = append(panelsToCompare, npuContent)
+	}
+	if hasVolcano {
+		panelsToCompare = append(panelsToCompare, volcanoContent)
+	}
+
+	targetLines := maxContentLines(summaryPanelMinContentLine, panelsToCompare...)
 
 	servicesPanel := renderSummaryPanel(servicesContent, targetLines)
 	storagePanel := renderSummaryPanel(storageContent, targetLines)
 	workloadsPanel := renderSummaryPanel(workloadsContent, targetLines)
 	networkPanel := renderSummaryPanel(networkContent, targetLines)
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, servicesPanel, storagePanel, workloadsPanel, networkPanel)
+	panels := []string{servicesPanel, storagePanel, workloadsPanel, networkPanel}
+
+	if hasNPU {
+		npuPanel := renderSummaryPanel(npuContent, targetLines)
+		panels = append(panels, npuPanel)
+	}
+
+	if hasVolcano {
+		volcanoPanel := renderSummaryPanel(volcanoContent, targetLines)
+		panels = append(panels, volcanoPanel)
+	}
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, panels...)
 }
 
 func (m *Model) servicesPanelLines(summary *model.ClusterSummary) []string {
@@ -1119,6 +1157,131 @@ func (m *Model) networkPanelLines(summary *model.ClusterSummary) []string {
 	return lines
 }
 
+// npuPanelLines generates NPU (Ascend AI accelerator) panel content
+func (m *Model) npuPanelLines(summary *model.ClusterSummary) []string {
+	lines := []string{
+		StyleHeader.Render("🧮 NPU"),
+		"",
+	}
+
+	if summary.NPUCapacity > 0 {
+		// Basic NPU stats
+		lines = append(lines,
+			fmt.Sprintf("Total:   %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.NPUAllocatable))),
+			fmt.Sprintf("Alloc:   %s", StyleStatusRunning.Render(fmt.Sprintf("%d", summary.NPUAllocated))),
+			fmt.Sprintf("Usage:   %s", StyleHighlight.Render(formatPercentage(summary.NPUUtilization))),
+		)
+
+		// Progress bar
+		lines = append(lines, fmt.Sprintf("  %s", renderProgressBar(summary.NPUUtilization, 14)))
+
+		// NPU Efficiency: Running jobs NPU / Allocated NPU
+		volcanoSummary := m.clusterData.VolcanoSummary
+		if volcanoSummary != nil && summary.NPUAllocated > 0 {
+			// Calculate NPU efficiency (how much of allocated NPU is actually being used by running jobs)
+			npuEfficiency := float64(volcanoSummary.NPURunningByJobs) / float64(summary.NPUAllocated) * 100
+			effStyle := StyleStatusReady
+			if npuEfficiency < 50 {
+				effStyle = StyleWarning // Underutilizing NPU
+			} else if npuEfficiency < 30 {
+				effStyle = StyleTextMuted
+			}
+			lines = append(lines,
+				fmt.Sprintf("Eff:     %s", effStyle.Render(formatPercentage(npuEfficiency))),
+			)
+
+			// Job scheduling efficiency: Running / (Running + Pending)
+			totalActive := volcanoSummary.RunningJobs + volcanoSummary.PendingJobs
+			if totalActive > 0 {
+				schedEfficiency := float64(volcanoSummary.RunningJobs) / float64(totalActive) * 100
+				schedStyle := StyleStatusReady
+				if schedEfficiency < 80 {
+					schedStyle = StyleWarning
+				} else if schedEfficiency < 50 {
+					schedStyle = StyleStatusNotReady
+				}
+				lines = append(lines,
+					fmt.Sprintf("Sched:   %s", schedStyle.Render(fmt.Sprintf("%.0f%% (%d/%d)", schedEfficiency, volcanoSummary.RunningJobs, totalActive))),
+				)
+			}
+		}
+
+		// NPU utilization trend sparkline (if history available)
+		npuHistory := m.getClusterNPUUtilizationHistory()
+		if len(npuHistory) >= 2 {
+			sparkline := RenderSparkline(npuHistory, 14)
+			trend := m.calculateClusterNPUTrend(summary.NPUAllocated)
+			trendIndicator := renderTrendIndicator(trend)
+			lines = append(lines, fmt.Sprintf("Trend: %s %s", sparkline, trendIndicator))
+		}
+
+		// NPU type info
+		if summary.NPUChipType != "" {
+			lines = append(lines,
+				"",
+				fmt.Sprintf("Chip: %s", StyleTextMuted.Render(summary.NPUChipType)),
+			)
+		}
+
+		// Topology info
+		if summary.SuperPodCount > 0 {
+			lines = append(lines,
+				fmt.Sprintf("Pods: %d nodes", summary.NPUNodesCount),
+			)
+		}
+	} else {
+		lines = append(lines, StyleTextMuted.Render("No NPU nodes"))
+	}
+
+	return lines
+}
+
+// volcanoPanelLines generates Volcano scheduler panel content
+func (m *Model) volcanoPanelLines(summary *model.ClusterSummary) []string {
+	lines := []string{
+		StyleHeader.Render("🌋 Volcano"),
+		"",
+	}
+
+	volcanoSummary := m.clusterData.VolcanoSummary
+	if volcanoSummary == nil {
+		lines = append(lines, StyleTextMuted.Render("Not available"))
+		return lines
+	}
+
+	// Job statistics
+	lines = append(lines,
+		fmt.Sprintf("Jobs:    %s", StyleHighlight.Render(fmt.Sprintf("%d", volcanoSummary.TotalJobs))),
+		fmt.Sprintf("Running: %s", StyleStatusRunning.Render(fmt.Sprintf("%d", volcanoSummary.RunningJobs))),
+		fmt.Sprintf("Pending: %s", StyleStatusPending.Render(fmt.Sprintf("%d", volcanoSummary.PendingJobs))),
+	)
+
+	if volcanoSummary.FailedJobs > 0 {
+		lines = append(lines,
+			fmt.Sprintf("Failed:  %s", StyleDanger.Render(fmt.Sprintf("%d", volcanoSummary.FailedJobs))),
+		)
+	}
+
+	// NPU usage by Volcano jobs (if cluster has NPU)
+	if summary.NPUCapacity > 0 && volcanoSummary.NPURequestedByJobs > 0 {
+		lines = append(lines,
+			"",
+			fmt.Sprintf("NPU Req: %s", StyleHighlight.Render(fmt.Sprintf("%d", volcanoSummary.NPURequestedByJobs))),
+			fmt.Sprintf("NPU Run: %s", StyleStatusRunning.Render(fmt.Sprintf("%d", volcanoSummary.NPURunningByJobs))),
+		)
+	}
+
+	// Queue info
+	if volcanoSummary.TotalQueues > 0 {
+		lines = append(lines,
+			"",
+			fmt.Sprintf("Queues:  %s", StyleTextMuted.Render(fmt.Sprintf("%d", volcanoSummary.TotalQueues))),
+		)
+	}
+
+	return lines
+}
+
 // Deprecated: old render functions kept for reference
 func (m *Model) renderClusterSummary(summary *model.ClusterSummary) string {
 	content := []string{
@@ -1164,4 +1327,101 @@ func (m *Model) renderPodSummary(summary *model.ClusterSummary) string {
 	}
 
 	return StyleBorder.Width(35).Render(strings.Join(content, "\n"))
+}
+
+// SuperPodInfo holds aggregated information for a SuperPod
+type SuperPodInfo struct {
+	ID        string
+	NodeCount int
+	NodeIPs   []string
+	TotalNPU  int64
+	NPUPerNode int64
+}
+
+// getSuperPodTopology groups nodes by SuperPod and aggregates NPU information
+func (m *Model) getSuperPodTopology() []SuperPodInfo {
+	if m.clusterData == nil || len(m.clusterData.Nodes) == 0 {
+		return nil
+	}
+
+	// Group nodes by SuperPod ID
+	superPods := make(map[string]*SuperPodInfo)
+
+	for _, node := range m.clusterData.Nodes {
+		if node.SuperPodID == "" {
+			continue
+		}
+
+		sp, exists := superPods[node.SuperPodID]
+		if !exists {
+			sp = &SuperPodInfo{
+				ID:       node.SuperPodID,
+				NodeIPs:  []string{},
+			}
+			superPods[node.SuperPodID] = sp
+		}
+
+		sp.NodeCount++
+		sp.TotalNPU += node.NPUAllocatable
+		if node.InternalIP != "" {
+			sp.NodeIPs = append(sp.NodeIPs, node.InternalIP)
+		}
+	}
+
+	// Convert map to slice and calculate NPU per node
+	result := make([]SuperPodInfo, 0, len(superPods))
+	for _, sp := range superPods {
+		if sp.NodeCount > 0 {
+			sp.NPUPerNode = sp.TotalNPU / int64(sp.NodeCount)
+		}
+		result = append(result, *sp)
+	}
+
+	// Sort by SuperPod ID for consistent display
+	for i := 0; i < len(result)-1; i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[i].ID > result[j].ID {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
+	}
+
+	return result
+}
+
+// renderSuperPodTopology renders the SuperPod topology section
+func (m *Model) renderSuperPodTopology() string {
+	superPods := m.getSuperPodTopology()
+	if len(superPods) == 0 {
+		return ""
+	}
+
+	var lines []string
+	lines = append(lines, StyleHeader.Render(m.T("topology.superpod.title")))
+	lines = append(lines, "")
+
+	for _, sp := range superPods {
+		// Build IP list (limit to first 4 IPs for readability)
+		ipList := sp.NodeIPs
+		suffix := ""
+		if len(ipList) > 4 {
+			ipList = ipList[:4]
+			suffix = fmt.Sprintf(" +%d", len(sp.NodeIPs)-4)
+		}
+		ipStr := strings.Join(ipList, ", ") + suffix
+
+		// Format: Superpod X: IP1, IP2 (N节点 × M NPU = Total NPU)
+		line := fmt.Sprintf("  %s %s: %s  (%d%s × %d NPU = %s)",
+			StyleTextMuted.Render("Superpod"),
+			StyleHighlight.Render(sp.ID),
+			StyleTextSecondary.Render(ipStr),
+			sp.NodeCount,
+			m.T("topology.superpod.nodes"),
+			sp.NPUPerNode,
+			StyleHighlight.Render(fmt.Sprintf("%d NPU", sp.TotalNPU)),
+		)
+		lines = append(lines, line)
+	}
+
+	return StyleBorder.Width(115).Render(strings.Join(lines, "\n"))
 }

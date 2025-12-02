@@ -82,19 +82,22 @@ func (m *Model) renderLogs() string {
 	totalLines := len(logLines)
 	filteredCount := len(displayLines)
 
-	// Clamp scroll offset to valid range
+	// Calculate scroll bounds (read-only, don't modify state in View)
 	maxScroll := filteredCount - maxVisible
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
-	if m.logsScrollOffset > maxScroll {
-		m.logsScrollOffset = maxScroll
+
+	// Use clamped scroll offset for display only
+	scrollOffset := m.logsScrollOffset
+	if scrollOffset > maxScroll {
+		scrollOffset = maxScroll
 	}
-	if m.logsScrollOffset < 0 {
-		m.logsScrollOffset = 0
+	if scrollOffset < 0 {
+		scrollOffset = 0
 	}
 
-	startIdx := m.logsScrollOffset
+	startIdx := scrollOffset
 	endIdx := startIdx + maxVisible
 	if endIdx > filteredCount {
 		endIdx = filteredCount

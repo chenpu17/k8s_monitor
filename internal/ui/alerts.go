@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/yourusername/k8s-monitor/internal/diagnostic"
 	"github.com/yourusername/k8s-monitor/internal/model"
 )
 
@@ -154,19 +155,22 @@ func (m *Model) renderAlertsList(alerts []model.Alert) string {
 
 	totalAlerts := len(flatAlerts)
 
-	// Clamp scroll offset to valid range to prevent panic when alert count shrinks
+	// Calculate scroll bounds (read-only, don't modify state in View)
 	maxScroll := totalAlerts - maxVisible
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
-	if m.scrollOffset > maxScroll {
-		m.scrollOffset = maxScroll
+
+	// Use clamped scroll offset for display only
+	scrollOffset := m.scrollOffset
+	if scrollOffset > maxScroll {
+		scrollOffset = maxScroll
 	}
-	if m.scrollOffset < 0 {
-		m.scrollOffset = 0
+	if scrollOffset < 0 {
+		scrollOffset = 0
 	}
 
-	startIdx := m.scrollOffset
+	startIdx := scrollOffset
 	endIdx := startIdx + maxVisible
 	if endIdx > totalAlerts {
 		endIdx = totalAlerts
@@ -236,7 +240,7 @@ func (m *Model) renderAlertRow(alert model.Alert) string {
 	// Format value/threshold
 	var valueStr string
 	if alert.Threshold != "" {
-		valueStr = fmt.Sprintf("%s (threshold: %s)", alert.Value, alert.Threshold)
+		valueStr = fmt.Sprintf("%s (%s: %s)", alert.Value, m.T("alerts.threshold"), alert.Threshold)
 	} else if alert.Value != "" {
 		valueStr = alert.Value
 	}
@@ -247,6 +251,21 @@ func (m *Model) renderAlertRow(alert model.Alert) string {
 	parts = append(parts, fmt.Sprintf("    %s", message))
 	if valueStr != "" {
 		parts = append(parts, fmt.Sprintf("    %s", StyleTextMuted.Render(valueStr)))
+	}
+
+	// Generate locale-aware recommended action
+	var recommendedAction string
+	if alert.AlertType != "" {
+		if m.isChinese() {
+			recommendedAction = diagnostic.GetRecommendedActionChinese(alert.AlertType, alert.Namespace, alert.ResourceName)
+		} else {
+			recommendedAction = diagnostic.GetRecommendedAction(alert.AlertType, alert.Namespace, alert.ResourceName)
+		}
+	}
+
+	// Add recommended action if available
+	if recommendedAction != "" {
+		parts = append(parts, fmt.Sprintf("    %s %s", StyleHighlight.Render("→"), StyleTextSecondary.Render(recommendedAction)))
 	}
 
 	return strings.Join(parts, "\n")

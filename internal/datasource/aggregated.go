@@ -20,6 +20,7 @@ type AggregatedDataSource struct {
 	apiServer         DataSource
 	apiServerClient   *APIServerClient
 	kubeletClient     *KubeletClient
+	volcanoClient     *VolcanoClient
 	logger            *zap.Logger
 	mu                sync.RWMutex
 	maxConcurrent     int // Maximum concurrent kubelet queries
@@ -43,6 +44,11 @@ func NewAggregatedDataSource(apiServer DataSource, kubeletClient *KubeletClient,
 		logger:          logger,
 		maxConcurrent:   maxConcurrent,
 	}
+}
+
+// SetVolcanoClient sets the Volcano client for the data source
+func (a *AggregatedDataSource) SetVolcanoClient(volcanoClient *VolcanoClient) {
+	a.volcanoClient = volcanoClient
 }
 
 // GetNodes retrieves nodes from API Server
@@ -159,19 +165,50 @@ func (a *AggregatedDataSource) GetClusterData(ctx context.Context, namespace str
 	// Build cluster summary
 	summary := a.buildClusterSummary(nodes, pods, events, services, pvs, pvcs)
 
+	// Fetch Volcano data if client is available
+	var volcanoJobs []*model.VolcanoJobData
+	var hyperNodes []*model.HyperNodeData
+	var queues []*model.QueueData
+	var volcanoSummary *model.VolcanoSummary
+
+	if a.volcanoClient != nil && a.volcanoClient.IsAvailable() {
+		var vcErr error
+
+		volcanoJobs, vcErr = a.volcanoClient.GetVolcanoJobs(ctx, namespace)
+		if vcErr != nil {
+			a.logger.Warn("Failed to get Volcano jobs", zap.Error(vcErr))
+		}
+
+		hyperNodes, vcErr = a.volcanoClient.GetHyperNodes(ctx)
+		if vcErr != nil {
+			a.logger.Warn("Failed to get HyperNodes", zap.Error(vcErr))
+		}
+
+		queues, vcErr = a.volcanoClient.GetQueues(ctx)
+		if vcErr != nil {
+			a.logger.Warn("Failed to get Volcano queues", zap.Error(vcErr))
+		}
+
+		volcanoSummary = a.volcanoClient.BuildVolcanoSummary(volcanoJobs, hyperNodes, queues)
+	}
+
 	clusterData := &model.ClusterData{
-		Nodes:        nodes,
-		Pods:         pods,
-		Events:       events,
-		Services:     services,
-		PVs:          pvs,
-		PVCs:         pvcs,
-		Deployments:  deployments,
-		StatefulSets: statefulsets,
-		DaemonSets:   daemonsets,
-		Jobs:         jobs,
-		CronJobs:     cronjobs,
-		Summary:      summary,
+		Nodes:          nodes,
+		Pods:           pods,
+		Events:         events,
+		Services:       services,
+		PVs:            pvs,
+		PVCs:           pvcs,
+		Deployments:    deployments,
+		StatefulSets:   statefulsets,
+		DaemonSets:     daemonsets,
+		Jobs:           jobs,
+		CronJobs:       cronjobs,
+		Summary:        summary,
+		VolcanoJobs:    volcanoJobs,
+		HyperNodes:     hyperNodes,
+		Queues:         queues,
+		VolcanoSummary: volcanoSummary,
 	}
 
 	a.logger.Info("Cluster data fetched successfully",
@@ -186,6 +223,8 @@ func (a *AggregatedDataSource) GetClusterData(ctx context.Context, namespace str
 		zap.Int("daemonsets", len(daemonsets)),
 		zap.Int("jobs", len(jobs)),
 		zap.Int("cronjobs", len(cronjobs)),
+		zap.Int("volcanoJobs", len(volcanoJobs)),
+		zap.Int("hyperNodes", len(hyperNodes)),
 	)
 
 	return clusterData, nil
@@ -333,6 +372,18 @@ func (a *AggregatedDataSource) buildClusterSummary(nodes []*model.NodeData, pods
 
 	errorSet := make(map[string]struct{})
 
+	// Build a map for NPU allocation per node (from running/pending pods)
+	npuAllocatedPerNode := make(map[string]int64)
+	for _, pod := range pods {
+		if pod.Node != "" && (pod.Phase == "Running" || pod.Phase == "Pending") && pod.NPURequest > 0 {
+			npuAllocatedPerNode[pod.Node] += pod.NPURequest
+		}
+	}
+
+	// Track unique SuperPod IDs for counting
+	superPodIDs := make(map[string]struct{})
+	hyperNodeIDs := make(map[string]struct{})
+
 	// Aggregate node resources
 	for _, node := range nodes {
 		// Count node states
@@ -379,6 +430,38 @@ func (a *AggregatedDataSource) buildClusterSummary(nodes []*model.NodeData, pods
 					summary.KubeletErrors = append(summary.KubeletErrors, node.KubeletError)
 					errorSet[node.KubeletError] = struct{}{}
 				}
+			}
+		}
+
+		// Sum up NPU (Ascend AI accelerator) resources
+		if node.NPUCapacity > 0 {
+			summary.NPUCapacity += node.NPUCapacity
+			summary.NPUAllocatable += node.NPUAllocatable
+			summary.NPUNodesCount++
+
+			// Set NPU resource name and chip type (from first node with NPU)
+			if summary.NPUResourceName == "" && node.NPUResourceName != "" {
+				summary.NPUResourceName = node.NPUResourceName
+			}
+			if summary.NPUChipType == "" && node.NPUChipType != "" {
+				summary.NPUChipType = node.NPUChipType
+			}
+
+			// Update node's NPU allocated count from pod requests
+			if allocated, ok := npuAllocatedPerNode[node.Name]; ok {
+				node.NPUAllocated = allocated
+				summary.NPUAllocated += allocated
+			}
+
+			// Track topology information
+			if node.HyperClusterID != "" && summary.HyperClusterID == "" {
+				summary.HyperClusterID = node.HyperClusterID
+			}
+			if node.HyperNodeID != "" {
+				hyperNodeIDs[node.HyperNodeID] = struct{}{}
+			}
+			if node.SuperPodID != "" {
+				superPodIDs[node.SuperPodID] = struct{}{}
 			}
 		}
 	}
@@ -618,6 +701,13 @@ func (a *AggregatedDataSource) buildClusterSummary(nodes []*model.NodeData, pods
 		summary.StorageUsagePercent = float64(summary.UsedStorageSize) / float64(summary.TotalStorageSize) * 100
 	}
 
+	// Calculate NPU utilization and topology statistics
+	if summary.NPUAllocatable > 0 {
+		summary.NPUUtilization = float64(summary.NPUAllocated) / float64(summary.NPUAllocatable) * 100
+	}
+	summary.HyperNodeCount = len(hyperNodeIDs)
+	summary.SuperPodCount = len(superPodIDs)
+
 	// Collect alerts based on thresholds
 	summary.Alerts = a.collectAlerts(nodes, pods, services, pvcs, summary)
 
@@ -785,98 +875,114 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 		// Node not ready
 		if node.Status != "Ready" {
 			alerts = append(alerts, model.Alert{
-				Severity:     model.AlertSeverityCritical,
-				Category:     "Node",
-				ResourceType: "Node",
-				ResourceName: node.Name,
-				Message:      fmt.Sprintf("Node is %s", node.Status),
-				Value:        node.Status,
-				Timestamp:    now,
+				Severity:          model.AlertSeverityCritical,
+				Category:          "Node",
+				AlertType:         model.AlertTypeNodeNotReady,
+				ResourceType:      "Node",
+				ResourceName:      node.Name,
+				Message:           fmt.Sprintf("Node is %s", node.Status),
+				Value:             node.Status,
+				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeNotReady, "", node.Name),
+				Timestamp:         now,
 			})
 		}
 
 		// Node pressure indicators
 		if node.MemoryPressure {
 			alerts = append(alerts, model.Alert{
-				Severity:     model.AlertSeverityCritical,
-				Category:     "Node",
-				ResourceType: "Node",
-				ResourceName: node.Name,
-				Message:      "Node has memory pressure",
-				Value:        "MemoryPressure",
-				Timestamp:    now,
+				Severity:          model.AlertSeverityCritical,
+				Category:          "Node",
+				AlertType:         model.AlertTypeNodeMemoryPressure,
+				ResourceType:      "Node",
+				ResourceName:      node.Name,
+				Message:           "Node has memory pressure",
+				Value:             "MemoryPressure",
+				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeMemoryPressure, "", node.Name),
+				Timestamp:         now,
 			})
 		}
 		if node.DiskPressure {
 			alerts = append(alerts, model.Alert{
-				Severity:     model.AlertSeverityWarning,
-				Category:     "Node",
-				ResourceType: "Node",
-				ResourceName: node.Name,
-				Message:      "Node has disk pressure",
-				Value:        "DiskPressure",
-				Timestamp:    now,
+				Severity:          model.AlertSeverityWarning,
+				Category:          "Node",
+				AlertType:         model.AlertTypeNodeDiskPressure,
+				ResourceType:      "Node",
+				ResourceName:      node.Name,
+				Message:           "Node has disk pressure",
+				Value:             "DiskPressure",
+				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeDiskPressure, "", node.Name),
+				Timestamp:         now,
 			})
 		}
 		if node.PIDPressure {
 			alerts = append(alerts, model.Alert{
-				Severity:     model.AlertSeverityWarning,
-				Category:     "Node",
-				ResourceType: "Node",
-				ResourceName: node.Name,
-				Message:      "Node has PID pressure",
-				Value:        "PIDPressure",
-				Timestamp:    now,
+				Severity:          model.AlertSeverityWarning,
+				Category:          "Node",
+				AlertType:         model.AlertTypeNodePIDPressure,
+				ResourceType:      "Node",
+				ResourceName:      node.Name,
+				Message:           "Node has PID pressure",
+				Value:             "PIDPressure",
+				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodePIDPressure, "", node.Name),
+				Timestamp:         now,
 			})
 		}
 
 		// High CPU usage
 		if node.CPUUsagePercent >= nodeCPUCriticalThreshold {
 			alerts = append(alerts, model.Alert{
-				Severity:     model.AlertSeverityCritical,
-				Category:     "Resource",
-				ResourceType: "Node",
-				ResourceName: node.Name,
-				Message:      "Node CPU usage critical",
-				Value:        fmt.Sprintf("%.1f%%", node.CPUUsagePercent),
-				Threshold:    fmt.Sprintf("%.0f%%", nodeCPUCriticalThreshold),
-				Timestamp:    now,
+				Severity:          model.AlertSeverityCritical,
+				Category:          "Resource",
+				AlertType:         model.AlertTypeNodeCPUCritical,
+				ResourceType:      "Node",
+				ResourceName:      node.Name,
+				Message:           "Node CPU usage critical",
+				Value:             fmt.Sprintf("%.1f%%", node.CPUUsagePercent),
+				Threshold:         fmt.Sprintf("%.0f%%", nodeCPUCriticalThreshold),
+				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeCPUCritical, "", node.Name),
+				Timestamp:         now,
 			})
 		} else if node.CPUUsagePercent >= nodeCPUWarningThreshold {
 			alerts = append(alerts, model.Alert{
-				Severity:     model.AlertSeverityWarning,
-				Category:     "Resource",
-				ResourceType: "Node",
-				ResourceName: node.Name,
-				Message:      "Node CPU usage high",
-				Value:        fmt.Sprintf("%.1f%%", node.CPUUsagePercent),
-				Threshold:    fmt.Sprintf("%.0f%%", nodeCPUWarningThreshold),
-				Timestamp:    now,
+				Severity:          model.AlertSeverityWarning,
+				Category:          "Resource",
+				AlertType:         model.AlertTypeNodeCPUHigh,
+				ResourceType:      "Node",
+				ResourceName:      node.Name,
+				Message:           "Node CPU usage high",
+				Value:             fmt.Sprintf("%.1f%%", node.CPUUsagePercent),
+				Threshold:         fmt.Sprintf("%.0f%%", nodeCPUWarningThreshold),
+				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeCPUHigh, "", node.Name),
+				Timestamp:         now,
 			})
 		}
 
 		// High memory usage
 		if node.MemoryUsagePercent >= nodeMemoryCriticalThreshold {
 			alerts = append(alerts, model.Alert{
-				Severity:     model.AlertSeverityCritical,
-				Category:     "Resource",
-				ResourceType: "Node",
-				ResourceName: node.Name,
-				Message:      "Node memory usage critical",
-				Value:        fmt.Sprintf("%.1f%%", node.MemoryUsagePercent),
-				Threshold:    fmt.Sprintf("%.0f%%", nodeMemoryCriticalThreshold),
-				Timestamp:    now,
+				Severity:          model.AlertSeverityCritical,
+				Category:          "Resource",
+				AlertType:         model.AlertTypeNodeMemoryCritical,
+				ResourceType:      "Node",
+				ResourceName:      node.Name,
+				Message:           "Node memory usage critical",
+				Value:             fmt.Sprintf("%.1f%%", node.MemoryUsagePercent),
+				Threshold:         fmt.Sprintf("%.0f%%", nodeMemoryCriticalThreshold),
+				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeMemoryCritical, "", node.Name),
+				Timestamp:         now,
 			})
 		} else if node.MemoryUsagePercent >= nodeMemoryWarningThreshold {
 			alerts = append(alerts, model.Alert{
-				Severity:     model.AlertSeverityWarning,
-				Category:     "Resource",
-				ResourceType: "Node",
-				ResourceName: node.Name,
-				Message:      "Node memory usage high",
-				Value:        fmt.Sprintf("%.1f%%", node.MemoryUsagePercent),
-				Threshold:    fmt.Sprintf("%.0f%%", nodeMemoryWarningThreshold),
-				Timestamp:    now,
+				Severity:          model.AlertSeverityWarning,
+				Category:          "Resource",
+				AlertType:         model.AlertTypeNodeMemoryHigh,
+				ResourceType:      "Node",
+				ResourceName:      node.Name,
+				Message:           "Node memory usage high",
+				Value:             fmt.Sprintf("%.1f%%", node.MemoryUsagePercent),
+				Threshold:         fmt.Sprintf("%.0f%%", nodeMemoryWarningThreshold),
+				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeMemoryHigh, "", node.Name),
+				Timestamp:         now,
 			})
 		}
 	}
@@ -887,14 +993,16 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 		for _, container := range pod.ContainerStates {
 			if container.Reason == "OOMKilled" {
 				alerts = append(alerts, model.Alert{
-					Severity:     model.AlertSeverityCritical,
-					Category:     "Pod",
-					ResourceType: "Pod",
-					ResourceName: pod.Name,
-					Namespace:    pod.Namespace,
-					Message:      fmt.Sprintf("Container %s was OOMKilled", container.Name),
-					Value:        fmt.Sprintf("%d restarts", container.RestartCount),
-					Timestamp:    now,
+					Severity:          model.AlertSeverityCritical,
+					Category:          "Pod",
+					AlertType:         model.AlertTypePodOOMKilled,
+					ResourceType:      "Pod",
+					ResourceName:      pod.Name,
+					Namespace:         pod.Namespace,
+					Message:           fmt.Sprintf("Container %s was OOMKilled", container.Name),
+					Value:             fmt.Sprintf("%d restarts", container.RestartCount),
+					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePodOOMKilled, pod.Namespace, pod.Name),
+					Timestamp:         now,
 				})
 				break // One alert per pod
 			}
@@ -904,14 +1012,16 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 		for _, container := range pod.ContainerStates {
 			if container.Reason == "CrashLoopBackOff" {
 				alerts = append(alerts, model.Alert{
-					Severity:     model.AlertSeverityCritical,
-					Category:     "Pod",
-					ResourceType: "Pod",
-					ResourceName: pod.Name,
-					Namespace:    pod.Namespace,
-					Message:      fmt.Sprintf("Container %s in CrashLoopBackOff", container.Name),
-					Value:        container.Reason,
-					Timestamp:    now,
+					Severity:          model.AlertSeverityCritical,
+					Category:          "Pod",
+					AlertType:         model.AlertTypePodCrashLoopBackOff,
+					ResourceType:      "Pod",
+					ResourceName:      pod.Name,
+					Namespace:         pod.Namespace,
+					Message:           fmt.Sprintf("Container %s in CrashLoopBackOff", container.Name),
+					Value:             container.Reason,
+					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePodCrashLoopBackOff, pod.Namespace, pod.Name),
+					Timestamp:         now,
 				})
 				break
 			}
@@ -921,14 +1031,16 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 		for _, container := range pod.ContainerStates {
 			if container.Reason == "ImagePullBackOff" || container.Reason == "ErrImagePull" {
 				alerts = append(alerts, model.Alert{
-					Severity:     model.AlertSeverityWarning,
-					Category:     "Pod",
-					ResourceType: "Pod",
-					ResourceName: pod.Name,
-					Namespace:    pod.Namespace,
-					Message:      fmt.Sprintf("Container %s failed to pull image", container.Name),
-					Value:        container.Reason,
-					Timestamp:    now,
+					Severity:          model.AlertSeverityWarning,
+					Category:          "Pod",
+					AlertType:         model.AlertTypePodImagePullBackOff,
+					ResourceType:      "Pod",
+					ResourceName:      pod.Name,
+					Namespace:         pod.Namespace,
+					Message:           fmt.Sprintf("Container %s failed to pull image", container.Name),
+					Value:             container.Reason,
+					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePodImagePullBackOff, pod.Namespace, pod.Name),
+					Timestamp:         now,
 				})
 				break
 			}
@@ -937,15 +1049,17 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 		// High restart count
 		if pod.RestartCount >= highRestartThreshold {
 			alerts = append(alerts, model.Alert{
-				Severity:     model.AlertSeverityWarning,
-				Category:     "Pod",
-				ResourceType: "Pod",
-				ResourceName: pod.Name,
-				Namespace:    pod.Namespace,
-				Message:      "Pod has high restart count",
-				Value:        fmt.Sprintf("%d restarts", pod.RestartCount),
-				Threshold:    fmt.Sprintf("%d", highRestartThreshold),
-				Timestamp:    now,
+				Severity:          model.AlertSeverityWarning,
+				Category:          "Pod",
+				AlertType:         model.AlertTypePodHighRestarts,
+				ResourceType:      "Pod",
+				ResourceName:      pod.Name,
+				Namespace:         pod.Namespace,
+				Message:           "Pod has high restart count",
+				Value:             fmt.Sprintf("%d restarts", pod.RestartCount),
+				Threshold:         fmt.Sprintf("%d", highRestartThreshold),
+				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePodHighRestarts, pod.Namespace, pod.Name),
+				Timestamp:         now,
 			})
 		}
 
@@ -954,15 +1068,17 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 			pendingDuration := time.Since(pod.CreationTimestamp)
 			if pendingDuration.Minutes() >= float64(pendingPodWarningMinutes) {
 				alerts = append(alerts, model.Alert{
-					Severity:     model.AlertSeverityWarning,
-					Category:     "Pod",
-					ResourceType: "Pod",
-					ResourceName: pod.Name,
-					Namespace:    pod.Namespace,
-					Message:      "Pod pending for too long",
-					Value:        fmt.Sprintf("%.0fm", pendingDuration.Minutes()),
-					Threshold:    fmt.Sprintf("%dm", pendingPodWarningMinutes),
-					Timestamp:    now,
+					Severity:          model.AlertSeverityWarning,
+					Category:          "Pod",
+					AlertType:         model.AlertTypePodPendingTooLong,
+					ResourceType:      "Pod",
+					ResourceName:      pod.Name,
+					Namespace:         pod.Namespace,
+					Message:           "Pod pending for too long",
+					Value:             fmt.Sprintf("%.0fm", pendingDuration.Minutes()),
+					Threshold:         fmt.Sprintf("%dm", pendingPodWarningMinutes),
+					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePodPendingTooLong, pod.Namespace, pod.Name),
+					Timestamp:         now,
 				})
 			}
 		}
@@ -970,14 +1086,16 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 		// Failed pods
 		if pod.Phase == "Failed" {
 			alerts = append(alerts, model.Alert{
-				Severity:     model.AlertSeverityWarning,
-				Category:     "Pod",
-				ResourceType: "Pod",
-				ResourceName: pod.Name,
-				Namespace:    pod.Namespace,
-				Message:      "Pod is in Failed state",
-				Value:        pod.Phase,
-				Timestamp:    now,
+				Severity:          model.AlertSeverityWarning,
+				Category:          "Pod",
+				AlertType:         model.AlertTypePodFailed,
+				ResourceType:      "Pod",
+				ResourceName:      pod.Name,
+				Namespace:         pod.Namespace,
+				Message:           "Pod is in Failed state",
+				Value:             pod.Phase,
+				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePodFailed, pod.Namespace, pod.Name),
+				Timestamp:         now,
 			})
 		}
 	}
@@ -986,14 +1104,16 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 	for _, svc := range services {
 		if svc.EndpointCount == 0 {
 			alerts = append(alerts, model.Alert{
-				Severity:     model.AlertSeverityWarning,
-				Category:     "Service",
-				ResourceType: "Service",
-				ResourceName: svc.Name,
-				Namespace:    svc.Namespace,
-				Message:      "Service has no ready endpoints",
-				Value:        "0 endpoints",
-				Timestamp:    now,
+				Severity:          model.AlertSeverityWarning,
+				Category:          "Service",
+				AlertType:         model.AlertTypeServiceNoEndpoints,
+				ResourceType:      "Service",
+				ResourceName:      svc.Name,
+				Namespace:         svc.Namespace,
+				Message:           "Service has no ready endpoints",
+				Value:             "0 endpoints",
+				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeServiceNoEndpoints, svc.Namespace, svc.Name),
+				Timestamp:         now,
 			})
 		}
 	}
@@ -1004,23 +1124,27 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 			pendingDuration := time.Since(pvc.CreationTimestamp)
 			if pendingDuration.Minutes() >= float64(pendingPodWarningMinutes) {
 				alerts = append(alerts, model.Alert{
-					Severity:     model.AlertSeverityWarning,
-					Category:     "Storage",
-					ResourceType: "PVC",
-					ResourceName: pvc.Name,
-					Namespace:    pvc.Namespace,
-					Message:      "PVC pending for too long",
-					Value:        fmt.Sprintf("%.0fm", pendingDuration.Minutes()),
-					Threshold:    fmt.Sprintf("%dm", pendingPodWarningMinutes),
-					Timestamp:    now,
+					Severity:          model.AlertSeverityWarning,
+					Category:          "Storage",
+					AlertType:         model.AlertTypePVCPendingTooLong,
+					ResourceType:      "PVC",
+					ResourceName:      pvc.Name,
+					Namespace:         pvc.Namespace,
+					Message:           "PVC pending for too long",
+					Value:             fmt.Sprintf("%.0fm", pendingDuration.Minutes()),
+					Threshold:         fmt.Sprintf("%dm", pendingPodWarningMinutes),
+					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePVCPendingTooLong, pvc.Namespace, pvc.Name),
+					Timestamp:         now,
 				})
 			}
 		}
 	}
 
-	// Sort alerts by severity (Critical first, then Warning, then Info) using sort.Slice (O(n log n))
+	// Sort alerts by priority (using diagnostic.GetAlertPriority)
 	sort.Slice(alerts, func(i, j int) bool {
-		return alerts[i].Severity > alerts[j].Severity
+		priI := diagnostic.GetAlertPriority(alerts[i].AlertType, alerts[i].Severity)
+		priJ := diagnostic.GetAlertPriority(alerts[j].AlertType, alerts[j].Severity)
+		return priI > priJ
 	})
 
 	return alerts

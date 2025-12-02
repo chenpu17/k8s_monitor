@@ -28,6 +28,21 @@ func (m *Model) renderWorkloads() string {
 	// Track global item index across all sections for selection
 	currentItemIndex := 0
 
+	// Volcano Jobs (selectable - HIGHEST PRIORITY for AI workloads)
+	if len(m.clusterData.VolcanoJobs) > 0 {
+		sectionStart := len(allLines)
+		volcanoLines, volcanoCount := m.renderVolcanoJobsList(currentItemIndex)
+		allLines = append(allLines, volcanoLines...)
+		allLines = append(allLines, "")
+
+		m.workloadSections["volcanojob"] = workloadSection{
+			startLine: sectionStart,
+			count:     volcanoCount,
+			itemType:  "volcanojob",
+		}
+		currentItemIndex += volcanoCount
+	}
+
 	// Jobs (selectable - FIRST PRIORITY)
 	if len(m.clusterData.Jobs) > 0 {
 		sectionStart := len(allLines)
@@ -189,8 +204,8 @@ func (m *Model) findSelectedItemLine() int {
 	// Iterate through sections in order to find which item is selected
 	currentItemIndex := 0
 
-	// Order: job, service, deployment, statefulset, daemonset, cronjob
-	sectionOrder := []string{"job", "service", "deployment", "statefulset", "daemonset", "cronjob"}
+	// Order: volcanojob, job, service, deployment, statefulset, daemonset, cronjob
+	sectionOrder := []string{"volcanojob", "job", "service", "deployment", "statefulset", "daemonset", "cronjob"}
 
 	for _, sectionType := range sectionOrder {
 		section, exists := m.workloadSections[sectionType]
@@ -216,25 +231,148 @@ func (m *Model) findSelectedItemLine() int {
 func (m *Model) renderWorkloadsHeader() string {
 	title := StyleHeader.Render("⚙️  " + m.T("views.workloads.title"))
 
-	counts := fmt.Sprintf("%s: %d • %s: %d • %s: %d • %s: %d • %s: %d",
-		m.T("workloads.deployments"),
-		len(m.clusterData.Deployments),
-		m.T("workloads.statefulsets"),
-		len(m.clusterData.StatefulSets),
-		m.T("workloads.daemonsets"),
-		len(m.clusterData.DaemonSets),
-		m.T("workloads.jobs"),
-		len(m.clusterData.Jobs),
-		m.T("workloads.cronjobs"),
-		len(m.clusterData.CronJobs),
+	// Build counts string, including Volcano jobs if available
+	var countParts []string
+
+	if len(m.clusterData.VolcanoJobs) > 0 {
+		countParts = append(countParts, fmt.Sprintf("%s: %d",
+			m.T("workloads.volcanojobs.title"),
+			len(m.clusterData.VolcanoJobs),
+		))
+	}
+
+	countParts = append(countParts,
+		fmt.Sprintf("%s: %d", m.T("workloads.deployments.title"), len(m.clusterData.Deployments)),
+		fmt.Sprintf("%s: %d", m.T("workloads.statefulsets.title"), len(m.clusterData.StatefulSets)),
+		fmt.Sprintf("%s: %d", m.T("workloads.daemonsets.title"), len(m.clusterData.DaemonSets)),
+		fmt.Sprintf("%s: %d", m.T("workloads.jobs.title"), len(m.clusterData.Jobs)),
+		fmt.Sprintf("%s: %d", m.T("workloads.cronjobs.title"), len(m.clusterData.CronJobs)),
 	)
 
-	return lipgloss.JoinHorizontal(
+	counts := strings.Join(countParts, " • ")
+
+	headerLine := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		title,
 		"  ",
 		StyleTextSecondary.Render(counts),
 	)
+
+	// Add job performance summary if there are any jobs
+	perfSummary := m.renderJobPerformanceSummary()
+	if perfSummary != "" {
+		return headerLine + "\n" + perfSummary
+	}
+
+	return headerLine
+}
+
+// renderJobPerformanceSummary renders a compact performance summary for all jobs
+func (m *Model) renderJobPerformanceSummary() string {
+	jobs := m.clusterData.Jobs
+	volcanoJobs := m.clusterData.VolcanoJobs
+
+	if len(jobs) == 0 && len(volcanoJobs) == 0 {
+		return ""
+	}
+
+	var parts []string
+
+	// K8s Jobs stats
+	if len(jobs) > 0 {
+		var totalDuration time.Duration
+		completedCount := 0
+		failedCount := 0
+		activeCount := 0
+
+		for _, job := range jobs {
+			if job.Succeeded == job.Completions && job.Duration > 0 {
+				totalDuration += job.Duration
+				completedCount++
+			} else if job.Failed > 0 {
+				failedCount++
+			} else if job.Active > 0 {
+				activeCount++
+			}
+		}
+
+		// Success rate
+		totalAttempts := completedCount + failedCount
+		if totalAttempts > 0 {
+			successRate := float64(completedCount) / float64(totalAttempts) * 100
+			rateStyle := StyleStatusReady
+			if successRate < 100 && successRate >= 80 {
+				rateStyle = StyleWarning
+			} else if successRate < 80 {
+				rateStyle = StyleStatusNotReady
+			}
+			parts = append(parts, fmt.Sprintf("%s: %s",
+				m.T("workloads.jobs.success_rate"),
+				rateStyle.Render(fmt.Sprintf("%.0f%%", successRate))))
+		}
+
+		// Average duration
+		if completedCount > 0 {
+			avgDuration := totalDuration / time.Duration(completedCount)
+			parts = append(parts, fmt.Sprintf("%s: %s",
+				m.T("workloads.jobs.avg_duration"),
+				StyleHighlight.Render(formatDuration(avgDuration))))
+		}
+
+		// Active count
+		if activeCount > 0 {
+			parts = append(parts, fmt.Sprintf("%s: %s",
+				m.T("workloads.jobs.active_count"),
+				StyleStatusRunning.Render(fmt.Sprintf("%d", activeCount))))
+		}
+	}
+
+	// Volcano Jobs stats
+	if len(volcanoJobs) > 0 {
+		var totalDuration time.Duration
+		completedCount := 0
+		runningCount := 0
+		var totalNPU int64
+
+		for _, job := range volcanoJobs {
+			switch job.Status {
+			case "Completed":
+				if job.Duration > 0 {
+					totalDuration += job.Duration
+				}
+				completedCount++
+			case "Running":
+				runningCount++
+				totalNPU += job.NPURequested
+			}
+		}
+
+		// Volcano average duration
+		if completedCount > 0 {
+			avgDuration := totalDuration / time.Duration(completedCount)
+			parts = append(parts, fmt.Sprintf("%s: %s",
+				m.T("workloads.volcano.avg_duration"),
+				StyleHighlight.Render(formatDuration(avgDuration))))
+		}
+
+		// Volcano running with NPU
+		if runningCount > 0 && totalNPU > 0 {
+			parts = append(parts, fmt.Sprintf("%s: %s (%d NPU)",
+				m.T("workloads.volcano.running"),
+				StyleStatusRunning.Render(fmt.Sprintf("%d", runningCount)),
+				totalNPU))
+		} else if runningCount > 0 {
+			parts = append(parts, fmt.Sprintf("%s: %s",
+				m.T("workloads.volcano.running"),
+				StyleStatusRunning.Render(fmt.Sprintf("%d", runningCount))))
+		}
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return StyleTextMuted.Render("  📊 ") + strings.Join(parts, " • ")
 }
 
 // renderDeployments renders deployments section
@@ -1069,4 +1207,209 @@ func (m *Model) renderCronJobsList(sectionOffset int) ([]string, int) {
 	}
 
 	return rows, totalCronJobs
+}
+
+// renderVolcanoJobsList renders Volcano jobs section with selectable items
+func (m *Model) renderVolcanoJobsList(sectionOffset int) ([]string, int) {
+	var rows []string
+
+	volcanoJobs := m.clusterData.VolcanoJobs
+	totalJobs := len(volcanoJobs)
+
+	// Calculate stats
+	running := 0
+	pending := 0
+	completed := 0
+	failed := 0
+	totalNPURequested := int64(0)
+	totalNPURunning := int64(0)
+
+	for _, job := range volcanoJobs {
+		switch job.Status {
+		case "Running":
+			running++
+			totalNPURunning += job.NPURequested
+		case "Pending":
+			pending++
+		case "Completed":
+			completed++
+		case "Failed", "Aborted":
+			failed++
+		}
+		totalNPURequested += job.NPURequested
+	}
+
+	// Header with stats
+	header := fmt.Sprintf("%s  (%s)",
+		StyleSubHeader.Render(m.T("workloads.volcanojobs.title")),
+		m.TF("workloads.volcanojobs.stats", map[string]interface{}{
+			"Total": totalJobs,
+			"Running": StyleStatusRunning.Render(m.TF("workloads.volcanojobs.stats_running", map[string]interface{}{
+				"Count": running,
+			})),
+			"Pending": StyleStatusPending.Render(m.TF("workloads.volcanojobs.stats_pending", map[string]interface{}{
+				"Count": pending,
+			})),
+			"Completed": StyleStatusReady.Render(m.TF("workloads.volcanojobs.stats_completed", map[string]interface{}{
+				"Count": completed,
+			})),
+		}),
+	)
+	rows = append(rows, header)
+
+	// Add NPU summary line if there are NPU jobs
+	if totalNPURequested > 0 {
+		npuSummary := m.renderVolcanoNPUSummary(totalNPURequested, totalNPURunning, running, pending)
+		if npuSummary != "" {
+			rows = append(rows, npuSummary)
+		}
+	}
+
+	rows = append(rows, "")
+
+	const (
+		colName      = 30
+		colNamespace = 12
+		colStatus    = 12
+		colQueue     = 12
+		colReplicas  = 16
+		colNPU       = 8
+		colDuration  = 12
+	)
+
+	headerRow := fmt.Sprintf("%s  %s  %s  %s  %s  %s  %s",
+		padRight(m.T("columns.name"), colName),
+		padRight(m.T("columns.namespace"), colNamespace),
+		padRight(m.T("columns.status"), colStatus),
+		padRight(m.T("columns.queue"), colQueue),
+		padRight(m.T("columns.replicas"), colReplicas),
+		padRight("NPU", colNPU),
+		padRight(m.T("columns.duration"), colDuration),
+	)
+	rows = append(rows, StyleTextMuted.Render(headerRow))
+
+	if totalJobs == 0 {
+		rows = append(rows, StyleTextMuted.Render("  "+m.T("workloads.no_volcanojobs")))
+		return rows, 0
+	}
+
+	// Render all Volcano jobs with selection highlighting
+	for i, job := range volcanoJobs {
+		row := m.renderVolcanoJobRow(job, colName, colNamespace, colStatus, colQueue, colReplicas, colNPU, colDuration)
+
+		// Highlight selected job (using global index)
+		globalIndex := sectionOffset + i
+		if globalIndex == m.selectedIndex {
+			row = StyleSelected.Render("> " + row)
+		} else {
+			row = "  " + row
+		}
+
+		rows = append(rows, row)
+	}
+
+	return rows, totalJobs
+}
+
+// renderVolcanoJobRow renders a single Volcano job row
+func (m *Model) renderVolcanoJobRow(job *model.VolcanoJobData, colName, colNamespace, colStatus, colQueue, colReplicas, colNPU, colDuration int) string {
+	// Status styling
+	statusStr := job.Status
+	switch job.Status {
+	case "Running":
+		statusStr = StyleStatusRunning.Render(job.Status)
+	case "Pending":
+		statusStr = StyleStatusPending.Render(job.Status)
+	case "Completed":
+		statusStr = StyleStatusReady.Render(job.Status)
+	case "Failed", "Aborted":
+		statusStr = StyleStatusNotReady.Render(job.Status)
+	default:
+		statusStr = StyleTextMuted.Render(job.Status)
+	}
+
+	// Replicas format: running/total
+	replicas := fmt.Sprintf("%d/%d", job.Running, job.Replicas)
+	if job.Running == job.Replicas && job.Replicas > 0 {
+		replicas = StyleStatusReady.Render(replicas)
+	} else if job.Running > 0 {
+		replicas = StyleStatusRunning.Render(replicas)
+	} else if job.Pending > 0 {
+		replicas = StyleStatusPending.Render(replicas)
+	}
+
+	// NPU info
+	npuStr := "-"
+	if job.NPURequested > 0 {
+		npuStr = fmt.Sprintf("%d", job.NPURequested)
+	}
+
+	// Duration
+	duration := "-"
+	if job.Duration > 0 {
+		duration = formatDuration(job.Duration)
+	} else if job.Status == "Running" && !job.StartTime.IsZero() {
+		duration = formatDuration(time.Since(job.StartTime))
+	}
+
+	// Queue
+	queue := job.Queue
+	if queue == "" {
+		queue = "default"
+	}
+
+	return fmt.Sprintf("%s  %s  %s  %s  %s  %s  %s",
+		padRight(truncate(job.Name, colName), colName),
+		padRight(truncate(job.Namespace, colNamespace), colNamespace),
+		padRight(statusStr, colStatus),
+		padRight(truncate(queue, colQueue), colQueue),
+		padRight(replicas, colReplicas),
+		padRight(npuStr, colNPU),
+		padRight(duration, colDuration),
+	)
+}
+
+// renderVolcanoNPUSummary renders NPU summary for Volcano jobs section
+func (m *Model) renderVolcanoNPUSummary(totalNPURequested, totalNPURunning int64, runningJobs, pendingJobs int) string {
+	var parts []string
+
+	// Total NPU requested by all jobs
+	parts = append(parts, fmt.Sprintf("%s: %d",
+		m.T("detail.volcanojob.npu_total"),
+		totalNPURequested))
+
+	// NPU being used by running jobs
+	parts = append(parts, fmt.Sprintf("%s: %s",
+		m.T("workloads.volcano.running"),
+		StyleStatusRunning.Render(fmt.Sprintf("%d", totalNPURunning))))
+
+	// NPU efficiency: running NPU / total requested NPU
+	if totalNPURequested > 0 {
+		npuEfficiency := float64(totalNPURunning) / float64(totalNPURequested) * 100
+		effStyle := StyleStatusReady
+		if npuEfficiency < 50 {
+			effStyle = StyleWarning // Many pending jobs not using NPU
+		} else if npuEfficiency < 30 {
+			effStyle = StyleTextMuted
+		}
+		parts = append(parts, fmt.Sprintf("%s: %s",
+			m.T("detail.job.efficiency"),
+			effStyle.Render(formatPercentage(npuEfficiency))))
+	}
+
+	// Scheduling efficiency (running / total active jobs)
+	totalActive := runningJobs + pendingJobs
+	if totalActive > 0 {
+		schedEfficiency := float64(runningJobs) / float64(totalActive) * 100
+		schedStyle := StyleStatusReady
+		if schedEfficiency < 80 {
+			schedStyle = StyleWarning
+		} else if schedEfficiency < 50 {
+			schedStyle = StyleStatusNotReady
+		}
+		parts = append(parts, fmt.Sprintf("Sched: %s",
+			schedStyle.Render(fmt.Sprintf("%.0f%%", schedEfficiency))))
+	}
+
+	return StyleTextMuted.Render("    🧮 ") + strings.Join(parts, " • ")
 }

@@ -59,13 +59,16 @@ func (m *Model) renderJobDetail() string {
 		}
 	}
 
-	// Auto-scroll to keep selected pod visible
+	// Calculate scroll bounds (read-only for View function)
 	maxVisible := m.height - 10
 	if maxVisible < 1 {
 		maxVisible = 1
 	}
 
-	// If we found the pod table and have a selection, adjust scroll offset
+	// Use a local variable for scroll offset to avoid modifying state in View
+	detailScrollOffset := m.detailScrollOffset
+
+	// If we found the pod table and have a selection, calculate appropriate scroll position
 	if podTableStartLine >= 0 {
 		jobPods := m.getJobPods(job)
 		if len(jobPods) > 0 && m.jobPodSelectedIndex < len(jobPods) {
@@ -73,35 +76,34 @@ func (m *Model) renderJobDetail() string {
 			selectedPodLine := podTableStartLine + m.jobPodSelectedIndex
 
 			// Ensure the selected pod line is within visible range
-			// Keep selected line in the middle-third of visible area if possible
-			visibleStart := m.detailScrollOffset
-			visibleEnd := m.detailScrollOffset + maxVisible
+			visibleStart := detailScrollOffset
+			visibleEnd := detailScrollOffset + maxVisible
 
-			// If selected line is above visible area, scroll up
+			// If selected line is above visible area, adjust scroll position
 			if selectedPodLine < visibleStart {
-				m.detailScrollOffset = selectedPodLine
+				detailScrollOffset = selectedPodLine
 			}
-			// If selected line is below visible area, scroll down
+			// If selected line is below visible area, adjust scroll position
 			if selectedPodLine >= visibleEnd {
-				m.detailScrollOffset = selectedPodLine - maxVisible + 1
-			}
-
-			// Clamp scroll offset to valid range
-			maxScroll := totalLines - maxVisible
-			if maxScroll < 0 {
-				maxScroll = 0
-			}
-			if m.detailScrollOffset > maxScroll {
-				m.detailScrollOffset = maxScroll
-			}
-			if m.detailScrollOffset < 0 {
-				m.detailScrollOffset = 0
+				detailScrollOffset = selectedPodLine - maxVisible + 1
 			}
 		}
 	}
 
+	// Clamp scroll offset to valid range
+	maxScroll := totalLines - maxVisible
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if detailScrollOffset > maxScroll {
+		detailScrollOffset = maxScroll
+	}
+	if detailScrollOffset < 0 {
+		detailScrollOffset = 0
+	}
+
 	// Apply scroll offset
-	startIdx := m.detailScrollOffset
+	startIdx := detailScrollOffset
 	if startIdx >= totalLines {
 		startIdx = totalLines - 1
 		if startIdx < 0 {
@@ -187,6 +189,63 @@ func (m *Model) renderJobBasicInfo(job *model.JobData) string {
 	info = append(info, fmt.Sprintf("  %s: %s",
 		StyleTextSecondary.Render(m.T("detail.age")),
 		formatAge(age)))
+
+	// Performance Analysis Section
+	if job.Completions > 0 {
+		info = append(info, "")
+		info = append(info, StyleSubHeader.Render(m.T("detail.job.performance")))
+		info = append(info, "")
+
+		// Success Rate
+		totalAttempts := job.Succeeded + job.Failed
+		if totalAttempts > 0 {
+			successRate := float64(job.Succeeded) / float64(totalAttempts) * 100
+			rateStyle := StyleStatusReady
+			if successRate < 100 && successRate >= 80 {
+				rateStyle = StyleWarning
+			} else if successRate < 80 {
+				rateStyle = StyleStatusNotReady
+			}
+			info = append(info, fmt.Sprintf("  %s: %s (%d/%d)",
+				StyleTextSecondary.Render(m.T("detail.job.success_rate")),
+				rateStyle.Render(fmt.Sprintf("%.1f%%", successRate)),
+				job.Succeeded, totalAttempts))
+		}
+
+		// Completion Progress
+		completionPercent := float64(job.Succeeded) / float64(job.Completions) * 100
+		info = append(info, fmt.Sprintf("  %s: %s",
+			StyleTextSecondary.Render(m.T("detail.job.progress")),
+			StyleHighlight.Render(fmt.Sprintf("%.0f%% (%d/%d)", completionPercent, job.Succeeded, job.Completions))))
+
+		// Throughput (completions per hour) if job is running or completed
+		if job.Duration > 0 && job.Succeeded > 0 {
+			throughputPerHour := float64(job.Succeeded) / job.Duration.Hours()
+			if throughputPerHour >= 1 {
+				info = append(info, fmt.Sprintf("  %s: %s",
+					StyleTextSecondary.Render(m.T("detail.job.throughput")),
+					StyleHighlight.Render(fmt.Sprintf("%.1f %s", throughputPerHour, m.T("detail.job.per_hour")))))
+			} else {
+				// For slow jobs, show per minute
+				throughputPerMin := float64(job.Succeeded) / job.Duration.Minutes()
+				info = append(info, fmt.Sprintf("  %s: %s",
+					StyleTextSecondary.Render(m.T("detail.job.throughput")),
+					StyleHighlight.Render(fmt.Sprintf("%.2f %s", throughputPerMin, m.T("detail.job.per_minute")))))
+			}
+
+			// ETA for running jobs
+			if job.Active > 0 && job.Succeeded < job.Completions {
+				remaining := job.Completions - job.Succeeded
+				etaHours := float64(remaining) / throughputPerHour
+				etaDuration := time.Duration(etaHours * float64(time.Hour))
+				if etaDuration > 0 {
+					info = append(info, fmt.Sprintf("  %s: %s",
+						StyleTextSecondary.Render(m.T("detail.job.eta")),
+						StyleHighlight.Render(formatDuration(etaDuration))))
+				}
+			}
+		}
+	}
 
 	return strings.Join(info, "\n")
 }
@@ -285,6 +344,20 @@ func (m *Model) renderJobPods(job *model.JobData) string {
 		m.T("detail.job.usage"),
 		StyleHighlight.Render(FormatMillicores(totalCPUUsage))))
 
+	// CPU Efficiency (actual usage / requested)
+	if totalCPURequest > 0 && totalCPUUsage > 0 {
+		cpuEfficiency := float64(totalCPUUsage) / float64(totalCPURequest) * 100
+		effStyle := StyleStatusReady
+		if cpuEfficiency > 100 {
+			effStyle = StyleWarning // Overusing
+		} else if cpuEfficiency < 30 {
+			effStyle = StyleTextMuted // Underutilizing
+		}
+		info = append(info, fmt.Sprintf("    %s: %s",
+			m.T("detail.job.efficiency"),
+			effStyle.Render(fmt.Sprintf("%.1f%%", cpuEfficiency))))
+	}
+
 	// Memory
 	info = append(info, fmt.Sprintf("  %s:",
 		StyleTextSecondary.Render(m.T("columns.memory"))))
@@ -295,6 +368,20 @@ func (m *Model) renderJobPods(job *model.JobData) string {
 		FormatBytes(totalMemLimit),
 		m.T("detail.job.usage"),
 		StyleHighlight.Render(FormatBytes(totalMemUsage))))
+
+	// Memory Efficiency (actual usage / requested)
+	if totalMemRequest > 0 && totalMemUsage > 0 {
+		memEfficiency := float64(totalMemUsage) / float64(totalMemRequest) * 100
+		effStyle := StyleStatusReady
+		if memEfficiency > 100 {
+			effStyle = StyleWarning // Overusing
+		} else if memEfficiency < 30 {
+			effStyle = StyleTextMuted // Underutilizing
+		}
+		info = append(info, fmt.Sprintf("    %s: %s",
+			m.T("detail.job.efficiency"),
+			effStyle.Render(fmt.Sprintf("%.1f%%", memEfficiency))))
+	}
 
 	// Network
 	if totalNetworkRxRate > 0 || totalNetworkTxRate > 0 {

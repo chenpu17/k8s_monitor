@@ -45,14 +45,15 @@ func (m *Model) renderPodDetail() string {
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
-	if m.detailScrollOffset > maxScroll {
-		m.detailScrollOffset = maxScroll
+	detailScrollOffset := m.detailScrollOffset
+	if detailScrollOffset > maxScroll {
+		detailScrollOffset = maxScroll
 	}
-	if m.detailScrollOffset < 0 {
-		m.detailScrollOffset = 0
+	if detailScrollOffset < 0 {
+		detailScrollOffset = 0
 	}
 
-	startIdx := m.detailScrollOffset
+	startIdx := detailScrollOffset
 	endIdx := startIdx + maxVisible
 	if endIdx > totalLines {
 		endIdx = totalLines
