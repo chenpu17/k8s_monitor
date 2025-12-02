@@ -161,32 +161,24 @@ data:
         log "Starting NPU metrics collector for node: $NODE_NAME"
         log "Collection interval: ${INTERVAL}s"
 
+        # Check npu-smi availability - exit if not found
         if ! check_npu_smi; then
-            log "WARNING: npu-smi not available, using mock data for testing"
+            log "ERROR: npu-smi not available, cannot collect NPU metrics"
+            log "Please ensure NPU driver is installed and npu-smi is accessible"
+            exit 1
         fi
 
+        log "npu-smi found, starting metrics collection"
+
         while true; do
-            if check_npu_smi; then
-                # Collect real metrics
-                util=$(get_npu_utilization)
-                read hbm_total hbm_used hbm_util <<< $(get_hbm_info)
-                temp=$(get_temperature)
-                power=$(get_power)
-                health=$(get_health_status)
-                errors=$(get_error_count)
-                aicore_count=$(get_aicore_count)
-            else
-                # Mock data for testing (when npu-smi not available)
-                util=$((RANDOM % 100))
-                hbm_total=68719476736  # 64GB
-                hbm_used=$((RANDOM % hbm_total))
-                hbm_util=$((hbm_used * 100 / hbm_total))
-                temp=$((40 + RANDOM % 30))
-                power=$((100 + RANDOM % 200))
-                health="Healthy"
-                errors=0
-                aicore_count=8
-            fi
+            # Collect real metrics
+            util=$(get_npu_utilization)
+            read hbm_total hbm_used hbm_util <<< $(get_hbm_info)
+            temp=$(get_temperature)
+            power=$(get_power)
+            health=$(get_health_status)
+            errors=$(get_error_count)
+            aicore_count=$(get_aicore_count)
 
             # Update node annotations
             if update_annotations "$util" "$hbm_total" "$hbm_used" "$hbm_util" "$temp" "$power" "$health" "$errors" "$aicore_count"; then
@@ -243,7 +235,7 @@ spec:
             fieldRef:
               fieldPath: spec.nodeName
         - name: INTERVAL
-          value: "10"
+          value: "3"
         volumeMounts:
         - name: scripts
           mountPath: /scripts

@@ -46,7 +46,7 @@ kubectl get node <node-name> -o jsonpath='{.metadata.annotations}' | jq . | grep
 
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
-| `INTERVAL` | `10` | 指标收集间隔（秒） |
+| `INTERVAL` | `3` | 指标收集间隔（秒） |
 | `NODE_NAME` | 自动获取 | 节点名称（自动从 Pod spec 获取） |
 
 ### 节点选择器
@@ -104,9 +104,11 @@ image: your-registry/npu-metrics-collector:latest
 | AI Core 数量 | `npu.huawei.com/aicore-count` | 每节点 AI Core 数量 |
 | 更新时间 | `npu.huawei.com/metrics-updated` | 最后更新时间戳 |
 
-## 测试模式
+## 前置条件
 
-如果节点上没有 `npu-smi` 命令，收集器会自动切换到测试模式，生成模拟数据。这在开发和测试环境中很有用。
+- 节点必须安装华为昇腾 NPU 驱动
+- `npu-smi` 命令必须可用（位于 `/usr/local/bin/npu-smi`）
+- 如果 `npu-smi` 不可用，Pod 会启动失败并报错
 
 ## 清理
 
