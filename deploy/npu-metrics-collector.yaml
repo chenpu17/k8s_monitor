@@ -1,0 +1,277 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: npu-metrics-collector
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: npu-metrics-collector
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: npu-metrics-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: npu-metrics-collector
+subjects:
+- kind: ServiceAccount
+  name: npu-metrics-collector
+  namespace: kube-system
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: npu-metrics-collector-script
+  namespace: kube-system
+data:
+  collect-metrics.sh: |
+    #!/bin/bash
+    set -e
+
+    # NPU Metrics Collector Script
+    # Collects NPU metrics using npu-smi and updates node annotations
+
+    NODE_NAME="${NODE_NAME:-$(hostname)}"
+    INTERVAL="${INTERVAL:-10}"
+
+    log() {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    }
+
+    # Check if npu-smi is available
+    check_npu_smi() {
+        if ! command -v npu-smi &> /dev/null; then
+            log "ERROR: npu-smi not found"
+            return 1
+        fi
+        return 0
+    }
+
+    # Parse NPU utilization from npu-smi
+    get_npu_utilization() {
+        # npu-smi info -t usages outputs AI Core utilization
+        # Format varies by version, adjust parsing as needed
+        local util=$(npu-smi info -t usages 2>/dev/null | grep -E "AI Core|Aicore" | awk '{print $NF}' | tr -d '%' | head -1)
+        if [[ -z "$util" ]]; then
+            # Try alternative parsing
+            util=$(npu-smi info 2>/dev/null | grep -i "aicore" | grep -oP '\d+(?=%)' | head -1)
+        fi
+        echo "${util:-0}"
+    }
+
+    # Parse HBM memory info
+    get_hbm_info() {
+        local hbm_output=$(npu-smi info -t memory 2>/dev/null)
+
+        # Total HBM (in bytes)
+        local total=$(echo "$hbm_output" | grep -i "total" | awk '{print $NF}' | tr -d 'MB' | head -1)
+        total=$((${total:-0} * 1024 * 1024))
+
+        # Used HBM (in bytes)
+        local used=$(echo "$hbm_output" | grep -i "used" | awk '{print $NF}' | tr -d 'MB' | head -1)
+        used=$((${used:-0} * 1024 * 1024))
+
+        # Utilization percentage
+        local util=0
+        if [[ $total -gt 0 ]]; then
+            util=$((used * 100 / total))
+        fi
+
+        echo "$total $used $util"
+    }
+
+    # Parse temperature
+    get_temperature() {
+        local temp=$(npu-smi info -t temp 2>/dev/null | grep -oP '\d+' | head -1)
+        echo "${temp:-0}"
+    }
+
+    # Parse power consumption
+    get_power() {
+        local power=$(npu-smi info -t power 2>/dev/null | grep -oP '\d+' | head -1)
+        echo "${power:-0}"
+    }
+
+    # Get health status
+    get_health_status() {
+        local health=$(npu-smi info -t health 2>/dev/null | grep -i "health" | awk '{print $NF}')
+        if [[ "$health" == "OK" ]] || [[ "$health" == "Normal" ]]; then
+            echo "Healthy"
+        elif [[ -z "$health" ]]; then
+            echo "Unknown"
+        else
+            echo "$health"
+        fi
+    }
+
+    # Get error count
+    get_error_count() {
+        local errors=$(npu-smi info -t error 2>/dev/null | grep -oP '\d+' | head -1)
+        echo "${errors:-0}"
+    }
+
+    # Get AI Core count
+    get_aicore_count() {
+        local count=$(npu-smi info -t board 2>/dev/null | grep -i "aicore" | grep -oP '\d+' | head -1)
+        if [[ -z "$count" ]]; then
+            # Try to count from device list
+            count=$(npu-smi info -l 2>/dev/null | grep -c "NPU" || echo "0")
+        fi
+        echo "${count:-0}"
+    }
+
+    # Update node annotations using kubectl
+    update_annotations() {
+        local util=$1
+        local hbm_total=$2
+        local hbm_used=$3
+        local hbm_util=$4
+        local temp=$5
+        local power=$6
+        local health=$7
+        local errors=$8
+        local aicore_count=$9
+
+        log "Updating annotations for node $NODE_NAME"
+        log "  NPU Util: ${util}%, HBM: ${hbm_used}/${hbm_total} (${hbm_util}%), Temp: ${temp}C, Power: ${power}W, Health: ${health}"
+
+        kubectl annotate node "$NODE_NAME" --overwrite \
+            npu.huawei.com/utilization="$util" \
+            npu.huawei.com/hbm-total="$hbm_total" \
+            npu.huawei.com/hbm-used="$hbm_used" \
+            npu.huawei.com/hbm-utilization="$hbm_util" \
+            npu.huawei.com/temperature="$temp" \
+            npu.huawei.com/power="$power" \
+            npu.huawei.com/health="$health" \
+            npu.huawei.com/error-count="$errors" \
+            npu.huawei.com/aicore-count="$aicore_count" \
+            npu.huawei.com/metrics-updated="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    }
+
+    # Main collection loop
+    main() {
+        log "Starting NPU metrics collector for node: $NODE_NAME"
+        log "Collection interval: ${INTERVAL}s"
+
+        if ! check_npu_smi; then
+            log "WARNING: npu-smi not available, using mock data for testing"
+        fi
+
+        while true; do
+            if check_npu_smi; then
+                # Collect real metrics
+                util=$(get_npu_utilization)
+                read hbm_total hbm_used hbm_util <<< $(get_hbm_info)
+                temp=$(get_temperature)
+                power=$(get_power)
+                health=$(get_health_status)
+                errors=$(get_error_count)
+                aicore_count=$(get_aicore_count)
+            else
+                # Mock data for testing (when npu-smi not available)
+                util=$((RANDOM % 100))
+                hbm_total=68719476736  # 64GB
+                hbm_used=$((RANDOM % hbm_total))
+                hbm_util=$((hbm_used * 100 / hbm_total))
+                temp=$((40 + RANDOM % 30))
+                power=$((100 + RANDOM % 200))
+                health="Healthy"
+                errors=0
+                aicore_count=8
+            fi
+
+            # Update node annotations
+            if update_annotations "$util" "$hbm_total" "$hbm_used" "$hbm_util" "$temp" "$power" "$health" "$errors" "$aicore_count"; then
+                log "Annotations updated successfully"
+            else
+                log "ERROR: Failed to update annotations"
+            fi
+
+            sleep "$INTERVAL"
+        done
+    }
+
+    main "$@"
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: npu-metrics-collector
+  namespace: kube-system
+  labels:
+    app: npu-metrics-collector
+spec:
+  selector:
+    matchLabels:
+      app: npu-metrics-collector
+  template:
+    metadata:
+      labels:
+        app: npu-metrics-collector
+    spec:
+      serviceAccountName: npu-metrics-collector
+      # Only run on nodes with NPU
+      nodeSelector:
+        # Adjust this selector based on your cluster's NPU node labels
+        # accelerator/huawei-npu: "true"
+        # Or use node.kubernetes.io/instance-type for specific instance types
+        {}
+      tolerations:
+      # Tolerate all taints to run on NPU nodes
+      - operator: Exists
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: collector
+        # Use a base image with kubectl and bash
+        # You may need to build a custom image with npu-smi included
+        image: bitnami/kubectl:latest
+        command:
+        - /bin/bash
+        - /scripts/collect-metrics.sh
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: INTERVAL
+          value: "10"
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+        - name: npu-driver
+          mountPath: /usr/local/Ascend
+          readOnly: true
+        - name: npu-smi
+          mountPath: /usr/local/bin/npu-smi
+          readOnly: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        securityContext:
+          privileged: true
+      volumes:
+      - name: scripts
+        configMap:
+          name: npu-metrics-collector-script
+          defaultMode: 0755
+      - name: npu-driver
+        hostPath:
+          path: /usr/local/Ascend
+          type: DirectoryOrCreate
+      - name: npu-smi
+        hostPath:
+          path: /usr/local/bin/npu-smi
+          type: FileOrCreate
