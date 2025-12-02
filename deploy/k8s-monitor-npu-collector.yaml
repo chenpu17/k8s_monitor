@@ -1,0 +1,279 @@
+# K8s Monitor NPU Collector DaemonSet
+# Collects Huawei Ascend NPU metrics using npu-smi and writes to node annotations
+# Uses Python for Kubernetes API calls (no curl dependency)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k8s-monitor
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: npu-collector
+  namespace: k8s-monitor
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-monitor-npu-collector
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-monitor-npu-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8s-monitor-npu-collector
+subjects:
+- kind: ServiceAccount
+  name: npu-collector
+  namespace: k8s-monitor
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: npu-collector-script
+  namespace: k8s-monitor
+data:
+  collect.py: |
+    #!/usr/bin/env python3
+    import json
+    import os
+    import re
+    import ssl
+    import subprocess
+    import time
+    import urllib.request
+    from datetime import datetime, timezone
+
+    INTERVAL = int(os.environ.get('COLLECT_INTERVAL', '3'))
+    NODE_NAME = os.environ.get('NODE_NAME', os.uname().nodename)
+    # Use environment variables for API server (works with hostNetwork)
+    K8S_HOST = os.environ.get('KUBERNETES_SERVICE_HOST', 'kubernetes.default.svc')
+    K8S_PORT = os.environ.get('KUBERNETES_SERVICE_PORT', '443')
+    API_SERVER = f'https://{K8S_HOST}:{K8S_PORT}'
+    TOKEN_FILE = '/var/run/secrets/kubernetes.io/serviceaccount/token'
+    CA_FILE = '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'
+
+    # Set library path for npu-smi
+    os.environ['LD_LIBRARY_PATH'] = ':'.join([
+        '/usr/local/Ascend/driver/lib64',
+        '/usr/local/Ascend/driver/lib64/common',
+        '/usr/local/Ascend/driver/lib64/driver',
+        '/usr/local/dcmi',
+        os.environ.get('LD_LIBRARY_PATH', '')
+    ])
+
+    def log(msg):
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}", flush=True)
+
+    def get_token():
+        with open(TOKEN_FILE, 'r') as f:
+            return f.read().strip()
+
+    def collect_npu_metrics():
+        try:
+            result = subprocess.run(
+                ['/usr/local/sbin/npu-smi', 'info'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode != 0:
+                return None
+
+            output = result.stdout
+            chips = []
+            current_npu = None
+            npu_health = None
+            npu_power = 0
+            npu_temp = 0
+
+            for line in output.split('\n'):
+                # Match NPU line: | 0     Ascend910           | OK            | 162.5       37 ...
+                npu_match = re.match(r'^\|\s+(\d+)\s+Ascend\d+\s+\|\s+(\w+)\s+\|\s+([\d.-]+)\s+(\d+)', line)
+                if npu_match:
+                    current_npu = int(npu_match.group(1))
+                    npu_health = npu_match.group(2)
+                    power_str = npu_match.group(3)
+                    npu_power = float(power_str) if power_str != '-' else 0
+                    npu_temp = int(npu_match.group(4))
+
+                # Match Chip line: | 0     0                   | 0000:9D:00.0  | 0 ... 3113 / 65536
+                chip_match = re.match(r'^\|\s+(\d+)\s+(\d+)\s+\|\s+([\w:.]+)\s+\|\s+(\d+)\s+\d+\s*/\s*\d+\s+(\d+)\s*/\s*(\d+)', line)
+                if chip_match and current_npu is not None:
+                    chips.append({
+                        'npu': current_npu,
+                        'chip': int(chip_match.group(1)),
+                        'phy_id': int(chip_match.group(2)),
+                        'bus_id': chip_match.group(3),
+                        'health': npu_health,
+                        'power': npu_power,
+                        'temp': npu_temp,
+                        'aicore': int(chip_match.group(4)),
+                        'hbm_used': int(chip_match.group(5)),
+                        'hbm_total': int(chip_match.group(6))
+                    })
+
+            if not chips:
+                return None
+
+            return {
+                'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                'chips': chips
+            }
+        except Exception as e:
+            log(f"Error collecting metrics: {e}")
+            return None
+
+    def update_node_annotation(metrics):
+        try:
+            token = get_token()
+            metrics_json = json.dumps(metrics, separators=(',', ':'))
+
+            patch = {
+                'metadata': {
+                    'annotations': {
+                        'k8s-monitor.io/npu-metrics': metrics_json
+                    }
+                }
+            }
+
+            url = f"{API_SERVER}/api/v1/nodes/{NODE_NAME}"
+            data = json.dumps(patch).encode('utf-8')
+
+            ssl_context = ssl.create_default_context(cafile=CA_FILE)
+
+            req = urllib.request.Request(
+                url,
+                data=data,
+                method='PATCH',
+                headers={
+                    'Authorization': f'Bearer {token}',
+                    'Content-Type': 'application/strategic-merge-patch+json'
+                }
+            )
+
+            with urllib.request.urlopen(req, context=ssl_context, timeout=10) as response:
+                return response.status == 200
+        except Exception as e:
+            log(f"Error updating annotation: {e}")
+            return False
+
+    def main():
+        log(f"Starting NPU metrics collector for node: {NODE_NAME}")
+        log(f"Collection interval: {INTERVAL}s")
+
+        # Verify npu-smi is accessible
+        try:
+            result = subprocess.run(
+                ['/usr/local/sbin/npu-smi', 'info', '-l'],
+                capture_output=True,
+                timeout=10
+            )
+            if result.returncode != 0:
+                log("ERROR: npu-smi not accessible or no NPUs found")
+                return 1
+        except Exception as e:
+            log(f"ERROR: Failed to run npu-smi: {e}")
+            return 1
+
+        log("NPU access verified, starting collection loop...")
+
+        while True:
+            metrics = collect_npu_metrics()
+            if metrics:
+                if update_node_annotation(metrics):
+                    log("Metrics updated successfully")
+                else:
+                    log("WARNING: Failed to update node annotation")
+            else:
+                log("WARNING: No metrics collected")
+
+            time.sleep(INTERVAL)
+
+    if __name__ == '__main__':
+        exit(main() or 0)
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: npu-collector
+  namespace: k8s-monitor
+  labels:
+    app: k8s-monitor-npu-collector
+spec:
+  selector:
+    matchLabels:
+      app: k8s-monitor-npu-collector
+  template:
+    metadata:
+      labels:
+        app: k8s-monitor-npu-collector
+    spec:
+      serviceAccountName: npu-collector
+      nodeSelector:
+        accelerator/huawei-npu: "ascend-snt9c"
+      tolerations:
+      - operator: Exists
+      hostNetwork: true
+      containers:
+      - name: collector
+        image: docker.1ms.run/library/python:3.11-slim
+        imagePullPolicy: IfNotPresent
+        command: ["python3", "/scripts/collect.py"]
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: COLLECT_INTERVAL
+          value: "3"
+        - name: LD_LIBRARY_PATH
+          value: "/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver:/usr/local/dcmi"
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+        - name: npu-driver
+          mountPath: /usr/local/Ascend/driver
+          readOnly: true
+        - name: npu-smi
+          mountPath: /usr/local/sbin/npu-smi
+          readOnly: true
+        - name: dcmi
+          mountPath: /usr/local/dcmi
+          readOnly: true
+        - name: dev
+          mountPath: /dev
+      volumes:
+      - name: scripts
+        configMap:
+          name: npu-collector-script
+          defaultMode: 0755
+      - name: npu-driver
+        hostPath:
+          path: /usr/local/Ascend/driver
+      - name: npu-smi
+        hostPath:
+          path: /usr/local/sbin/npu-smi
+      - name: dcmi
+        hostPath:
+          path: /usr/local/dcmi
+      - name: dev
+        hostPath:
+          path: /dev
