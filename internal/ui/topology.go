@@ -221,9 +221,9 @@ func (m *Model) renderSuperPodDetail() string {
 				npuAllocStr = StyleStatusRunning.Render(npuAllocStr)
 			}
 
-			// NPU Utilization
+			// NPU Utilization - show 0% if we have metrics, "-" if no data
 			npuUtilStr := "-"
-			if node.NPUUtilization > 0 {
+			if node.NPUMemoryTotal > 0 || node.NPUUtilization > 0 {
 				npuUtilStr = FormatPercentage(node.NPUUtilization)
 				if node.NPUUtilization > 90 {
 					npuUtilStr = StyleDanger.Render(npuUtilStr)
