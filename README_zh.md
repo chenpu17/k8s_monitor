@@ -369,6 +369,23 @@ k8s-monitor/
 └── scripts/                # 构建和工具脚本
 ```
 
+### 代码统计
+
+| 组件 | 代码行数 | 说明 |
+|------|---------|------|
+| **总计** | **~22,300** | 纯 Go 实现 |
+| `internal/ui` | ~15,200 | TUI 层（Bubble Tea 模型、视图、渲染） |
+| `internal/datasource` | ~4,600 | 数据源（API Server、Kubelet、NPU-Exporter、Volcano） |
+| `internal/model` | ~700 | 数据模型和类型定义 |
+| `internal/cache` | ~550 | TTL 缓存和后台刷新 |
+| `internal/app` | ~420 | 应用核心和配置 |
+| `internal/i18n` | ~120 | 国际化支持 |
+| `cmd/` | ~190 | CLI 入口 |
+
+- **51 个 Go 源文件**
+- **零运行时外部依赖** - 单一静态二进制
+- **支持两种语言** - 中文和英文
+
 ### 运行测试
 
 ```bash

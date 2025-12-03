@@ -369,6 +369,23 @@ k8s-monitor/
 └── scripts/                # Build and utility scripts
 ```
 
+### Code Statistics
+
+| Component | Lines of Code | Description |
+|-----------|---------------|-------------|
+| **Total** | **~22,300** | Pure Go implementation |
+| `internal/ui` | ~15,200 | TUI layer (Bubble Tea models, views, rendering) |
+| `internal/datasource` | ~4,600 | Data sources (API Server, Kubelet, NPU-Exporter, Volcano) |
+| `internal/model` | ~700 | Data models and types |
+| `internal/cache` | ~550 | TTL cache and background refresh |
+| `internal/app` | ~420 | Application core and configuration |
+| `internal/i18n` | ~120 | Internationalization support |
+| `cmd/` | ~190 | CLI entry point |
+
+- **51 Go source files** across the codebase
+- **Zero external runtime dependencies** - single static binary
+- **Two languages supported** - English and Chinese
+
 ### Running Tests
 
 ```bash

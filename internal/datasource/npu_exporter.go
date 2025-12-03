@@ -18,6 +18,19 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+const (
+	// npuExporterTimeout is the timeout for NPU-Exporter requests
+	// This prevents blocking the entire refresh cycle if the exporter is unavailable
+	npuExporterTimeout = 5 * time.Second
+
+	// npuExporterRetryDelay is the delay before retrying after a failure
+	npuExporterRetryDelay = 30 * time.Second
+
+	// chipsPerNPU is the typical number of chips per NPU device
+	// Ascend 910 series typically has 2 chips per NPU card
+	chipsPerNPU = 2
+)
+
 // NPUExporterClient provides access to NPU metrics from NPU-Exporter
 type NPUExporterClient struct {
 	restClient      rest.Interface
@@ -29,6 +42,7 @@ type NPUExporterClient struct {
 	servicePort     string // NPU-Exporter port
 	logger          *zap.Logger
 	available       bool
+	lastFailure     time.Time // Time of last failure, used for retry backoff
 }
 
 // NPUChipMetrics represents detailed NPU chip metrics from NPU-Exporter
@@ -106,13 +120,25 @@ func (c *NPUExporterClient) SetEndpoint(endpoint string) {
 }
 
 // CheckAvailability checks if NPU-Exporter is available
+// Uses retry backoff to avoid repeated failures blocking the refresh cycle
 func (c *NPUExporterClient) CheckAvailability(ctx context.Context) error {
-	_, _, err := c.GetMetrics(ctx)
+	// Check if we should skip due to recent failure (retry backoff)
+	if !c.lastFailure.IsZero() && time.Since(c.lastFailure) < npuExporterRetryDelay {
+		return fmt.Errorf("NPU-Exporter recently failed, waiting for retry backoff")
+	}
+
+	// Create a timeout context for the availability check
+	timeoutCtx, cancel := context.WithTimeout(ctx, npuExporterTimeout)
+	defer cancel()
+
+	_, _, err := c.GetMetrics(timeoutCtx)
 	if err != nil {
 		c.available = false
+		c.lastFailure = time.Now()
 		return err
 	}
 	c.available = true
+	c.lastFailure = time.Time{} // Clear failure time on success
 	return nil
 }
 
@@ -324,131 +350,229 @@ func (c *NPUExporterClient) parseMetrics(body io.Reader) (map[int]*NPUChipMetric
 
 // EnrichNodeData enriches node data with NPU metrics from NPU-Exporter
 func (c *NPUExporterClient) EnrichNodeData(ctx context.Context, nodes []*model.NodeData) error {
+	// Skip if recently failed (retry backoff)
+	if !c.lastFailure.IsZero() && time.Since(c.lastFailure) < npuExporterRetryDelay {
+		c.logger.Debug("NPU-Exporter in backoff period, skipping enrichment")
+		return nil
+	}
+
+	// Create timeout context to prevent blocking the refresh cycle
+	timeoutCtx, cancel := context.WithTimeout(ctx, npuExporterTimeout)
+	defer cancel()
+
 	if !c.available {
-		if err := c.CheckAvailability(ctx); err != nil {
+		if err := c.CheckAvailability(timeoutCtx); err != nil {
 			c.logger.Debug("NPU-Exporter not available, skipping enrichment", zap.Error(err))
 			return nil // Not an error, just skip enrichment
 		}
 	}
 
-	chipMetrics, npuCount, err := c.GetMetrics(ctx)
+	chipMetrics, npuCount, err := c.GetMetrics(timeoutCtx)
 	if err != nil {
 		c.logger.Warn("Failed to get NPU metrics", zap.Error(err))
+		c.lastFailure = time.Now()
 		return nil // Don't fail, just skip enrichment
 	}
+
+	// Clear failure time on success
+	c.lastFailure = time.Time{}
 
 	c.logger.Debug("Got NPU metrics from NPU-Exporter",
 		zap.Int("npu_count", npuCount),
 		zap.Int("chip_count", len(chipMetrics)),
 	)
 
-	// For now, we enrich all NPU nodes with the aggregated metrics
-	// In a multi-node setup, we would need to match chips to nodes
-	// based on pod_name/namespace or other labels
+	// Count NPU nodes in the cluster
+	var npuNodes []*model.NodeData
 	for _, node := range nodes {
-		if node.NPUCapacity <= 0 {
-			continue // Skip non-NPU nodes
+		if node.NPUCapacity > 0 {
+			npuNodes = append(npuNodes, node)
 		}
+	}
 
-		// Aggregate chip metrics for this node
-		var totalUtil, totalVecUtil, totalTemp, totalPower float64
-		var totalHBMUsed, totalHBMTotal int64
-		var healthyCount, unhealthyCount int
-		var chipCount int
+	if len(npuNodes) == 0 {
+		c.logger.Debug("No NPU nodes found in cluster")
+		return nil
+	}
 
-		// Collect chips for this node
-		nodeChips := make([]model.NPUChipData, 0)
-		for _, chip := range chipMetrics {
-			// In a single-node scenario or if we can't determine node ownership,
-			// assign all chips to NPU nodes
-			// TODO: In multi-node, match based on node IP or pod allocation
+	// Convert chip metrics map to sorted slice for consistent assignment
+	chips := make([]*NPUChipMetrics, 0, len(chipMetrics))
+	for _, chip := range chipMetrics {
+		chips = append(chips, chip)
+	}
+	sort.Slice(chips, func(i, j int) bool {
+		return chips[i].ID < chips[j].ID
+	})
 
-			chipData := model.NPUChipData{
-				NPUID:    chip.ID / 2, // Typically 2 chips per NPU
-				Chip:     chip.ID % 2,
-				PhyID:    chip.ID,
-				BusID:    chip.PCIeBusInfo,
-				AICore:   int(chip.Utilization),
-				Temp:     chip.Temperature,
-				Power:    chip.Power,
-				HBMUsed:  chip.HBMUsedMemory,  // Already in MB from NPU-Exporter
-				HBMTotal: chip.HBMTotalMemory, // Already in MB from NPU-Exporter
+	// Strategy for chip distribution:
+	// 1. Single NPU node: Assign all chips to it
+	// 2. Multiple NPU nodes with chip count matching first node's capacity:
+	//    Assume single-node metrics (via Service LB), assign only to first node
+	// 3. Multiple NPU nodes with chip count > any single node's capacity:
+	//    Distribute chips proportionally based on NPUAllocatable
 
-				// Extended metrics from NPU-Exporter
-				VectorUtil:      chip.VectorUtilization,
-				Voltage:         chip.Voltage,
-				AICoreFreq:      chip.AICoreCurrentFreq,
-				LinkStatus:      chip.LinkStatus,
-				LinkSpeed:       chip.LinkSpeed,
-				LinkUpNum:       chip.LinkUpNum,
-				NetworkStatus:   chip.NetworkStatus,
-				ErrorCode:       chip.ErrorCode,
-				HBMEccSingleErr: chip.HBMEccSingleBitErr,
-				HBMEccDoubleErr: chip.HBMEccDoubleBitErr,
-				RoCETxPkts:      chip.RoCETxAllPktNum,
-				RoCERxPkts:      chip.RoCERxAllPktNum,
-				RoCETxErrPkts:   chip.RoCETxErrPktNum,
-				RoCERxErrPkts:   chip.RoCERxErrPktNum,
-				BandwidthRx:     chip.BandwidthRx,
-				BandwidthTx:     chip.BandwidthTx,
-			}
+	if len(npuNodes) == 1 {
+		// Single NPU node - assign all chips
+		c.enrichSingleNode(npuNodes[0], chips)
+	} else {
+		// Multiple NPU nodes - need to determine distribution strategy
+		totalChips := len(chips)
+		// Calculate expected chips for first node (NPU count * chips per NPU)
+		firstNodeExpectedChips := int(npuNodes[0].NPUAllocatable) * chipsPerNPU
 
-			if chip.HealthStatus == 1 {
-				chipData.Health = "OK"
-				healthyCount++
-			} else {
-				chipData.Health = "Error"
-				unhealthyCount++
-			}
-
-			nodeChips = append(nodeChips, chipData)
-
-			totalUtil += chip.Utilization
-			totalVecUtil += chip.VectorUtilization
-			totalTemp += float64(chip.Temperature)
-			totalPower += chip.Power
-			totalHBMUsed += chip.HBMUsedMemory
-			totalHBMTotal += chip.HBMTotalMemory
-			chipCount++
-		}
-
-		// Distribute chips across NPU nodes (simple round-robin for now)
-		// This is a simplification - in production you'd match based on topology
-		if chipCount > 0 && len(nodeChips) > 0 {
-			// Sort chips by PhyID for consistent display
-			sort.Slice(nodeChips, func(i, j int) bool {
-				return nodeChips[i].PhyID < nodeChips[j].PhyID
-			})
-
-			// Only assign chips to this node if it has NPU capacity
-			node.NPUChips = nodeChips
-			node.NPUUtilization = totalUtil / float64(chipCount)
-			// Convert MB to bytes for node-level HBM totals (NPU-Exporter provides MB)
-			node.NPUMemoryTotal = totalHBMTotal * 1024 * 1024
-			node.NPUMemoryUsed = totalHBMUsed * 1024 * 1024
-			if totalHBMTotal > 0 {
-				node.NPUMemoryUtil = float64(totalHBMUsed) / float64(totalHBMTotal) * 100
-			}
-			node.NPUTemperature = int(totalTemp / float64(chipCount))
-			node.NPUPower = int(totalPower)
-			node.NPUMetricsTime = time.Now()
-
-			if unhealthyCount > 0 {
-				node.NPUHealthStatus = "Warning"
-				node.NPUErrorCount = unhealthyCount
-			} else {
-				node.NPUHealthStatus = "Healthy"
-			}
-
-			c.logger.Debug("Enriched node with NPU metrics",
-				zap.String("node", node.Name),
-				zap.Float64("utilization", node.NPUUtilization),
-				zap.Int("chips", len(node.NPUChips)),
+		// Check if metrics likely come from a single node (Service load balanced to one pod)
+		if totalChips > 0 && totalChips <= firstNodeExpectedChips {
+			// Metrics count suggests single node source, warn and assign to first node only
+			c.logger.Warn("NPU metrics count suggests single-node source in multi-node cluster",
+				zap.Int("chip_count", totalChips),
+				zap.Int("npu_nodes", len(npuNodes)),
+				zap.Int("first_node_expected_chips", firstNodeExpectedChips),
+				zap.String("hint", "Consider using headless Service or querying each node directly"),
 			)
+			c.enrichSingleNode(npuNodes[0], chips)
+		} else {
+			// Distribute chips across nodes based on expected capacity
+			c.distributeChipsToNodes(npuNodes, chips)
 		}
 	}
 
 	return nil
+}
+
+// enrichSingleNode assigns all chip metrics to a single node
+func (c *NPUExporterClient) enrichSingleNode(node *model.NodeData, chips []*NPUChipMetrics) {
+	if len(chips) == 0 {
+		return
+	}
+
+	var totalUtil, totalTemp, totalPower float64
+	var totalHBMUsed, totalHBMTotal int64
+	var healthyCount, unhealthyCount int
+
+	nodeChips := make([]model.NPUChipData, 0, len(chips))
+	for _, chip := range chips {
+		chipData := c.convertChipMetrics(chip)
+		nodeChips = append(nodeChips, chipData)
+
+		if chip.HealthStatus == 1 {
+			healthyCount++
+		} else {
+			unhealthyCount++
+		}
+
+		totalUtil += chip.Utilization
+		totalTemp += float64(chip.Temperature)
+		totalPower += chip.Power
+		totalHBMUsed += chip.HBMUsedMemory
+		totalHBMTotal += chip.HBMTotalMemory
+	}
+
+	chipCount := len(chips)
+	node.NPUChips = nodeChips
+	node.NPUUtilization = totalUtil / float64(chipCount)
+	node.NPUMemoryTotal = totalHBMTotal * 1024 * 1024
+	node.NPUMemoryUsed = totalHBMUsed * 1024 * 1024
+	if totalHBMTotal > 0 {
+		node.NPUMemoryUtil = float64(totalHBMUsed) / float64(totalHBMTotal) * 100
+	}
+	node.NPUTemperature = int(totalTemp / float64(chipCount))
+	node.NPUPower = int(totalPower)
+	node.NPUMetricsTime = time.Now()
+
+	if unhealthyCount > 0 {
+		node.NPUHealthStatus = "Warning"
+		node.NPUErrorCount = unhealthyCount
+	} else {
+		node.NPUHealthStatus = "Healthy"
+	}
+
+	c.logger.Debug("Enriched single node with NPU metrics",
+		zap.String("node", node.Name),
+		zap.Float64("utilization", node.NPUUtilization),
+		zap.Int("chips", len(node.NPUChips)),
+	)
+}
+
+// distributeChipsToNodes distributes chips to multiple nodes based on NPUAllocatable
+func (c *NPUExporterClient) distributeChipsToNodes(nodes []*model.NodeData, chips []*NPUChipMetrics) {
+	if len(chips) == 0 || len(nodes) == 0 {
+		return
+	}
+
+	// Distribute chips to nodes based on expected capacity
+	chipIndex := 0
+	for _, node := range nodes {
+		// Calculate expected chips for this node (NPU count * chips per NPU)
+		expectedChips := int(node.NPUAllocatable) * chipsPerNPU
+		if expectedChips <= 0 {
+			continue
+		}
+
+		// Assign expectedChips chips to this node
+		endIndex := chipIndex + expectedChips
+		if endIndex > len(chips) {
+			endIndex = len(chips)
+		}
+
+		if chipIndex >= len(chips) {
+			// No more chips to assign
+			break
+		}
+
+		nodeChips := chips[chipIndex:endIndex]
+		c.enrichSingleNode(node, nodeChips)
+
+		chipIndex = endIndex
+	}
+
+	// Log warning if we have leftover chips
+	if chipIndex < len(chips) {
+		c.logger.Warn("Some NPU chips not assigned to any node",
+			zap.Int("unassigned_chips", len(chips)-chipIndex),
+			zap.Int("total_chips", len(chips)),
+		)
+	}
+}
+
+// convertChipMetrics converts NPUChipMetrics to model.NPUChipData
+func (c *NPUExporterClient) convertChipMetrics(chip *NPUChipMetrics) model.NPUChipData {
+	chipData := model.NPUChipData{
+		NPUID:    chip.ID / chipsPerNPU, // Each NPU has chipsPerNPU chips
+		Chip:     chip.ID % chipsPerNPU,
+		PhyID:    chip.ID,
+		BusID:    chip.PCIeBusInfo,
+		AICore:   int(chip.Utilization),
+		Temp:     chip.Temperature,
+		Power:    chip.Power,
+		HBMUsed:  chip.HBMUsedMemory,
+		HBMTotal: chip.HBMTotalMemory,
+
+		// Extended metrics from NPU-Exporter
+		VectorUtil:      chip.VectorUtilization,
+		Voltage:         chip.Voltage,
+		AICoreFreq:      chip.AICoreCurrentFreq,
+		LinkStatus:      chip.LinkStatus,
+		LinkSpeed:       chip.LinkSpeed,
+		LinkUpNum:       chip.LinkUpNum,
+		NetworkStatus:   chip.NetworkStatus,
+		ErrorCode:       chip.ErrorCode,
+		HBMEccSingleErr: chip.HBMEccSingleBitErr,
+		HBMEccDoubleErr: chip.HBMEccDoubleBitErr,
+		RoCETxPkts:      chip.RoCETxAllPktNum,
+		RoCERxPkts:      chip.RoCERxAllPktNum,
+		RoCETxErrPkts:   chip.RoCETxErrPktNum,
+		RoCERxErrPkts:   chip.RoCERxErrPktNum,
+		BandwidthRx:     chip.BandwidthRx,
+		BandwidthTx:     chip.BandwidthTx,
+	}
+
+	if chip.HealthStatus == 1 {
+		chipData.Health = "OK"
+	} else {
+		chipData.Health = "Error"
+	}
+
+	return chipData
 }
 
 // Close cleans up resources
