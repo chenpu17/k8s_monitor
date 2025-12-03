@@ -49,17 +49,21 @@ func (m *Model) renderLogs() string {
 		return strings.Join(sections, "\n")
 	}
 
-	// Split logs into lines
-	logLines := strings.Split(m.containerLogs, "\n")
+	// Use cached log lines (cache is updated in Update when logs change)
+	logLines := m.cachedLogLines
+	if len(logLines) == 0 {
+		// Fallback: split if cache is empty (shouldn't happen normally)
+		logLines = strings.Split(m.containerLogs, "\n")
+	}
 
-	// Filter lines if search is active
+	// Filter lines if search is active (use simple string matching, not regex)
 	var displayLines []string
-	var originalIndices []int // Track original line numbers for filtered results
+	var originalIndices []int
 
 	if m.logsSearchText != "" {
-		// Filter matching lines
+		lowerSearch := strings.ToLower(m.logsSearchText)
 		for idx, line := range logLines {
-			if strings.Contains(strings.ToLower(stripANSI(line)), strings.ToLower(m.logsSearchText)) {
+			if strings.Contains(strings.ToLower(line), lowerSearch) {
 				displayLines = append(displayLines, line)
 				originalIndices = append(originalIndices, idx)
 			}
@@ -73,8 +77,7 @@ func (m *Model) renderLogs() string {
 	}
 
 	// Apply scroll offset with proper bounds checking
-	// Use consistent maxVisible calculation across the codebase
-	maxVisible := m.height - 8 // Reserve space for header/footer (consistent with Down/Up key handling)
+	maxVisible := m.height - 8
 	if maxVisible < 1 {
 		maxVisible = 1
 	}
@@ -82,7 +85,7 @@ func (m *Model) renderLogs() string {
 	totalLines := len(logLines)
 	filteredCount := len(displayLines)
 
-	// Calculate scroll bounds (read-only, don't modify state in View)
+	// Calculate scroll bounds
 	maxScroll := filteredCount - maxVisible
 	if maxScroll < 0 {
 		maxScroll = 0
@@ -106,70 +109,58 @@ func (m *Model) renderLogs() string {
 	visibleLines := displayLines[startIdx:endIdx]
 	visibleIndices := originalIndices[startIdx:endIdx]
 
-	// Render log lines with line numbers, highlighting, and wrapping
+	// Render log lines with line numbers (simplified highlighting for performance)
 	var renderedLines []string
-	indent := "     │ " // 5 spaces + separator to align with line number (7 chars)
 
 	for i, line := range visibleLines {
 		lineNum := visibleIndices[i] + 1
 		lineNumStr := StyleTextMuted.Render(fmt.Sprintf("%4d│ ", lineNum))
 
-		// Apply log level highlighting and search highlighting
-		highlightedLine := highlightLogLine(line, m.logsSearchText)
+		// Simple highlighting: only highlight search term, skip expensive log level patterns during scroll
+		displayLine := line
+		if m.logsSearchText != "" {
+			displayLine = highlightSearchTermSimple(line, m.logsSearchText)
+		}
 
-		// Calculate max width for log content (reserve space for line number)
+		// Truncate long lines instead of wrapping (much faster)
 		maxLineWidth := m.width - 10
-		if maxLineWidth < 10 {
-			maxLineWidth = 10 // Minimum width to prevent panic
+		if maxLineWidth < 20 {
+			maxLineWidth = 20
+		}
+		if len(displayLine) > maxLineWidth {
+			displayLine = displayLine[:maxLineWidth-3] + "..."
 		}
 
-		// Wrap long lines instead of truncating them
-		wrappedLines := wrapLine(highlightedLine, maxLineWidth, 7) // indent width is 7
-
-		// Add line number to first line, indent to continuation lines
-		for j, wrappedLine := range wrappedLines {
-			if j == 0 {
-				renderedLines = append(renderedLines, lineNumStr+wrappedLine)
-			} else {
-				renderedLines = append(renderedLines, StyleTextMuted.Render(indent)+wrappedLine)
-			}
-		}
+		renderedLines = append(renderedLines, lineNumStr+displayLine)
 	}
 
 	sections = append(sections, renderedLines...)
 
-	// Always show status bar for user feedback
+	// Status bar
 	var statusParts []string
 
-	// Show search results if filtering
 	if m.logsSearchText != "" {
 		matchInfo := fmt.Sprintf("🔍 %d/%d matches", filteredCount, totalLines)
 		statusParts = append(statusParts, StyleKey.Render(matchInfo))
+	} else if filteredCount > maxVisible {
+		scrollPosStr := m.TF("logs.lines_range", map[string]interface{}{
+			"Start": startIdx + 1,
+			"End":   endIdx,
+			"Total": filteredCount,
+		})
+		statusParts = append(statusParts, scrollPosStr)
 	} else {
-		// Scroll position (only if scrollable)
-		if filteredCount > maxVisible {
-			scrollPosStr := m.TF("logs.lines_range", map[string]interface{}{
-				"Start": startIdx + 1,
-				"End":   endIdx,
-				"Total": filteredCount,
-			})
-			statusParts = append(statusParts, scrollPosStr)
-		} else {
-			// Show total even if not scrollable
-			statusParts = append(statusParts, m.TF("logs.lines_total", map[string]interface{}{
-				"Total": totalLines,
-			}))
-		}
+		statusParts = append(statusParts, m.TF("logs.lines_total", map[string]interface{}{
+			"Total": totalLines,
+		}))
 	}
 
-	// Auto-scroll status (always show so user knows the mode)
 	if m.logsAutoScroll {
 		statusParts = append(statusParts, "🔄 "+m.T("logs.auto_follow"))
 	} else {
 		statusParts = append(statusParts, "⏸ "+m.T("logs.paused"))
 	}
 
-	// Last update time (always show so user knows logs are refreshing)
 	if !m.logsLastUpdate.IsZero() {
 		elapsed := time.Since(m.logsLastUpdate)
 		timeStr := m.TF("logs.updated_ago", map[string]interface{}{
@@ -180,7 +171,6 @@ func (m *Model) renderLogs() string {
 		statusParts = append(statusParts, m.T("logs.loading"))
 	}
 
-	// Build status bar
 	var helpText string
 	if m.logsSearchMode {
 		helpText = "Type to search • ESC to exit search"

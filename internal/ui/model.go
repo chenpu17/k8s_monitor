@@ -196,6 +196,10 @@ type Model struct {
 	logsSearchMode bool   // True when in logs search mode
 	logsSearchText string // Current search text for logs filtering
 
+	// Logs cache for performance (avoid re-splitting on every render)
+	cachedLogLines       []string // Cached split log lines
+	cachedLogLinesSource string   // Source string that was cached (for invalidation)
+
 	// Action menu state
 	actionMenuMode          bool // True when action menu is visible
 	actionMenuSelectedIndex int  // Selected item in action menu
@@ -1188,8 +1192,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.logsMode {
-				// Scroll down in logs view
-				logLines := strings.Split(m.containerLogs, "\n")
+				// Scroll down in logs view - use cached log lines for performance
+				logLines := m.cachedLogLines
+				if len(logLines) == 0 {
+					// Fallback if cache not populated
+					logLines = strings.Split(m.containerLogs, "\n")
+				}
 				maxVisible := m.height - 8
 				if maxVisible < 1 {
 					maxVisible = 1
@@ -1331,8 +1339,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					pageSize = 1
 				}
 
-				// Calculate bounds
-				logLines := strings.Split(m.containerLogs, "\n")
+				// Calculate bounds using cached log lines for performance
+				logLines := m.cachedLogLines
+				if len(logLines) == 0 {
+					logLines = strings.Split(m.containerLogs, "\n")
+				}
 				maxVisible := m.height - 8
 				if maxVisible < 1 {
 					maxVisible = 1
@@ -1502,20 +1513,28 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.logsError = msg.err.Error()
 			m.containerLogs = ""
+			m.cachedLogLines = nil
+			m.cachedLogLinesSource = ""
 		} else {
 			m.logsError = ""
 			wasEmpty := m.containerLogs == ""
 			m.containerLogs = msg.logs
 
+			// Split once and cache the log lines to avoid repeated splits during rendering
+			logLines := strings.Split(m.containerLogs, "\n")
+
 			// Limit log size to prevent performance issues
 			// Keep only the last 10000 lines
 			const maxLogLines = 10000
-			logLines := strings.Split(m.containerLogs, "\n")
 			if len(logLines) > maxLogLines {
 				// Keep only the last maxLogLines
 				logLines = logLines[len(logLines)-maxLogLines:]
 				m.containerLogs = strings.Join(logLines, "\n")
 			}
+
+			// Cache the split log lines for fast rendering
+			m.cachedLogLines = logLines
+			m.cachedLogLinesSource = m.containerLogs
 
 			m.logsLastUpdate = time.Now() // Update refresh timestamp
 
@@ -1524,13 +1543,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.initLogsScrollPosition()
 			} else if m.logsAutoScroll {
 				// Only auto-scroll if enabled and not first time
-				// Calculate the new bottom position
-				logLines := strings.Split(m.containerLogs, "\n")
+				// Calculate the new bottom position using cached lines
 				maxVisible := m.height - 8
 				if maxVisible < 1 {
 					maxVisible = 1
 				}
-				totalLines := len(logLines)
+				totalLines := len(m.cachedLogLines)
 				maxScroll := totalLines - maxVisible
 				if maxScroll < 0 {
 					maxScroll = 0
@@ -2005,8 +2023,11 @@ func (m *Model) initLogsScrollPosition() {
 		return
 	}
 
-	// Calculate bottom position to show latest logs
-	logLines := strings.Split(m.containerLogs, "\n")
+	// Calculate bottom position to show latest logs - use cached lines
+	logLines := m.cachedLogLines
+	if len(logLines) == 0 {
+		logLines = strings.Split(m.containerLogs, "\n")
+	}
 	maxVisible := m.height - 8
 	if maxVisible < 1 {
 		maxVisible = 1
