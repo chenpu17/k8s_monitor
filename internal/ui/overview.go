@@ -962,7 +962,6 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 	servicesContent := m.servicesPanelLines(summary)
 	storageContent := m.storagePanelLines(summary)
 	workloadsContent := m.workloadsPanelLines(summary)
-	networkContent := m.networkPanelLines(summary)
 
 	// Include NPU panel if cluster has NPU nodes
 	var npuContent []string
@@ -978,7 +977,7 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 		volcanoContent = m.volcanoPanelLines(summary)
 	}
 
-	panelsToCompare := [][]string{servicesContent, storageContent, workloadsContent, networkContent}
+	panelsToCompare := [][]string{servicesContent, storageContent, workloadsContent}
 	if hasNPU {
 		panelsToCompare = append(panelsToCompare, npuContent)
 	}
@@ -991,9 +990,8 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 	servicesPanel := renderSummaryPanel(servicesContent, targetLines)
 	storagePanel := renderSummaryPanel(storageContent, targetLines)
 	workloadsPanel := renderSummaryPanel(workloadsContent, targetLines)
-	networkPanel := renderSummaryPanel(networkContent, targetLines)
 
-	panels := []string{servicesPanel, storagePanel, workloadsPanel, networkPanel}
+	panels := []string{servicesPanel, storagePanel, workloadsPanel}
 
 	if hasNPU {
 		npuPanel := renderSummaryPanel(npuContent, targetLines)
@@ -1094,64 +1092,6 @@ func (m *Model) workloadsPanelLines(summary *model.ClusterSummary) []string {
 			StyleTextMuted.Render("Limited detection"),
 			StyleTextMuted.Render("(based on labels)"),
 		)
-	}
-
-	return lines
-}
-
-func (m *Model) networkPanelLines(summary *model.ClusterSummary) []string {
-	lines := []string{
-		StyleHeader.Render("🌐 Network"),
-		"",
-	}
-
-	hasRate := summary.NetworkRxRate > 0 || summary.NetworkTxRate > 0
-	hasData := summary.NetworkRxBytes > 0 || summary.NetworkTxBytes > 0
-
-	if hasRate {
-		lines = append(lines,
-			fmt.Sprintf("RX: %s", StyleHighlight.Render(formatRate(summary.NetworkRxRate))),
-			fmt.Sprintf("TX: %s", StyleHighlight.Render(formatRate(summary.NetworkTxRate))),
-		)
-		if hasData {
-			lines = append(lines,
-				"",
-				StyleTextMuted.Render("Cumulative:"),
-				StyleTextMuted.Render(fmt.Sprintf("  RX: %s", formatMemory(summary.NetworkRxBytes))),
-				StyleTextMuted.Render(fmt.Sprintf("  TX: %s", formatMemory(summary.NetworkTxBytes))),
-			)
-		}
-	} else if hasData {
-		lines = append(lines,
-			StyleTextMuted.Render("Cumulative:"),
-			fmt.Sprintf("RX: %s", StyleHighlight.Render(formatMemory(summary.NetworkRxBytes))),
-			fmt.Sprintf("TX: %s", StyleHighlight.Render(formatMemory(summary.NetworkTxBytes))),
-			"",
-			StyleTextMuted.Render("(waiting for rate...)"),
-		)
-		if summary.TotalNodes > 0 && summary.NodesWithMetrics < summary.TotalNodes {
-			lines = append(lines,
-				StyleWarning.Render(fmt.Sprintf("%d/%d nodes", summary.NodesWithMetrics, summary.TotalNodes)),
-			)
-		}
-	} else {
-		msg := "metrics unavailable"
-		if summary.TotalNodes > 0 {
-			msg += fmt.Sprintf(" (%d/%d nodes)", summary.NodesWithMetrics, summary.TotalNodes)
-		}
-		if summary.KubeletError != "" {
-			msg += fmt.Sprintf(" • %s", truncateText(summary.KubeletError, 40))
-		}
-		lines = append(lines, StyleTextMuted.Render(msg))
-		if summary.KubeletError != "" {
-			hint := m.kubeletHint(detectKubeletHintKind(summary.KubeletError))
-			if hint != "" {
-				lines = append(lines,
-					"",
-					StyleTextMuted.Render(hint),
-				)
-			}
-		}
 	}
 
 	return lines
