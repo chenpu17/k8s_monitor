@@ -4,9 +4,41 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 )
+
+// wrapLogLine wraps a single log line into multiple display lines
+// Returns the wrapped lines and the number of display lines
+func wrapLogLine(line string, maxWidth int) []string {
+	if maxWidth < 20 {
+		maxWidth = 20
+	}
+
+	// If line fits, return as-is
+	lineLen := utf8.RuneCountInString(line)
+	if lineLen <= maxWidth {
+		return []string{line}
+	}
+
+	// Wrap line into multiple parts
+	var wrapped []string
+	runes := []rune(line)
+
+	for len(runes) > 0 {
+		// Calculate how many runes to take
+		takeLen := maxWidth
+		if takeLen > len(runes) {
+			takeLen = len(runes)
+		}
+
+		wrapped = append(wrapped, string(runes[:takeLen]))
+		runes = runes[takeLen:]
+	}
+
+	return wrapped
+}
 
 // renderLogs renders the logs viewer
 func (m *Model) renderLogs() string {
@@ -76,6 +108,37 @@ func (m *Model) renderLogs() string {
 		}
 	}
 
+	// Calculate max width for log content (reserve space for line number prefix "9999│ ")
+	maxLineWidth := m.width - 8
+	if maxLineWidth < 20 {
+		maxLineWidth = 20
+	}
+
+	// Build wrapped display lines with their original line indices
+	type wrappedLine struct {
+		text          string
+		originalIndex int
+		isFirstLine   bool // true for first line of a logical log line
+	}
+
+	var allWrappedLines []wrappedLine
+	for i, line := range displayLines {
+		// Apply search highlighting before wrapping
+		displayLine := line
+		if m.logsSearchText != "" {
+			displayLine = highlightSearchTermSimple(line, m.logsSearchText)
+		}
+
+		wrapped := wrapLogLine(displayLine, maxLineWidth)
+		for j, w := range wrapped {
+			allWrappedLines = append(allWrappedLines, wrappedLine{
+				text:          w,
+				originalIndex: originalIndices[i],
+				isFirstLine:   j == 0,
+			})
+		}
+	}
+
 	// Apply scroll offset with proper bounds checking
 	maxVisible := m.height - 8
 	if maxVisible < 1 {
@@ -83,10 +146,10 @@ func (m *Model) renderLogs() string {
 	}
 
 	totalLines := len(logLines)
-	filteredCount := len(displayLines)
+	totalDisplayLines := len(allWrappedLines)
 
-	// Calculate scroll bounds
-	maxScroll := filteredCount - maxVisible
+	// Calculate scroll bounds based on display lines
+	maxScroll := totalDisplayLines - maxVisible
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
@@ -102,36 +165,27 @@ func (m *Model) renderLogs() string {
 
 	startIdx := scrollOffset
 	endIdx := startIdx + maxVisible
-	if endIdx > filteredCount {
-		endIdx = filteredCount
+	if endIdx > totalDisplayLines {
+		endIdx = totalDisplayLines
 	}
 
-	visibleLines := displayLines[startIdx:endIdx]
-	visibleIndices := originalIndices[startIdx:endIdx]
-
-	// Render log lines with line numbers (simplified highlighting for performance)
+	// Render visible wrapped lines
 	var renderedLines []string
 
-	for i, line := range visibleLines {
-		lineNum := visibleIndices[i] + 1
-		lineNumStr := StyleTextMuted.Render(fmt.Sprintf("%4d│ ", lineNum))
+	for i := startIdx; i < endIdx; i++ {
+		wl := allWrappedLines[i]
+		lineNum := wl.originalIndex + 1
 
-		// Simple highlighting: only highlight search term, skip expensive log level patterns during scroll
-		displayLine := line
-		if m.logsSearchText != "" {
-			displayLine = highlightSearchTermSimple(line, m.logsSearchText)
+		var lineNumStr string
+		if wl.isFirstLine {
+			// First line of a logical log line: show line number
+			lineNumStr = StyleTextMuted.Render(fmt.Sprintf("%4d│ ", lineNum))
+		} else {
+			// Continuation line: show indent marker
+			lineNumStr = StyleTextMuted.Render("    │ ")
 		}
 
-		// Truncate long lines instead of wrapping (much faster)
-		maxLineWidth := m.width - 10
-		if maxLineWidth < 20 {
-			maxLineWidth = 20
-		}
-		if len(displayLine) > maxLineWidth {
-			displayLine = displayLine[:maxLineWidth-3] + "..."
-		}
-
-		renderedLines = append(renderedLines, lineNumStr+displayLine)
+		renderedLines = append(renderedLines, lineNumStr+wl.text)
 	}
 
 	sections = append(sections, renderedLines...)
@@ -140,13 +194,13 @@ func (m *Model) renderLogs() string {
 	var statusParts []string
 
 	if m.logsSearchText != "" {
-		matchInfo := fmt.Sprintf("🔍 %d/%d matches", filteredCount, totalLines)
+		matchInfo := fmt.Sprintf("🔍 %d/%d matches", len(displayLines), totalLines)
 		statusParts = append(statusParts, StyleKey.Render(matchInfo))
-	} else if filteredCount > maxVisible {
+	} else if totalDisplayLines > maxVisible {
 		scrollPosStr := m.TF("logs.lines_range", map[string]interface{}{
 			"Start": startIdx + 1,
 			"End":   endIdx,
-			"Total": filteredCount,
+			"Total": totalDisplayLines,
 		})
 		statusParts = append(statusParts, scrollPosStr)
 	} else {
@@ -174,7 +228,7 @@ func (m *Model) renderLogs() string {
 	var helpText string
 	if m.logsSearchMode {
 		helpText = "Type to search • ESC to exit search"
-	} else if filteredCount > maxVisible {
+	} else if totalDisplayLines > maxVisible {
 		helpText = m.T("logs.help.scroll") + " • / to search"
 	} else {
 		helpText = m.T("logs.help.back") + " • / to search"

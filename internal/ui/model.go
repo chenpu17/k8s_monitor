@@ -1192,17 +1192,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.logsMode {
-				// Scroll down in logs view - use cached log lines for performance
-				logLines := m.cachedLogLines
-				if len(logLines) == 0 {
-					// Fallback if cache not populated
-					logLines = strings.Split(m.containerLogs, "\n")
-				}
+				// Scroll down in logs view - use wrapped line count for correct bounds
+				totalLines := m.getLogsDisplayLineCount()
 				maxVisible := m.height - 8
 				if maxVisible < 1 {
 					maxVisible = 1
 				}
-				totalLines := len(logLines)
 				maxScroll := totalLines - maxVisible
 				if maxScroll < 0 {
 					maxScroll = 0
@@ -1333,22 +1328,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.PageDown):
 			// Page down: jump by a full page
 			if m.logsMode {
-				// Scroll down by a page in logs view
+				// Scroll down by a page in logs view - use wrapped line count for correct bounds
 				pageSize := m.height - 10
 				if pageSize < 1 {
 					pageSize = 1
 				}
 
-				// Calculate bounds using cached log lines for performance
-				logLines := m.cachedLogLines
-				if len(logLines) == 0 {
-					logLines = strings.Split(m.containerLogs, "\n")
-				}
+				// Calculate bounds using wrapped line count
+				totalLines := m.getLogsDisplayLineCount()
 				maxVisible := m.height - 8
 				if maxVisible < 1 {
 					maxVisible = 1
 				}
-				totalLines := len(logLines)
 				maxScroll := totalLines - maxVisible
 				if maxScroll < 0 {
 					maxScroll = 0
@@ -1543,12 +1534,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.initLogsScrollPosition()
 			} else if m.logsAutoScroll {
 				// Only auto-scroll if enabled and not first time
-				// Calculate the new bottom position using cached lines
+				// Calculate the new bottom position using wrapped line count
 				maxVisible := m.height - 8
 				if maxVisible < 1 {
 					maxVisible = 1
 				}
-				totalLines := len(m.cachedLogLines)
+				totalLines := m.getLogsDisplayLineCount()
 				maxScroll := totalLines - maxVisible
 				if maxScroll < 0 {
 					maxScroll = 0
@@ -2023,22 +2014,42 @@ func (m *Model) initLogsScrollPosition() {
 		return
 	}
 
-	// Calculate bottom position to show latest logs - use cached lines
-	logLines := m.cachedLogLines
-	if len(logLines) == 0 {
-		logLines = strings.Split(m.containerLogs, "\n")
-	}
+	// Calculate bottom position to show latest logs - use wrapped line count
+	totalLines := m.getLogsDisplayLineCount()
 	maxVisible := m.height - 8
 	if maxVisible < 1 {
 		maxVisible = 1
 	}
-	totalLines := len(logLines)
 	maxScroll := totalLines - maxVisible
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
 	m.logsScrollOffset = maxScroll // Start at bottom
 	m.logsAutoScroll = true         // Enable auto-scroll by default
+}
+
+// getLogsDisplayLineCount calculates the total number of display lines after wrapping
+// This is used for scroll calculations to account for wrapped long lines
+func (m *Model) getLogsDisplayLineCount() int {
+	logLines := m.cachedLogLines
+	if len(logLines) == 0 {
+		return 0
+	}
+
+	// Calculate max width for log content (same as in renderLogs)
+	maxLineWidth := m.width - 8
+	if maxLineWidth < 20 {
+		maxLineWidth = 20
+	}
+
+	// Count total display lines after wrapping
+	totalDisplayLines := 0
+	for _, line := range logLines {
+		wrapped := wrapLogLine(line, maxLineWidth)
+		totalDisplayLines += len(wrapped)
+	}
+
+	return totalDisplayLines
 }
 
 // handleFilterNavigation handles navigation in filter mode
