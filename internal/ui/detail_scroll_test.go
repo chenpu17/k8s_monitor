@@ -15,17 +15,17 @@ import (
 // forces the renderers to find where the content actually ends, so the tests
 // stay valid whatever formula a renderer uses to clamp its window.
 
-// probeKey canonicalises a rendered window for comparison. NOTE: it is the same
-// algorithm as the implementation's detailWindowKey (split + sort + join), so on
-// its own it does NOT give the probes an independent oracle - a bug that changed
-// both would be invisible here. What keeps the probes honest is that they never
+// probeKey canonicalises a rendered window for comparison. The implementation
+// compares the windows as rendered; probeKey sorts the lines on top of that, so
+// it is a coarser equivalence: a renderer that reshuffled its lines between two
+// renders of the same window would look "unchanged" here while the
+// implementation saw movement. What keeps the probes honest is that they never
 // call detailScrollLimit/detailScrollTarget: the reachable offset is derived by
 // brute-force scanning the renderer's own output (probeMaxScroll /
 // probeDisplayedOffset), and TestDetailScrollPVCMatchesRendererIndicator parses
-// the footer the renderer itself prints. The line sort makes the comparison
-// order-insensitive; since the D4 fix sorted every rendered map iteration, it is
-// no longer load-bearing, but it is kept so the probes cannot go flaky if an
-// unsorted map iteration is reintroduced.
+// the footer the renderer itself prints. The line sort is kept so that the
+// probes cannot go flaky if an unsorted map iteration is reintroduced - the
+// determinism it relies on is pinned by TestDetailScrollMapOrderedContent.
 func probeKey(content string) string {
 	lines := strings.Split(content, "\n")
 	sort.Strings(lines)
@@ -499,42 +499,4 @@ func TestDetailScrollBoundaries(t *testing.T) {
 			t.Fatalf("↑ scrolled past the first line: offset = %d", m.detailScrollOffset)
 		}
 	})
-}
-
-// TestProbeViewSwitchKeysInOtherModes records what the digit/Tab view-switch keys
-// do in the modes that were NOT given a filterMode-style guard. detailMode is
-// left false so that only the mode under test can block the shortcut.
-func TestProbeViewSwitchKeysInOtherModes(t *testing.T) {
-	cases := []struct {
-		name  string
-		setup func(m *Model)
-	}{
-		{"filterMode (guarded)", func(m *Model) { m.filterMode = true }},
-		{"searchMode (guarded by search handler)", func(m *Model) { m.searchMode = true }},
-		{"logsMode", func(m *Model) { m.logsMode = true }},
-		{"commandOutputMode", func(m *Model) { m.commandOutputMode = true }},
-		{"actionMenuMode", func(m *Model) { m.actionMenuMode = true }},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			m := newTestModel(t)
-			m.currentView = ViewPods
-			m.detailMode = false
-			tc.setup(m)
-
-			m.Update(keyMsg("2"))
-			switchedByDigit := m.currentView != ViewPods
-
-			m2 := newTestModel(t)
-			m2.currentView = ViewPods
-			m2.detailMode = false
-			tc.setup(m2)
-			m2.Update(tea.KeyMsg{Type: tea.KeyTab})
-			switchedByTab := m2.currentView != ViewPods
-
-			t.Logf("%s: digit switched view = %v, tab switched view = %v (view after digit=%v)",
-				tc.name, switchedByDigit, switchedByTab, m.currentView)
-		})
-	}
 }

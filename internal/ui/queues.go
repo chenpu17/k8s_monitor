@@ -59,13 +59,13 @@ func (m *Model) renderQueues() string {
 
 	// Column widths
 	const (
-		colName     = 25
-		colState    = 10
-		colWeight   = 8
-		colNPU      = 15
-		colCPU      = 15
-		colMemory   = 15
-		colJobs     = 12
+		colName   = 25
+		colState  = 10
+		colWeight = 8
+		colNPU    = 15
+		colCPU    = 15
+		colMemory = 15
+		colJobs   = 12
 	)
 
 	// Table header

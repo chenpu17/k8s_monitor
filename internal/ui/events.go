@@ -77,11 +77,11 @@ func (m *Model) renderEventsList(events []*model.EventData) string {
 
 	// Table header - define fixed column widths
 	const (
-		colType     = 10
-		colReason   = 25
-		colObject   = 30
-		colMessage  = 50
-		colCount    = 8
+		colType    = 10
+		colReason  = 25
+		colObject  = 30
+		colMessage = 50
+		colCount   = 8
 	)
 
 	headerRow := fmt.Sprintf("%s  %s  %s  %s  %s",

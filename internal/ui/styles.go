@@ -25,7 +25,6 @@ var (
 	ColorTextMuted     = lipgloss.Color("#6B7280")
 
 	// Background colors
-	ColorBgPrimary   = lipgloss.Color("#1F2937")
 	ColorBgSecondary = lipgloss.Color("#374151")
 	ColorBgHover     = lipgloss.Color("#4B5563")
 )
@@ -338,46 +337,4 @@ func renderSeparator(width int) string {
 	}
 
 	return strings.Repeat("─", lineWidth)
-}
-
-// wrapLine wraps a long line into multiple lines with proper indentation
-// Returns a slice of wrapped lines (continuation lines are NOT indented, caller should add indent)
-func wrapLine(line string, maxWidth int, indentWidth int) []string {
-	// Strip ANSI codes for accurate length calculation
-	stripped := stripANSI(line)
-
-	// If line fits within maxWidth, return as-is
-	if runewidth.StringWidth(stripped) <= maxWidth {
-		return []string{line}
-	}
-
-	var result []string
-	currentLine := ""
-
-	// First line uses full width, continuation lines reserve space for indent
-	lineWidth := maxWidth
-
-	// Process runes to build wrapped lines
-	for _, r := range stripped {
-		charWidth := runewidth.RuneWidth(r)
-
-		if runewidth.StringWidth(currentLine)+charWidth > lineWidth {
-			// Current line is full, save it and start new line
-			if currentLine != "" {
-				result = append(result, currentLine)
-			}
-			currentLine = string(r)
-			// After first line, reduce width for indent
-			lineWidth = maxWidth - indentWidth
-		} else {
-			currentLine += string(r)
-		}
-	}
-
-	// Add remaining content
-	if currentLine != "" {
-		result = append(result, currentLine)
-	}
-
-	return result
 }

@@ -107,10 +107,10 @@ func (m *Model) renderPodsList(pods []*model.PodData) string {
 		colName      = 26
 		colNamespace = 14
 		colStatus    = 11
-		colCPU       = 12  // Trend indicator
-		colMemory    = 15  // Trend indicator
-		colRx        = 11  // Network RX
-		colTx        = 11  // Network TX
+		colCPU       = 12 // Trend indicator
+		colMemory    = 15 // Trend indicator
+		colRx        = 11 // Network RX
+		colTx        = 11 // Network TX
 		colRestarts  = 8
 	)
 

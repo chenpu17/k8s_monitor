@@ -859,48 +859,6 @@ other = "pods"
 other = "services"
 
 
-[overview.cluster_load_realtime]
-other = "⚡ Cluster Load - Real-time Status"
-
-[overview.cpu_load]
-other = "CPU Load:"
-
-[overview.memory_load]
-other = "Memory Load:"
-
-[overview.network_traffic]
-other = "Network Traffic:"
-
-[overview.usage_unavailable_show_requests]
-other = "(actual usage data unavailable, showing requests)"
-
-[overview.requests]
-other = "Requests:"
-
-[overview.cumulative]
-other = "(cumulative)"
-
-[overview.partial_nodes_missing_metrics]
-other = "Some nodes missing kubelet metrics ({{.WithMetrics}}/{{.Total}})"
-
-[overview.hint_kubelet_no_rate]
-other = "Hint: kubelet not providing rate data"
-
-[overview.kubelet_metrics_unavailable]
-other = "kubelet metrics unavailable"
-
-[overview.hint]
-other = "Hint"
-
-[overview.hint_tls_alternative]
-other = "or configure cluster to skip kubelet TLS verification"
-
-[overview.hint_rbac_grant]
-other = "grant get nodes/proxy permission to current credentials"
-
-[overview.partial_nodes_no_metrics]
-other = "Some nodes not returning kubelet metrics ({{.WithMetrics}}/{{.Total}})"
-
 [overview.capacity]
 other = "Capacity:"
 
@@ -1240,18 +1198,6 @@ other = "Failed: {{.Count}}"
 
 [workloads.jobs.stats_active]
 other = "Active: {{.Count}}"
-
-[workloads.jobs.active_section]
-other = "▸ Active Jobs"
-
-[workloads.jobs.failed_section]
-other = "▸ Failed Jobs"
-
-[workloads.jobs.completed_section]
-other = "▸ Completed Jobs (last 5)"
-
-[workloads.jobs.and_more]
-other = "... and {{.Count}} more completed jobs"
 
 [workloads.jobs.status_complete]
 other = "Complete"

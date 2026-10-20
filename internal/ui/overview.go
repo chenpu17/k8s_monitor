@@ -56,14 +56,6 @@ func formatMemory(bytes int64) string {
 	}
 }
 
-// formatRate formats bytes per second
-func formatRate(bytesPerSecond int64) string {
-	if bytesPerSecond <= 0 {
-		return "0B/s"
-	}
-	return fmt.Sprintf("%s/s", formatMemory(bytesPerSecond))
-}
-
 func truncateText(text string, max int) string {
 	if max <= 0 || len(text) <= max {
 		return text
@@ -144,7 +136,6 @@ func (m *Model) kubeletHint(kind kubeletHintKind) string {
 	return kubeletHintEnglish(kind)
 }
 
-
 // renderProgressBar renders a simple progress bar
 func renderProgressBar(percent float64, width int) string {
 	if width < 2 {
@@ -200,7 +191,7 @@ func renderSummaryPanel(lines []string, targetContentLines int) string {
 	lines = padContentLines(lines, targetContentLines)
 	return summaryPanelStyle.
 		Width(summaryPanelWidth).
-		Height(targetContentLines+summaryPanelExtraHeight).
+		Height(targetContentLines + summaryPanelExtraHeight).
 		Render(strings.Join(lines, "\n"))
 }
 
@@ -330,95 +321,6 @@ func (m *Model) hasAlerts(summary *model.ClusterSummary) bool {
 		summary.ImagePullBackOffPods > 0 ||
 		summary.OOMKilledPods > 0 ||
 		summary.NoEndpointServices > 0
-}
-
-// renderAlertPanel renders critical alerts at the top
-func (m *Model) renderAlertPanel(summary *model.ClusterSummary) string {
-	alerts := []string{
-		StyleHeader.Render("[🔔 Alerts]"),
-		"",
-	}
-
-	hasAlert := false
-
-	// Node alerts
-	if summary.NotReadyNodes > 0 {
-		alerts = append(alerts,
-			StyleDanger.Render(fmt.Sprintf("❌ %d Node(s) NotReady", summary.NotReadyNodes)),
-		)
-		hasAlert = true
-	}
-	if summary.MemoryPressureNodes > 0 {
-		alerts = append(alerts,
-			StyleWarning.Render(fmt.Sprintf("💾 %d Node(s) with Memory Pressure", summary.MemoryPressureNodes)),
-		)
-		hasAlert = true
-	}
-	if summary.DiskPressureNodes > 0 {
-		alerts = append(alerts,
-			StyleWarning.Render(fmt.Sprintf("💿 %d Node(s) with Disk Pressure", summary.DiskPressureNodes)),
-		)
-		hasAlert = true
-	}
-	if summary.PIDPressureNodes > 0 {
-		alerts = append(alerts,
-			StyleWarning.Render(fmt.Sprintf("🔢 %d Node(s) with PID Pressure", summary.PIDPressureNodes)),
-		)
-		hasAlert = true
-	}
-
-	// Pod anomaly alerts
-	if summary.CrashLoopBackOffPods > 0 {
-		alerts = append(alerts,
-			StyleDanger.Render(fmt.Sprintf("🔄 %d Pod(s) in CrashLoopBackOff", summary.CrashLoopBackOffPods)),
-		)
-		hasAlert = true
-	}
-	if summary.ImagePullBackOffPods > 0 {
-		alerts = append(alerts,
-			StyleDanger.Render(fmt.Sprintf("📦 %d Pod(s) with ImagePullBackOff", summary.ImagePullBackOffPods)),
-		)
-		hasAlert = true
-	}
-	if summary.OOMKilledPods > 0 {
-		alerts = append(alerts,
-			StyleDanger.Render(fmt.Sprintf("💥 %d Pod(s) OOMKilled", summary.OOMKilledPods)),
-		)
-		hasAlert = true
-	}
-
-	// Service health alerts
-	if summary.NoEndpointServices > 0 {
-		alerts = append(alerts,
-			StyleWarning.Render(fmt.Sprintf("🔌 %d Service(s) with no endpoints", summary.NoEndpointServices)),
-		)
-		hasAlert = true
-	}
-
-	// High restart pods
-	if len(summary.HighRestartPods) > 0 {
-		alerts = append(alerts, "", StyleSubHeader.Render("High Restart Pods:"))
-		for i, pod := range summary.HighRestartPods {
-			if i >= 3 { // Show top 3 in alert panel
-				break
-			}
-			reason := pod.Reason
-			if reason == "" {
-				reason = "Unknown"
-			}
-			alerts = append(alerts,
-				StyleTextMuted.Render(fmt.Sprintf("  • %s/%s: %d restarts (%s)",
-					pod.Namespace, pod.Name, pod.RestartCount, reason)),
-			)
-		}
-		hasAlert = true
-	}
-
-	if !hasAlert {
-		return ""
-	}
-
-	return StyleBorder.Width(95).Render(strings.Join(alerts, "\n"))
 }
 
 // renderCompactAlertPanel renders a compact alert panel for the overview
@@ -610,179 +512,6 @@ func (m *Model) renderClusterLoadCompact(summary *model.ClusterSummary) string {
 	return StyleBorder.Width(95).Render(strings.Join(content, "\n"))
 }
 
-// renderClusterLoad renders the cluster load summary (most important metrics)
-func (m *Model) renderClusterLoad(summary *model.ClusterSummary) string {
-	content := []string{
-		StyleHeader.Render(m.T("overview.cluster_load_realtime")),
-		"",
-	}
-
-	// CPU Load
-	cpuLoadLabel := StyleSubHeader.Render(m.T("overview.cpu_load"))
-	if summary.CPUUsed > 0 {
-		// We have actual usage data!
-		cpuUsageStr := fmt.Sprintf("%s / %s",
-			StyleWarning.Render(formatCPU(summary.CPUUsed)),
-			formatCPU(summary.CPUCapacity),
-		)
-		usagePercent := summary.CPUUsageUtilization
-		content = append(content,
-			fmt.Sprintf("%s %s (%s)",
-				cpuLoadLabel,
-				cpuUsageStr,
-				StyleHighlight.Render(formatPercentage(usagePercent)),
-			),
-			fmt.Sprintf("  %s", renderProgressBar(usagePercent, 60)),
-		)
-	} else {
-		// No actual usage, show requested as proxy
-		requestPercent := summary.CPURequestUtilization
-		content = append(content,
-			cpuLoadLabel+" "+StyleTextMuted.Render(m.T("overview.usage_unavailable_show_requests")),
-			fmt.Sprintf("  %s %s / %s (%s)",
-				m.T("overview.requests"),
-				StyleStatusRunning.Render(formatCPU(summary.CPURequested)),
-				formatCPU(summary.CPUAllocatable),
-				StyleHighlight.Render(formatPercentage(requestPercent)),
-			),
-			fmt.Sprintf("  %s", renderProgressBar(requestPercent, 60)),
-		)
-	}
-
-	content = append(content, "")
-
-	// Memory Load
-	memLoadLabel := StyleSubHeader.Render(m.T("overview.memory_load"))
-	if summary.MemoryUsed > 0 {
-		// We have actual usage data!
-		memUsageStr := fmt.Sprintf("%s / %s",
-			StyleWarning.Render(formatMemory(summary.MemoryUsed)),
-			formatMemory(summary.MemoryCapacity),
-		)
-		usagePercent := summary.MemUsageUtilization
-		content = append(content,
-			fmt.Sprintf("%s %s (%s)",
-				memLoadLabel,
-				memUsageStr,
-				StyleHighlight.Render(formatPercentage(usagePercent)),
-			),
-			fmt.Sprintf("  %s", renderProgressBar(usagePercent, 60)),
-		)
-	} else {
-		// No actual usage, show requested as proxy
-		requestPercent := summary.MemRequestUtilization
-		content = append(content,
-			memLoadLabel+" "+StyleTextMuted.Render(m.T("overview.usage_unavailable_show_requests")),
-			fmt.Sprintf("  %s %s / %s (%s)",
-				m.T("overview.requests"),
-				StyleStatusRunning.Render(formatMemory(summary.MemoryRequested)),
-				formatMemory(summary.MemoryAllocatable),
-				StyleHighlight.Render(formatPercentage(requestPercent)),
-			),
-			fmt.Sprintf("  %s", renderProgressBar(requestPercent, 60)),
-		)
-	}
-
-	content = append(content, "")
-
-	// Network Load
-	netLoadLabel := StyleSubHeader.Render(m.T("overview.network_traffic"))
-	switch {
-	case summary.KubeletMetricsAvailable && (summary.NetworkRxRate > 0 || summary.NetworkTxRate > 0):
-		content = append(content,
-			fmt.Sprintf("%s %s %s  %s %s",
-				netLoadLabel,
-				m.T("metrics.rx"),
-				StyleHighlight.Render(formatRate(summary.NetworkRxRate)),
-				m.T("metrics.tx"),
-				StyleHighlight.Render(formatRate(summary.NetworkTxRate)),
-			),
-			StyleTextMuted.Render(fmt.Sprintf("  Σ %s / %s",
-				formatMemory(summary.NetworkRxBytes),
-				formatMemory(summary.NetworkTxBytes))),
-		)
-	case summary.KubeletMetricsAvailable:
-		line := fmt.Sprintf("%s %s %s  %s %s %s",
-			netLoadLabel,
-			m.T("metrics.rx"),
-			StyleHighlight.Render(formatMemory(summary.NetworkRxBytes)),
-			m.T("metrics.tx"),
-			StyleHighlight.Render(formatMemory(summary.NetworkTxBytes)),
-			StyleTextMuted.Render(m.T("overview.cumulative")),
-		)
-		content = append(content, line)
-		if summary.TotalNodes > 0 && summary.NodesWithMetrics < summary.TotalNodes {
-			content = append(content,
-				StyleWarning.Render(m.TF("overview.partial_nodes_missing_metrics", map[string]interface{}{
-					"WithMetrics": summary.NodesWithMetrics,
-					"Total":       summary.TotalNodes,
-				})),
-			)
-		} else {
-			content = append(content,
-				StyleTextMuted.Render(m.T("overview.hint_kubelet_no_rate")),
-			)
-		}
-	default:
-		message := m.T("overview.kubelet_metrics_unavailable")
-		if summary.TotalNodes > 0 {
-			message += fmt.Sprintf(" (%d/%d %s)", summary.NodesWithMetrics, summary.TotalNodes, m.T("common.nodes"))
-		}
-		if summary.KubeletError != "" {
-			message += fmt.Sprintf(" • %s", truncateText(summary.KubeletError, 60))
-		}
-		hintKind := detectKubeletHintKind(summary.KubeletError)
-		hint := m.kubeletHint(hintKind)
-		if hint != "" {
-			message += ", " + hint
-		}
-		content = append(content,
-			netLoadLabel+" "+StyleTextMuted.Render(message),
-		)
-	}
-
-	content = append(content, "")
-
-	// Hint for getting metrics
-	if !summary.KubeletMetricsAvailable {
-		hintKind := detectKubeletHintKind(summary.KubeletError)
-		hint := m.kubeletHint(hintKind)
-		if hint != "" {
-			content = append(content,
-				StyleTextMuted.Render("💡 "+m.T("overview.hint")+": "+hint),
-			)
-		}
-		switch hintKind {
-		case kubeletHintTLS:
-			content = append(content,
-				StyleTextMuted.Render("   "+m.T("overview.hint_tls_alternative")),
-			)
-		case kubeletHintRBAC:
-			content = append(content,
-				StyleTextMuted.Render("   "+m.T("overview.hint_rbac_grant")),
-			)
-		}
-	} else if summary.TotalNodes > 0 && summary.NodesWithMetrics < summary.TotalNodes {
-		content = append(content,
-			StyleWarning.Render(m.TF("overview.partial_nodes_no_metrics", map[string]interface{}{
-				"WithMetrics": summary.NodesWithMetrics,
-				"Total":       summary.TotalNodes,
-			})),
-		)
-	}
-
-	return StyleBorder.Width(115).Render(strings.Join(content, "\n"))
-}
-
-// renderResourceDetails renders detailed resource capacity information
-func (m *Model) renderResourceDetails(summary *model.ClusterSummary) string {
-	cpuPanel := m.renderCPUDetails(summary, summaryPanelMinContentLine)
-	memoryPanel := m.renderMemoryDetails(summary, summaryPanelMinContentLine)
-	podPanel := m.renderPodDetails(summary, summaryPanelMinContentLine)
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, cpuPanel, memoryPanel, podPanel)
-}
-
 func (m *Model) cpuDetailsLines(summary *model.ClusterSummary) []string {
 	lines := []string{
 		StyleHeader.Render("[⚡ CPU]"),
@@ -795,10 +524,6 @@ func (m *Model) cpuDetailsLines(summary *model.ClusterSummary) []string {
 		lines = append(lines, fmt.Sprintf("%s   %s", m.T("overview.actual"), StyleWarning.Render(formatCPU(summary.CPUUsed))))
 	}
 	return lines
-}
-
-func (m *Model) renderCPUDetails(summary *model.ClusterSummary, targetContentLines int) string {
-	return renderSummaryPanel(m.cpuDetailsLines(summary), targetContentLines)
 }
 
 func (m *Model) memoryDetailsLines(summary *model.ClusterSummary) []string {
@@ -815,10 +540,6 @@ func (m *Model) memoryDetailsLines(summary *model.ClusterSummary) []string {
 	return lines
 }
 
-func (m *Model) renderMemoryDetails(summary *model.ClusterSummary, targetContentLines int) string {
-	return renderSummaryPanel(m.memoryDetailsLines(summary), targetContentLines)
-}
-
 func (m *Model) podDetailsLines(summary *model.ClusterSummary) []string {
 	return []string{
 		StyleHeader.Render("[📦 Pods]"),
@@ -828,111 +549,6 @@ func (m *Model) podDetailsLines(summary *model.ClusterSummary) []string {
 		fmt.Sprintf("%s %s", m.T("overview.pending"), StyleStatusPending.Render(fmt.Sprintf("%d", summary.PendingPods))),
 		fmt.Sprintf("%s %s", m.T("overview.failed"), StyleStatusNotReady.Render(fmt.Sprintf("%d", summary.FailedPods))),
 	}
-}
-
-func (m *Model) renderPodDetails(summary *model.ClusterSummary, targetContentLines int) string {
-	return renderSummaryPanel(m.podDetailsLines(summary), targetContentLines)
-}
-
-// renderClusterResources renders cluster-wide resource usage
-func (m *Model) renderClusterResources(summary *model.ClusterSummary) string {
-	content := []string{
-		StyleHeader.Render("📊 Cluster Resources"),
-		"",
-	}
-
-	// CPU Section
-	content = append(content, StyleSubHeader.Render("CPU (cores):"))
-	if summary.CPUCapacity > 0 {
-		content = append(content,
-			fmt.Sprintf("  Capacity:    %s", StyleHighlight.Render(formatCPU(summary.CPUCapacity))),
-			fmt.Sprintf("  Allocatable: %s", formatCPU(summary.CPUAllocatable)),
-		)
-
-		// CPU Requests
-		if summary.CPURequested > 0 {
-			content = append(content,
-				fmt.Sprintf("  Requested:   %s (%s)",
-					StyleStatusRunning.Render(formatCPU(summary.CPURequested)),
-					formatPercentage(summary.CPURequestUtilization),
-				),
-				fmt.Sprintf("  %s", renderProgressBar(summary.CPURequestUtilization, 30)),
-			)
-		}
-
-		// CPU Usage (from metrics)
-		if summary.CPUUsed > 0 {
-			content = append(content,
-				fmt.Sprintf("  Used:        %s (%s)",
-					StyleWarning.Render(formatCPU(summary.CPUUsed)),
-					formatPercentage(summary.CPUUsageUtilization),
-				),
-				fmt.Sprintf("  %s", renderProgressBar(summary.CPUUsageUtilization, 30)),
-			)
-		} else {
-			content = append(content,
-				StyleTextMuted.Render("  Usage: metrics unavailable"),
-			)
-		}
-	} else {
-		content = append(content, StyleTextMuted.Render("  No CPU data"))
-	}
-
-	content = append(content, "")
-
-	// Memory Section
-	content = append(content, StyleSubHeader.Render("Memory:"))
-	if summary.MemoryCapacity > 0 {
-		content = append(content,
-			fmt.Sprintf("  Capacity:    %s", StyleHighlight.Render(formatMemory(summary.MemoryCapacity))),
-			fmt.Sprintf("  Allocatable: %s", formatMemory(summary.MemoryAllocatable)),
-		)
-
-		// Memory Requests
-		if summary.MemoryRequested > 0 {
-			content = append(content,
-				fmt.Sprintf("  Requested:   %s (%s)",
-					StyleStatusRunning.Render(formatMemory(summary.MemoryRequested)),
-					formatPercentage(summary.MemRequestUtilization),
-				),
-				fmt.Sprintf("  %s", renderProgressBar(summary.MemRequestUtilization, 30)),
-			)
-		}
-
-		// Memory Usage (from metrics)
-		if summary.MemoryUsed > 0 {
-			content = append(content,
-				fmt.Sprintf("  Used:        %s (%s)",
-					StyleWarning.Render(formatMemory(summary.MemoryUsed)),
-					formatPercentage(summary.MemUsageUtilization),
-				),
-				fmt.Sprintf("  %s", renderProgressBar(summary.MemUsageUtilization, 30)),
-			)
-		} else {
-			content = append(content,
-				StyleTextMuted.Render("  Usage: metrics unavailable"),
-			)
-		}
-	} else {
-		content = append(content, StyleTextMuted.Render("  No memory data"))
-	}
-
-	content = append(content, "")
-
-	// Pod Capacity
-	content = append(content, StyleSubHeader.Render("Pod Capacity:"))
-	if summary.PodAllocatable > 0 {
-		content = append(content,
-			fmt.Sprintf("  Allocatable: %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.PodAllocatable))),
-			fmt.Sprintf("  Used:        %s (%s)",
-				StyleStatusRunning.Render(fmt.Sprintf("%d", summary.TotalPods)),
-				formatPercentage(summary.PodUtilization),
-			),
-			fmt.Sprintf("  %s", renderProgressBar(summary.PodUtilization, 30)),
-		)
-	}
-
-	return StyleBorder.Width(75).Render(strings.Join(content, "\n"))
 }
 
 // renderNodesAndPods renders nodes and pods summary
@@ -1238,59 +854,12 @@ func (m *Model) volcanoPanelLines(summary *model.ClusterSummary) []string {
 	return lines
 }
 
-// Deprecated: old render functions kept for reference
-func (m *Model) renderClusterSummary(summary *model.ClusterSummary) string {
-	content := []string{
-		StyleHeader.Render("📊 Cluster Overview"),
-		"",
-		fmt.Sprintf("Nodes:  %s / %s",
-			StyleHighlight.Render(fmt.Sprintf("%d", summary.ReadyNodes)),
-			fmt.Sprintf("%d total", summary.TotalNodes),
-		),
-		fmt.Sprintf("Pods:   %s / %s",
-			StyleHighlight.Render(fmt.Sprintf("%d", summary.RunningPods)),
-			fmt.Sprintf("%d total", summary.TotalPods),
-		),
-		fmt.Sprintf("Events: %s",
-			StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalEvents)),
-		),
-	}
-
-	return StyleBorder.Width(35).Render(strings.Join(content, "\n"))
-}
-
-func (m *Model) renderNodeSummary(summary *model.ClusterSummary) string {
-	content := []string{
-		StyleHeader.Render("💻  Nodes"),
-		"",
-		fmt.Sprintf("Ready:     %s", StyleStatusReady.Render(fmt.Sprintf("%d", summary.ReadyNodes))),
-		fmt.Sprintf("NotReady:  %s", StyleStatusNotReady.Render(fmt.Sprintf("%d", summary.NotReadyNodes))),
-		fmt.Sprintf("Total:     %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalNodes))),
-	}
-
-	return StyleBorder.Width(35).Render(strings.Join(content, "\n"))
-}
-
-func (m *Model) renderPodSummary(summary *model.ClusterSummary) string {
-	content := []string{
-		StyleHeader.Render("📦 Pods"),
-		"",
-		fmt.Sprintf("Running:   %s", StyleStatusRunning.Render(fmt.Sprintf("%d", summary.RunningPods))),
-		fmt.Sprintf("Pending:   %s", StyleStatusPending.Render(fmt.Sprintf("%d", summary.PendingPods))),
-		fmt.Sprintf("Failed:    %s", StyleStatusNotReady.Render(fmt.Sprintf("%d", summary.FailedPods))),
-		fmt.Sprintf("Unknown:   %s", StyleTextSecondary.Render(fmt.Sprintf("%d", summary.UnknownPods))),
-		fmt.Sprintf("Total:     %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalPods))),
-	}
-
-	return StyleBorder.Width(35).Render(strings.Join(content, "\n"))
-}
-
 // SuperPodInfo holds aggregated information for a SuperPod
 type SuperPodInfo struct {
-	ID        string
-	NodeCount int
-	NodeIPs   []string
-	TotalNPU  int64
+	ID         string
+	NodeCount  int
+	NodeIPs    []string
+	TotalNPU   int64
 	NPUPerNode int64
 }
 
@@ -1311,8 +880,8 @@ func (m *Model) getSuperPodTopology() []SuperPodInfo {
 		sp, exists := superPods[node.SuperPodID]
 		if !exists {
 			sp = &SuperPodInfo{
-				ID:       node.SuperPodID,
-				NodeIPs:  []string{},
+				ID:      node.SuperPodID,
+				NodeIPs: []string{},
 			}
 			superPods[node.SuperPodID] = sp
 		}

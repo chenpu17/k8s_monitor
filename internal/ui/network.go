@@ -63,12 +63,12 @@ func (m *Model) renderNetwork() string {
 
 	// Add scroll indicator if needed
 	if totalLines > maxVisible {
-		scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n[%s %d-%d %s %d] (↑/↓ %s, PgUp/PgDn %s)",
-			m.T("scroll.showing"),
-			startIdx+1,
-			endIdx,
-			m.T("common.of"),
-			totalLines,
+		scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n[%s] (↑/↓ %s, PgUp/PgDn %s)",
+			m.TF("scroll.showing", map[string]interface{}{
+				"Start": startIdx + 1,
+				"End":   endIdx,
+				"Total": totalLines,
+			}),
 			m.T("keys.scroll"),
 			m.T("keys.page"),
 		))

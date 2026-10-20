@@ -1,0 +1,1265 @@
+package ui
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+// Update handles messages
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
+
+	// 忽略鼠标事件，防止滚轮触发高频重绘
+	case tea.MouseMsg:
+		return m, nil
+
+	case refreshTickMsg:
+		if m.quitting {
+			return m, nil
+		}
+		return m, tea.Batch(
+			m.startFetchData(),
+			m.scheduleRefresh(),
+		)
+
+	case tea.KeyMsg:
+		// In search modes, treat most single-character keys as text input
+		// Only allow navigation keys (arrows, page up/down, esc, backspace, space, enter)
+		if m.logsSearchMode || m.searchMode {
+			// Check if this is a special key that should work in search mode
+			isSpecialKey := key.Matches(msg, m.keys.Back) || // Esc
+				key.Matches(msg, m.keys.Up) ||
+				key.Matches(msg, m.keys.Down) ||
+				key.Matches(msg, m.keys.PageUp) ||
+				key.Matches(msg, m.keys.PageDown) ||
+				key.Matches(msg, m.keys.Enter) ||
+				msg.Type == tea.KeyBackspace ||
+				msg.Type == tea.KeyDelete ||
+				msg.Type == tea.KeySpace
+
+			// Handle backspace and space before checking other special keys
+			if msg.Type == tea.KeyBackspace || msg.Type == tea.KeyDelete {
+				if m.logsSearchMode && len(m.logsSearchText) > 0 {
+					m.logsSearchText = m.logsSearchText[:len(m.logsSearchText)-1]
+					m.logsScrollOffset = 0
+					return m, nil
+				}
+				if m.searchMode && len(m.searchText) > 0 {
+					m.searchText = m.searchText[:len(m.searchText)-1]
+					m.scrollOffset = 0
+					m.selectedIndex = 0
+					return m, nil
+				}
+				return m, nil
+			}
+
+			if msg.Type == tea.KeySpace {
+				if m.logsSearchMode {
+					m.logsSearchText += " "
+					m.logsScrollOffset = 0
+					return m, nil
+				}
+				if m.searchMode {
+					m.searchText += " "
+					m.scrollOffset = 0
+					m.selectedIndex = 0
+					return m, nil
+				}
+				return m, nil
+			}
+
+			// If not a special key, handle as text input directly
+			if !isSpecialKey {
+				// Handle text input for logs search mode
+				if m.logsSearchMode {
+					if len(msg.String()) == 1 {
+						char := msg.String()
+						// Allow most printable characters for log search
+						if char >= " " && char <= "~" {
+							m.logsSearchText += char
+							m.logsScrollOffset = 0
+							return m, nil
+						}
+					}
+				}
+				// Handle text input for normal search mode
+				if m.searchMode {
+					if len(msg.String()) == 1 {
+						char := msg.String()
+						// Allow alphanumeric, dash, underscore, dot
+						if (char >= "a" && char <= "z") || (char >= "A" && char <= "Z") ||
+							(char >= "0" && char <= "9") || char == "-" || char == "_" || char == "." {
+							m.searchText += char
+							m.scrollOffset = 0
+							m.selectedIndex = 0
+							return m, nil
+						}
+					}
+				}
+				// If we get here, it's not a printable character we handle
+				return m, nil
+			}
+		}
+
+		switch {
+		case key.Matches(msg, m.keys.Quit):
+			m.quitting = true
+			return m, tea.Quit
+
+		case key.Matches(msg, m.keys.Refresh):
+			// Manual refresh: refresh logs if in logs mode, otherwise refresh cluster data
+			if m.logsMode {
+				return m, m.fetchLogs()
+			}
+			// Only call startFetchData() to avoid duplicate GetClusterData calls
+			// The refresher cache will be updated automatically
+			return m, m.startFetchData()
+
+		// Number keys for quick view switching
+		case msg.String() == "1":
+			if !m.viewSwitchBlocked() {
+				m.currentView = ViewOverview
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+			}
+			return m, nil
+
+		case msg.String() == "2":
+			if !m.viewSwitchBlocked() {
+				m.currentView = ViewNodes
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+			}
+			return m, nil
+
+		case msg.String() == "3":
+			if !m.viewSwitchBlocked() {
+				m.currentView = ViewPods
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+			}
+			return m, nil
+
+		case msg.String() == "4":
+			if !m.viewSwitchBlocked() {
+				m.currentView = ViewWorkloads
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+			}
+			return m, nil
+
+		case msg.String() == "5":
+			if !m.viewSwitchBlocked() {
+				m.currentView = ViewNetwork
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+			}
+			return m, nil
+
+		case msg.String() == "6":
+			if !m.viewSwitchBlocked() {
+				m.currentView = ViewStorage
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+			}
+			return m, nil
+
+		case msg.String() == "7":
+			if !m.viewSwitchBlocked() {
+				m.currentView = ViewEvents
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+			}
+			return m, nil
+
+		case msg.String() == "8":
+			if !m.viewSwitchBlocked() {
+				m.currentView = ViewAlerts
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+			}
+			return m, nil
+
+		case msg.String() == "9":
+			// Only switch to Queues view if Volcano is available
+			if !m.viewSwitchBlocked() && m.hasVolcanoQueues() {
+				m.currentView = ViewQueues
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+			}
+			return m, nil
+
+		case msg.String() == "0":
+			// Only switch to Topology view if SuperPod info is available
+			if !m.viewSwitchBlocked() && m.hasSuperPodTopology() {
+				m.currentView = ViewTopology
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.Tab):
+			// Tab key switches views in list mode
+			if !m.viewSwitchBlocked() {
+				// Build the list of currently available views; must stay in sync with renderViewTabs
+				views := []ViewType{
+					ViewOverview, ViewNodes, ViewPods, ViewWorkloads,
+					ViewNetwork, ViewStorage, ViewEvents, ViewAlerts,
+				}
+				if m.hasVolcanoQueues() {
+					views = append(views, ViewQueues)
+				}
+				if m.hasSuperPodTopology() {
+					views = append(views, ViewTopology)
+				}
+
+				// Advance to the next available view, wrapping around
+				next := views[0]
+				for i, v := range views {
+					if v == m.currentView {
+						next = views[(i+1)%len(views)]
+						break
+					}
+				}
+				m.currentView = next
+				m.scrollOffset = 0 // Reset scroll when switching views
+				m.selectedIndex = 0
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.Enter):
+			// Handle action menu execution
+			if m.actionMenuMode {
+				items := m.getActionMenuItems()
+				if m.actionMenuSelectedIndex < len(items) {
+					action := items[m.actionMenuSelectedIndex].Action
+					m.actionMenuMode = false
+					return m, m.executeAction(action)
+				}
+				m.actionMenuMode = false
+				return m, nil
+			}
+			// Enter key opens detail view or applies filter
+			if m.filterMode {
+				// Apply filter and exit filter mode
+				m.filterMode = false
+				return m, nil
+			}
+			if m.detailMode && m.currentView == ViewJobDetail && m.selectedJob != nil {
+				// Navigate from Job detail to Pod detail
+				jobPods := m.getJobPods(m.selectedJob)
+				// Limit to max 50 pods displayed
+				displayCount := len(jobPods)
+				const maxDisplay = 50
+				if displayCount > maxDisplay {
+					displayCount = maxDisplay
+				}
+				if m.jobPodSelectedIndex < displayCount && m.jobPodSelectedIndex < len(jobPods) {
+					m.selectedPod = jobPods[m.jobPodSelectedIndex]
+					m.currentView = ViewPodDetail
+					m.detailMode = true // BUGFIX: Must set detailMode to true for "l" key to work
+					m.fromJobDetail = true
+					m.detailScrollOffset = 0
+				}
+				return m, nil
+			}
+			if m.detailMode && m.currentView == ViewVolcanoJobDetail && m.selectedVolcanoJob != nil {
+				// Navigate from Volcano Job detail to Pod detail
+				volcanoJobPods := m.getVolcanoJobPods(m.selectedVolcanoJob)
+				// Limit to max 50 pods displayed
+				displayCount := len(volcanoJobPods)
+				const maxDisplay = 50
+				if displayCount > maxDisplay {
+					displayCount = maxDisplay
+				}
+				if m.volcanoJobPodSelectedIndex < displayCount && m.volcanoJobPodSelectedIndex < len(volcanoJobPods) {
+					m.selectedPod = volcanoJobPods[m.volcanoJobPodSelectedIndex]
+					m.currentView = ViewPodDetail
+					m.detailMode = true
+					m.fromVolcanoJobDetail = true
+					m.detailScrollOffset = 0
+				}
+				return m, nil
+			}
+			if !m.detailMode && m.clusterData != nil {
+				switch m.currentView {
+				case ViewNodes:
+					// Use cached sorted nodes if available
+					nodes := m.cachedSortedNodes
+					if nodes == nil {
+						nodes = m.clusterData.Nodes
+					}
+					if m.selectedIndex < len(nodes) {
+						m.selectedNode = nodes[m.selectedIndex]
+						m.currentView = ViewNodeDetail
+						m.detailMode = true
+						m.detailScrollOffset = 0 // Reset scroll when entering detail
+					}
+				case ViewPods:
+					// Use cached sorted pods if available
+					pods := m.cachedSortedPods
+					if pods == nil {
+						pods = m.getFilteredPods()
+					}
+					if m.selectedIndex < len(pods) {
+						m.selectedPod = pods[m.selectedIndex]
+						m.currentView = ViewPodDetail
+						m.detailMode = true
+						m.detailScrollOffset = 0 // Reset scroll when entering detail
+					}
+				case ViewEvents:
+					// Use cached sorted events if available
+					events := m.cachedSortedEvents
+					if events == nil {
+						events = m.getFilteredEvents()
+					}
+					if m.selectedIndex < len(events) {
+						m.selectedEvent = events[m.selectedIndex]
+						m.currentView = ViewEventDetail
+						m.detailMode = true
+						m.detailScrollOffset = 0 // Reset scroll when entering detail
+					}
+				case ViewWorkloads:
+					// Determine which workload section contains the selected index
+					currentItemIndex := 0
+					sectionOrder := []string{"volcanojob", "job", "service", "deployment", "statefulset", "daemonset", "cronjob"}
+
+					for _, sectionType := range sectionOrder {
+						section, exists := m.workloadSections[sectionType]
+						if !exists || section.count == 0 {
+							continue
+						}
+
+						// Check if selected index falls in this section
+						if m.selectedIndex >= currentItemIndex && m.selectedIndex < currentItemIndex+section.count {
+							itemIndexInSection := m.selectedIndex - currentItemIndex
+
+							// Route to appropriate detail view based on section type
+							switch sectionType {
+							case "volcanojob":
+								if itemIndexInSection < len(m.clusterData.VolcanoJobs) {
+									m.selectedVolcanoJob = m.clusterData.VolcanoJobs[itemIndexInSection]
+									m.currentView = ViewVolcanoJobDetail
+									m.detailMode = true
+									m.detailScrollOffset = 0
+									m.volcanoJobPodSelectedIndex = 0
+								}
+							case "job":
+								if itemIndexInSection < len(m.clusterData.Jobs) {
+									m.selectedJob = m.clusterData.Jobs[itemIndexInSection]
+									m.currentView = ViewJobDetail
+									m.detailMode = true
+									m.detailScrollOffset = 0
+								}
+							case "service":
+								if itemIndexInSection < len(m.clusterData.Services) {
+									m.selectedService = m.clusterData.Services[itemIndexInSection]
+									m.currentView = ViewServiceDetail
+									m.detailMode = true
+									m.detailScrollOffset = 0
+								}
+							case "deployment":
+								if itemIndexInSection < len(m.clusterData.Deployments) {
+									m.selectedDeployment = m.clusterData.Deployments[itemIndexInSection]
+									m.currentView = ViewDeploymentDetail
+									m.detailMode = true
+									m.detailScrollOffset = 0
+								}
+							case "statefulset":
+								if itemIndexInSection < len(m.clusterData.StatefulSets) {
+									m.selectedStatefulSet = m.clusterData.StatefulSets[itemIndexInSection]
+									m.currentView = ViewStatefulSetDetail
+									m.detailMode = true
+									m.detailScrollOffset = 0
+								}
+							case "daemonset":
+								if itemIndexInSection < len(m.clusterData.DaemonSets) {
+									m.selectedDaemonSet = m.clusterData.DaemonSets[itemIndexInSection]
+									m.currentView = ViewDaemonSetDetail
+									m.detailMode = true
+									m.detailScrollOffset = 0
+								}
+							case "cronjob":
+								if itemIndexInSection < len(m.clusterData.CronJobs) {
+									m.selectedCronJob = m.clusterData.CronJobs[itemIndexInSection]
+									m.currentView = ViewCronJobDetail
+									m.detailMode = true
+									m.detailScrollOffset = 0
+								}
+							}
+							break
+						}
+
+						currentItemIndex += section.count
+					}
+				case ViewStorage:
+					// Storage view shows PVs first, then PVCs
+					totalPVs := len(m.clusterData.PVs)
+					totalPVCs := len(m.clusterData.PVCs)
+
+					if m.selectedIndex < totalPVs {
+						// Selected a PV
+						m.selectedPV = m.clusterData.PVs[m.selectedIndex]
+						m.currentView = ViewPVDetail
+						m.detailMode = true
+						m.detailScrollOffset = 0
+					} else if m.selectedIndex < totalPVs+totalPVCs {
+						// Selected a PVC
+						pvcIndex := m.selectedIndex - totalPVs
+						m.selectedPVC = m.clusterData.PVCs[pvcIndex]
+						m.currentView = ViewPVCDetail
+						m.detailMode = true
+						m.detailScrollOffset = 0
+					}
+				case ViewQueues:
+					// Queue view - select queue for detail
+					if m.selectedIndex < len(m.clusterData.Queues) {
+						m.selectedQueue = m.clusterData.Queues[m.selectedIndex]
+						m.currentView = ViewQueueDetail
+						m.detailMode = true
+						m.detailScrollOffset = 0
+					}
+				case ViewTopology:
+					// Topology view - select SuperPod for detail
+					superPods := m.getSuperPodTopology()
+					if m.selectedIndex < len(superPods) {
+						m.selectedSuperPod = &superPods[m.selectedIndex]
+						m.currentView = ViewTopologyDetail
+						m.detailMode = true
+						m.detailScrollOffset = 0
+					}
+				}
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.Back):
+			// Esc key returns to list view or exits filter/search/logs/command output mode
+			// Exit command output viewer if active
+			if m.commandOutputMode {
+				m.commandOutputMode = false
+				m.commandOutputTitle = ""
+				m.commandOutputContent = ""
+				m.commandOutputScroll = 0
+				return m, nil
+			}
+			if m.logsMode {
+				// If in logs search mode, exit search mode first
+				if m.logsSearchMode {
+					m.logsSearchMode = false
+					m.logsSearchText = ""
+					m.logsScrollOffset = 0
+
+					// Restart auto-refresh and fetch latest logs
+					if !m.logsAutoRefresh {
+						m.logsAutoRefresh = true
+					}
+					// Fetch logs immediately to show fresh content
+					return m, m.fetchLogs()
+				}
+				// Exit logs mode entirely
+				m.logsMode = false
+				m.logsAutoRefresh = false // Stop auto-refresh
+				m.logsAutoScroll = false  // Reset auto-scroll
+				m.selectedContainer = ""
+				m.containerLogs = ""
+				m.logsScrollOffset = 0
+				m.logsError = ""
+				return m, nil
+			}
+			// Exit action menu if active
+			if m.actionMenuMode {
+				m.actionMenuMode = false
+				return m, nil
+			}
+			if m.searchMode {
+				m.searchMode = false
+				m.searchText = ""
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+				return m, nil
+			}
+			if m.filterMode {
+				m.filterMode = false
+				return m, nil
+			}
+			if m.detailMode {
+				// Special handling for navigating back from Pod detail to Job detail
+				if m.currentView == ViewPodDetail && m.fromJobDetail {
+					m.currentView = ViewJobDetail
+					m.fromJobDetail = false
+					m.detailScrollOffset = 0
+					m.selectedPod = nil
+					// Keep m.selectedJob intact
+					return m, nil
+				}
+
+				// Special handling for navigating back from Pod detail to Volcano Job detail
+				if m.currentView == ViewPodDetail && m.fromVolcanoJobDetail {
+					m.currentView = ViewVolcanoJobDetail
+					m.fromVolcanoJobDetail = false
+					m.detailScrollOffset = 0
+					m.selectedPod = nil
+					// Keep m.selectedVolcanoJob intact
+					return m, nil
+				}
+
+				switch m.currentView {
+				case ViewNodeDetail:
+					m.currentView = ViewNodes
+				case ViewPodDetail:
+					m.currentView = ViewPods
+				case ViewEventDetail:
+					m.currentView = ViewEvents
+				case ViewJobDetail:
+					m.currentView = ViewWorkloads
+					m.jobPodSelectedIndex = 0 // Reset selection
+				case ViewVolcanoJobDetail:
+					m.currentView = ViewWorkloads
+					m.volcanoJobPodSelectedIndex = 0 // Reset selection
+				case ViewServiceDetail:
+					m.currentView = ViewWorkloads
+				case ViewDeploymentDetail:
+					m.currentView = ViewWorkloads
+				case ViewStatefulSetDetail:
+					m.currentView = ViewWorkloads
+				case ViewDaemonSetDetail:
+					m.currentView = ViewWorkloads
+				case ViewCronJobDetail:
+					m.currentView = ViewWorkloads
+				case ViewPVDetail:
+					m.currentView = ViewStorage
+				case ViewPVCDetail:
+					m.currentView = ViewStorage
+				case ViewQueueDetail:
+					m.currentView = ViewQueues
+				case ViewTopologyDetail:
+					m.currentView = ViewTopology
+				}
+				m.detailMode = false
+				m.detailScrollOffset = 0 // Reset detail scroll offset
+				m.selectedNode = nil
+				m.selectedPod = nil
+				m.selectedEvent = nil
+				m.selectedJob = nil
+				m.selectedService = nil
+				m.selectedDeployment = nil
+				m.selectedStatefulSet = nil
+				m.selectedDaemonSet = nil
+				m.selectedCronJob = nil
+				m.selectedPV = nil
+				m.selectedPVC = nil
+				m.selectedVolcanoJob = nil
+				m.selectedQueue = nil
+				m.selectedSuperPod = nil
+				m.scrollOffset = 0
+				m.selectedIndex = 0 // Reset selected index when returning from detail view
+
+				// Clamp selectedIndex to valid range after view switch
+				maxIndex := m.getMaxIndex()
+				if maxIndex > 0 && m.selectedIndex >= maxIndex {
+					m.selectedIndex = maxIndex - 1
+				}
+				if m.selectedIndex < 0 {
+					m.selectedIndex = 0
+				}
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.Filter):
+			// F key opens filter mode
+			if !m.detailMode && !m.filterMode && !m.searchMode {
+				// Only for Pods view for now (will extend to Nodes later)
+				if m.currentView == ViewPods {
+					m.filterMode = true
+				}
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.ClearFilter):
+			// C key clears all filters
+			if !m.detailMode {
+				m.filterNamespace = ""
+				m.filterStatus = ""
+				m.filterRole = ""
+				m.searchText = ""
+				m.searchMode = false
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.Search):
+			// / key enters search mode
+			if m.logsMode && !m.logsSearchMode {
+				// In logs mode, enter logs search mode
+				m.logsSearchMode = true
+				m.logsSearchText = ""
+				return m, nil
+			}
+			if !m.detailMode && !m.filterMode && !m.searchMode {
+				m.searchMode = true
+				m.searchText = ""
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.Logs):
+			// L key opens logs viewer in Pod detail view or Job detail view
+			if m.detailMode && m.currentView == ViewJobDetail && m.selectedJob != nil {
+				// Get logs for selected pod in Job detail
+				jobPods := m.getJobPods(m.selectedJob)
+				// Limit to max 50 pods displayed
+				displayCount := len(jobPods)
+				const maxDisplay = 50
+				if displayCount > maxDisplay {
+					displayCount = maxDisplay
+				}
+				if m.jobPodSelectedIndex < displayCount && m.jobPodSelectedIndex < len(jobPods) {
+					selectedPod := jobPods[m.jobPodSelectedIndex]
+					if len(selectedPod.ContainerStates) == 0 {
+						m.logsError = "No containers available"
+						return m, nil
+					}
+
+					// If single container, fetch logs directly
+					if len(selectedPod.ContainerStates) == 1 {
+						m.selectedPod = selectedPod
+						m.selectedContainer = selectedPod.ContainerStates[0].Name
+						m.logsMode = true // Enter logs mode
+						return m, m.fetchLogs()
+					}
+
+					// For multiple containers, select the first container by default
+					m.selectedPod = selectedPod
+					m.selectedContainer = selectedPod.ContainerStates[0].Name
+					m.logsMode = true // Enter logs mode
+					return m, m.fetchLogs()
+				}
+				return m, nil
+			}
+			if m.detailMode && m.currentView == ViewPodDetail && m.selectedPod != nil {
+				// Get containers from the selected pod
+				if len(m.selectedPod.ContainerStates) == 0 {
+					m.logsError = "No containers available"
+					return m, nil
+				}
+
+				// If single container, fetch logs directly
+				if len(m.selectedPod.ContainerStates) == 1 {
+					m.selectedContainer = m.selectedPod.ContainerStates[0].Name
+					m.logsMode = true // Enter logs mode
+					return m, m.fetchLogs()
+				}
+
+				// For multiple containers, select the first container by default
+				// TODO: In future, implement container selection UI
+				m.selectedContainer = m.selectedPod.ContainerStates[0].Name
+				m.logsMode = true // Enter logs mode
+				return m, m.fetchLogs()
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.Actions):
+			// A key opens action menu in detail views
+			if m.detailMode && !m.actionMenuMode {
+				// Check if current view supports actions
+				if m.currentView == ViewPodDetail || m.currentView == ViewNodeDetail {
+					m.actionMenuMode = true
+					m.actionMenuSelectedIndex = 0
+				}
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.Export):
+			// E key exports current view data
+			if !m.detailMode && !m.exportInProgress && !m.filterMode && !m.searchMode {
+				// Check if current view supports export
+				if m.currentView == ViewNodes || m.currentView == ViewPods ||
+					m.currentView == ViewEvents || m.currentView == ViewNetwork {
+					m.exportInProgress = true
+					return m, m.exportData(ExportCSV) // Default to CSV format
+				}
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.Sort):
+			// S key cycles through sort fields
+			if !m.detailMode && !m.filterMode {
+				switch m.currentView {
+				case ViewNodes:
+					// Cycle through: Name -> CPU -> Memory -> Pods -> Name
+					switch m.sortField {
+					case SortByName:
+						m.sortField = SortByCPU
+						m.sortOrder = SortDesc // Default to descending for numeric fields
+					case SortByCPU:
+						m.sortField = SortByMemory
+						m.sortOrder = SortDesc
+					case SortByMemory:
+						m.sortField = SortByPods
+						m.sortOrder = SortDesc
+					case SortByPods:
+						m.sortField = SortByName
+						m.sortOrder = SortAsc // Default to ascending for name
+					default:
+						m.sortField = SortByName
+						m.sortOrder = SortAsc
+					}
+				case ViewPods:
+					// Cycle through: Name -> Namespace -> Restarts -> Name
+					switch m.sortField {
+					case SortByName:
+						m.sortField = SortByNamespace
+						m.sortOrder = SortAsc
+					case SortByNamespace:
+						m.sortField = SortByRestarts
+						m.sortOrder = SortDesc
+					case SortByRestarts:
+						m.sortField = SortByName
+						m.sortOrder = SortAsc
+					default:
+						m.sortField = SortByName
+						m.sortOrder = SortAsc
+					}
+				}
+				// Reset selection after sort
+				m.selectedIndex = 0
+				m.scrollOffset = 0
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.Up):
+			// Handle action menu navigation
+			if m.actionMenuMode {
+				if m.actionMenuSelectedIndex > 0 {
+					m.actionMenuSelectedIndex--
+				}
+				return m, nil
+			}
+			if m.filterMode {
+				// Handle filter navigation
+				return m, m.handleFilterNavigation(-1)
+			}
+			if m.commandOutputMode {
+				// Scroll up in command output view
+				if m.commandOutputScroll > 0 {
+					m.commandOutputScroll--
+				}
+				return m, nil
+			}
+			if m.logsMode {
+				// Scroll up in logs view
+				if m.logsScrollOffset > 0 {
+					m.logsScrollOffset--
+					m.logsAutoScroll = false // Disable auto-scroll when user scrolls up
+				}
+				return m, nil
+			}
+			if m.detailMode {
+				// Navigate pods in Job detail view
+				if m.currentView == ViewJobDetail && m.selectedJob != nil {
+					jobPods := m.getJobPods(m.selectedJob)
+					// Limit to max 50 pods displayed
+					displayCount := len(jobPods)
+					const maxDisplay = 50
+					if displayCount > maxDisplay {
+						displayCount = maxDisplay
+					}
+					if len(jobPods) > 0 && m.jobPodSelectedIndex > 0 {
+						m.jobPodSelectedIndex--
+					}
+					return m, nil
+				}
+				// Navigate pods in Volcano Job detail view
+				if m.currentView == ViewVolcanoJobDetail && m.selectedVolcanoJob != nil {
+					volcanoJobPods := m.getVolcanoJobPods(m.selectedVolcanoJob)
+					// Limit to max 50 pods displayed
+					displayCount := len(volcanoJobPods)
+					const maxDisplay = 50
+					if displayCount > maxDisplay {
+						displayCount = maxDisplay
+					}
+					if len(volcanoJobPods) > 0 && m.volcanoJobPodSelectedIndex > 0 {
+						m.volcanoJobPodSelectedIndex--
+					}
+					return m, nil
+				}
+				// Scroll up in detail view
+				m.detailScrollBy(-1)
+				return m, nil
+			}
+			// Overview and Network views use line-based scrolling
+			if m.currentView == ViewOverview || m.currentView == ViewNetwork {
+				if m.scrollOffset > 0 {
+					m.scrollOffset--
+				}
+				return m, nil
+			}
+			// Other list views use item-based selection
+			if !m.detailMode {
+				if m.selectedIndex > 0 {
+					m.selectedIndex--
+					if m.selectedIndex < m.scrollOffset {
+						m.scrollOffset--
+					}
+				}
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.Down):
+			// Handle action menu navigation
+			if m.actionMenuMode {
+				items := m.getActionMenuItems()
+				if m.actionMenuSelectedIndex < len(items)-1 {
+					m.actionMenuSelectedIndex++
+				}
+				return m, nil
+			}
+			if m.filterMode {
+				// Handle filter navigation
+				return m, m.handleFilterNavigation(1)
+			}
+			if m.commandOutputMode {
+				// Scroll down in command output view
+				lines := strings.Split(m.commandOutputContent, "\n")
+				maxVisible := m.height - 6
+				if maxVisible < 1 {
+					maxVisible = 1
+				}
+				totalLines := len(lines)
+				maxScroll := totalLines - maxVisible
+				if maxScroll < 0 {
+					maxScroll = 0
+				}
+				if m.commandOutputScroll < maxScroll {
+					m.commandOutputScroll++
+				}
+				return m, nil
+			}
+			if m.logsMode {
+				// Scroll down in logs view - use wrapped line count for correct bounds
+				totalLines := m.getLogsDisplayLineCount()
+				maxVisible := m.height - 8
+				if maxVisible < 1 {
+					maxVisible = 1
+				}
+				maxScroll := totalLines - maxVisible
+				if maxScroll < 0 {
+					maxScroll = 0
+				}
+
+				if m.logsScrollOffset < maxScroll {
+					m.logsScrollOffset++
+
+					// Re-enable auto-scroll if user scrolls near bottom (within 5 lines)
+					if m.logsScrollOffset >= maxScroll-5 {
+						m.logsAutoScroll = true
+					}
+				}
+				return m, nil
+			}
+			if m.detailMode {
+				// Navigate pods in Job detail view
+				if m.currentView == ViewJobDetail && m.selectedJob != nil {
+					jobPods := m.getJobPods(m.selectedJob)
+					// Limit to max 50 pods displayed
+					displayCount := len(jobPods)
+					const maxDisplay = 50
+					if displayCount > maxDisplay {
+						displayCount = maxDisplay
+					}
+					if len(jobPods) > 0 && m.jobPodSelectedIndex < displayCount-1 {
+						m.jobPodSelectedIndex++
+					}
+					return m, nil
+				}
+				// Navigate pods in Volcano Job detail view
+				if m.currentView == ViewVolcanoJobDetail && m.selectedVolcanoJob != nil {
+					volcanoJobPods := m.getVolcanoJobPods(m.selectedVolcanoJob)
+					// Limit to max 50 pods displayed
+					displayCount := len(volcanoJobPods)
+					const maxDisplay = 50
+					if displayCount > maxDisplay {
+						displayCount = maxDisplay
+					}
+					if len(volcanoJobPods) > 0 && m.volcanoJobPodSelectedIndex < displayCount-1 {
+						m.volcanoJobPodSelectedIndex++
+					}
+					return m, nil
+				}
+				// Scroll down in detail view
+				m.detailScrollBy(1)
+				return m, nil
+			}
+			// Overview and Network views use line-based scrolling
+			if m.currentView == ViewOverview || m.currentView == ViewNetwork {
+				m.scrollOffset++
+				return m, nil
+			}
+			// Other list views use item-based selection
+			if !m.detailMode {
+				maxIndex := m.getMaxIndex()
+				if m.selectedIndex < maxIndex-1 {
+					m.selectedIndex++
+					maxVisible := m.height - 10
+					if m.selectedIndex >= m.scrollOffset+maxVisible {
+						m.scrollOffset++
+					}
+				}
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.PageUp):
+			// Page up: jump by a full page
+			if m.logsMode {
+				// Scroll up by a page in logs view
+				pageSize := m.height - 10
+				if pageSize < 1 {
+					pageSize = 1
+				}
+				if m.logsScrollOffset >= pageSize {
+					m.logsScrollOffset -= pageSize
+				} else {
+					m.logsScrollOffset = 0
+				}
+				m.logsAutoScroll = false // Disable auto-scroll when user pages up
+				return m, nil
+			}
+			if m.detailMode {
+				// Scroll up by a page in detail view
+				pageSize := m.height - 10
+				if pageSize < 1 {
+					pageSize = 1
+				}
+				m.detailScrollBy(-pageSize)
+				return m, nil
+			}
+			// Overview and Network views use line-based scrolling
+			if m.currentView == ViewOverview || m.currentView == ViewNetwork {
+				pageSize := m.height - 10
+				if pageSize < 1 {
+					pageSize = 1
+				}
+				if m.scrollOffset >= pageSize {
+					m.scrollOffset -= pageSize
+				} else {
+					m.scrollOffset = 0
+				}
+				return m, nil
+			}
+			// Other list views use item-based selection
+			if !m.detailMode {
+				pageSize := m.height - 10
+				if pageSize < 1 {
+					pageSize = 1
+				}
+				if m.selectedIndex >= pageSize {
+					m.selectedIndex -= pageSize
+					m.scrollOffset -= pageSize
+					if m.scrollOffset < 0 {
+						m.scrollOffset = 0
+					}
+				} else {
+					m.selectedIndex = 0
+					m.scrollOffset = 0
+				}
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.PageDown):
+			// Page down: jump by a full page
+			if m.logsMode {
+				// Scroll down by a page in logs view - use wrapped line count for correct bounds
+				pageSize := m.height - 10
+				if pageSize < 1 {
+					pageSize = 1
+				}
+
+				// Calculate bounds using wrapped line count
+				totalLines := m.getLogsDisplayLineCount()
+				maxVisible := m.height - 8
+				if maxVisible < 1 {
+					maxVisible = 1
+				}
+				maxScroll := totalLines - maxVisible
+				if maxScroll < 0 {
+					maxScroll = 0
+				}
+
+				m.logsScrollOffset += pageSize
+				if m.logsScrollOffset > maxScroll {
+					m.logsScrollOffset = maxScroll
+				}
+
+				// Re-enable auto-scroll if user pages near bottom (within 5 lines)
+				if m.logsScrollOffset >= maxScroll-5 {
+					m.logsAutoScroll = true
+				}
+
+				return m, nil
+			}
+			if m.detailMode {
+				// Scroll down by a page in detail view
+				pageSize := m.height - 10
+				if pageSize < 1 {
+					pageSize = 1
+				}
+				m.detailScrollBy(pageSize)
+				return m, nil
+			}
+			// Overview and Network views use line-based scrolling
+			if m.currentView == ViewOverview || m.currentView == ViewNetwork {
+				pageSize := m.height - 10
+				if pageSize < 1 {
+					pageSize = 1
+				}
+				m.scrollOffset += pageSize
+				return m, nil
+			}
+			// Other list views use item-based selection
+			if !m.detailMode {
+				pageSize := m.height - 10
+				if pageSize < 1 {
+					pageSize = 1
+				}
+				maxIndex := m.getMaxIndex()
+				if m.selectedIndex+pageSize < maxIndex {
+					m.selectedIndex += pageSize
+					m.scrollOffset += pageSize
+				} else {
+					m.selectedIndex = maxIndex - 1
+					maxVisible := m.height - 10
+					m.scrollOffset = maxIndex - maxVisible
+					if m.scrollOffset < 0 {
+						m.scrollOffset = 0
+					}
+				}
+			}
+			return m, nil
+
+		// Handle text input in logs search mode and search mode
+		default:
+			if m.logsSearchMode {
+				// Handle printable characters (allow more characters for log search)
+				if len(msg.String()) == 1 {
+					char := msg.String()
+					// Allow most printable characters for log search
+					if char >= " " && char <= "~" {
+						m.logsSearchText += char
+						m.logsScrollOffset = 0
+						return m, nil
+					}
+				}
+				// Handle backspace
+				if msg.Type == tea.KeyBackspace || msg.Type == tea.KeyDelete {
+					if len(m.logsSearchText) > 0 {
+						m.logsSearchText = m.logsSearchText[:len(m.logsSearchText)-1]
+						m.logsScrollOffset = 0
+					}
+					return m, nil
+				}
+				// Handle space
+				if msg.Type == tea.KeySpace {
+					m.logsSearchText += " "
+					m.logsScrollOffset = 0
+					return m, nil
+				}
+			}
+			if m.searchMode {
+				// Handle printable characters
+				if len(msg.String()) == 1 {
+					char := msg.String()
+					// Allow alphanumeric, dash, underscore, dot
+					if (char >= "a" && char <= "z") || (char >= "A" && char <= "Z") ||
+						(char >= "0" && char <= "9") || char == "-" || char == "_" || char == "." {
+						m.searchText += char
+						m.scrollOffset = 0
+						m.selectedIndex = 0
+						return m, nil
+					}
+				}
+				// Handle backspace
+				if msg.Type == tea.KeyBackspace || msg.Type == tea.KeyDelete {
+					if len(m.searchText) > 0 {
+						m.searchText = m.searchText[:len(m.searchText)-1]
+						m.scrollOffset = 0
+						m.selectedIndex = 0
+					}
+					return m, nil
+				}
+				// Handle space
+				if msg.Type == tea.KeySpace {
+					m.searchText += " "
+					m.scrollOffset = 0
+					m.selectedIndex = 0
+					return m, nil
+				}
+			}
+		}
+
+	case clusterDataMsg:
+		m.refreshInFlight = false
+		m.err = msg.err
+
+		// Only update data and counters if successful
+		if msg.err == nil && msg.data != nil {
+			m.clusterData = msg.data
+			m.lastUpdate = time.Now()
+			m.refreshCounter++
+
+			// Use the summary's LastRefreshTime (set by the refresher) to determine whether
+			// this snapshot represents new metrics. This avoids both duplicate entries
+			// and the missed-updates problem when cache returns the same pointer repeatedly.
+			var snapshotTime time.Time
+			if msg.data.Summary != nil && !msg.data.Summary.LastRefreshTime.IsZero() {
+				snapshotTime = msg.data.Summary.LastRefreshTime
+			} else {
+				snapshotTime = time.Now()
+			}
+
+			if snapshotTime.After(m.lastSnapshotTime) {
+				m.recordMetricSnapshot(msg.data)
+				m.lastSnapshotTime = snapshotTime
+			}
+
+			// Clamp selectedIndex to valid range after data refresh
+			// This must run even in detailMode, because if data changes while viewing detail,
+			// selectedIndex may point to non-existent items when user returns to list view
+			maxIndex := m.getMaxIndex()
+			if maxIndex > 0 && m.selectedIndex >= maxIndex {
+				m.selectedIndex = maxIndex - 1
+			}
+			if m.selectedIndex < 0 {
+				m.selectedIndex = 0
+			}
+		}
+
+		return m, nil
+
+	case logsMsg:
+		// Only process log messages if still in logs mode
+		// This prevents race conditions when user exits logs mode but async fetch completes
+		if !m.logsMode {
+			return m, nil
+		}
+
+		if msg.err != nil {
+			m.logsError = msg.err.Error()
+			m.containerLogs = ""
+			m.cachedLogLines = nil
+			m.cachedLogLinesSource = ""
+		} else {
+			m.logsError = ""
+			wasEmpty := m.containerLogs == ""
+			m.containerLogs = msg.logs
+
+			// Split once and cache the log lines to avoid repeated splits during rendering
+			logLines := strings.Split(m.containerLogs, "\n")
+
+			// Limit log size to prevent performance issues
+			// Keep only the last 10000 lines
+			const maxLogLines = 10000
+			if len(logLines) > maxLogLines {
+				// Keep only the last maxLogLines
+				logLines = logLines[len(logLines)-maxLogLines:]
+				m.containerLogs = strings.Join(logLines, "\n")
+			}
+
+			// Cache the split log lines for fast rendering
+			m.cachedLogLines = logLines
+			m.cachedLogLinesSource = m.containerLogs
+
+			m.logsLastUpdate = time.Now() // Update refresh timestamp
+
+			// Initialize scroll position when first receiving logs
+			if wasEmpty && m.containerLogs != "" {
+				m.initLogsScrollPosition()
+			} else if m.logsAutoScroll {
+				// Only auto-scroll if enabled and not first time
+				// Calculate the new bottom position using wrapped line count
+				maxVisible := m.height - 8
+				if maxVisible < 1 {
+					maxVisible = 1
+				}
+				totalLines := m.getLogsDisplayLineCount()
+				maxScroll := totalLines - maxVisible
+				if maxScroll < 0 {
+					maxScroll = 0
+				}
+				m.logsScrollOffset = maxScroll
+			}
+
+			// Start auto-refresh if not already running
+			if !m.logsAutoRefresh {
+				m.logsAutoRefresh = true
+				return m, m.startLogsRefresh()
+			}
+		}
+		return m, nil
+
+	case logsRefreshTickMsg:
+		// Auto-refresh logs if still in logs mode (but not in search mode)
+		// Pause refresh during search to avoid performance issues with large logs
+		if m.logsMode && m.logsAutoRefresh && !m.logsSearchMode {
+			return m, tea.Batch(
+				m.fetchLogs(),
+				m.startLogsRefresh(), // Schedule next refresh
+			)
+		}
+		// If in search mode, still schedule next tick but don't fetch
+		if m.logsMode && m.logsAutoRefresh && m.logsSearchMode {
+			return m, m.startLogsRefresh()
+		}
+		return m, nil
+
+	case exportSuccessMsg:
+		m.exportInProgress = false
+		m.exportMessage = fmt.Sprintf("✅ Exported %d items to: %s", msg.count, msg.filePath)
+		return m, tea.Tick(time.Second*3, func(time.Time) tea.Msg {
+			return clearExportMessageMsg{}
+		})
+
+	case exportErrorMsg:
+		m.exportInProgress = false
+		m.exportMessage = fmt.Sprintf("❌ Export failed: %v", msg.err)
+		return m, tea.Tick(time.Second*3, func(time.Time) tea.Msg {
+			return clearExportMessageMsg{}
+		})
+
+	case clipboardResultMsg:
+		if msg.err != nil {
+			m.exportMessage = fmt.Sprintf("❌ Copy failed: %v", msg.err)
+		} else {
+			m.exportMessage = fmt.Sprintf("✅ Copied: %s", msg.text)
+		}
+		return m, tea.Tick(time.Second*2, func(time.Time) tea.Msg {
+			return clearExportMessageMsg{}
+		})
+
+	case commandOutputMsg:
+		// Display command output in viewer mode
+		m.commandOutputMode = true
+		m.commandOutputTitle = msg.title
+		m.commandOutputContent = msg.content
+		m.commandOutputScroll = 0
+		return m, nil
+
+	case clearExportMessageMsg:
+		m.exportMessage = ""
+		return m, nil
+
+	case errMsg:
+		m.refreshInFlight = false
+		m.err = msg.err
+		return m, nil
+	}
+
+	return m, nil
+}

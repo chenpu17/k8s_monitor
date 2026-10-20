@@ -290,30 +290,30 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 
 			if hasExtendedMetrics {
 				// Column widths for extended metrics table
-			const (
-				colID     = 3
-				colAICore = 7
-				colVector = 7
-				colHBM    = 14
-				colTemp   = 6
-				colPower  = 6
-				colVolt   = 6
-				colFreq   = 7
-				colLink   = 4
-			)
+				const (
+					colID     = 3
+					colAICore = 7
+					colVector = 7
+					colHBM    = 14
+					colTemp   = 6
+					colPower  = 6
+					colVolt   = 6
+					colFreq   = 7
+					colLink   = 4
+				)
 
-			// Extended header with all metrics - HBM next to AICore
-			info = append(info, fmt.Sprintf("    %s %s %s %s %s %s %s %s %s",
-				padRight("ID", colID),
-				padRight("AICore", colAICore),
-				padRight("Vector", colVector),
-				padRight("HBM", colHBM),
-				padRight("Temp", colTemp),
-				padRight("Power", colPower),
-				padRight("Volt", colVolt),
-				padRight("Freq", colFreq),
-				padRight("Link", colLink)))
-			info = append(info, "    "+strings.Repeat("─", colID+colAICore+colVector+colHBM+colTemp+colPower+colVolt+colFreq+colLink+8))
+				// Extended header with all metrics - HBM next to AICore
+				info = append(info, fmt.Sprintf("    %s %s %s %s %s %s %s %s %s",
+					padRight("ID", colID),
+					padRight("AICore", colAICore),
+					padRight("Vector", colVector),
+					padRight("HBM", colHBM),
+					padRight("Temp", colTemp),
+					padRight("Power", colPower),
+					padRight("Volt", colVolt),
+					padRight("Freq", colFreq),
+					padRight("Link", colLink)))
+				info = append(info, "    "+strings.Repeat("─", colID+colAICore+colVector+colHBM+colTemp+colPower+colVolt+colFreq+colLink+8))
 
 				for _, chip := range node.NPUChips {
 					// Temperature with color coding

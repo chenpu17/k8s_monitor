@@ -859,48 +859,6 @@ other = "Pod"
 other = "服务"
 
 
-[overview.cluster_load_realtime]
-other = "⚡ 集群负载 - 实时状态"
-
-[overview.cpu_load]
-other = "CPU 负载："
-
-[overview.memory_load]
-other = "内存负载："
-
-[overview.network_traffic]
-other = "网络流量："
-
-[overview.usage_unavailable_show_requests]
-other = "（实际使用数据不可用，显示请求量）"
-
-[overview.requests]
-other = "请求量："
-
-[overview.cumulative]
-other = "（累计）"
-
-[overview.partial_nodes_missing_metrics]
-other = "部分节点缺少 kubelet metrics（{{.WithMetrics}}/{{.Total}}）"
-
-[overview.hint_kubelet_no_rate]
-other = "提示：kubelet 未提供速率数据"
-
-[overview.kubelet_metrics_unavailable]
-other = "kubelet metrics 不可用"
-
-[overview.hint]
-other = "提示"
-
-[overview.hint_tls_alternative]
-other = "或配置集群跳过 kubelet TLS 验证"
-
-[overview.hint_rbac_grant]
-other = "为当前凭证授予 get nodes/proxy 权限"
-
-[overview.partial_nodes_no_metrics]
-other = "部分节点未返回 kubelet 指标（{{.WithMetrics}}/{{.Total}}）"
-
 [overview.capacity]
 other = "容量："
 
@@ -1240,18 +1198,6 @@ other = "失败：{{.Count}}"
 
 [workloads.jobs.stats_active]
 other = "活跃：{{.Count}}"
-
-[workloads.jobs.active_section]
-other = "▸ 活跃任务"
-
-[workloads.jobs.failed_section]
-other = "▸ 失败任务"
-
-[workloads.jobs.completed_section]
-other = "▸ 已完成任务（最近 5 个）"
-
-[workloads.jobs.and_more]
-other = "... 还有 {{.Count}} 个已完成任务"
 
 [workloads.jobs.status_complete]
 other = "完成"
