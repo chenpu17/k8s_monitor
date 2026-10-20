@@ -11,41 +11,52 @@ import (
 	"go.uber.org/zap"
 )
 
+// defaultRefreshTimeout bounds a single refresh round when the caller does not
+// configure one, so a stalled data source cannot block the refresh loop forever.
+const defaultRefreshTimeout = 30 * time.Second
+
 // Refresher handles automatic data refresh
 type Refresher struct {
 	dataSource      *datasource.AggregatedDataSource
 	cache           *TTLCache
 	refreshInterval time.Duration
+	refreshTimeout  time.Duration
 	namespace       string
 	logger          *zap.Logger
 
-	ctx        context.Context
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
-	mu         sync.RWMutex
-	isRunning  bool
-	lastError  error
-	lastUpdate time.Time
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	mu        sync.RWMutex
+	isRunning bool
+	lastError error
 
 	// For rate calculation
 	lastSummary *model.ClusterSummary
-	lastSample time.Time
+	lastSample  time.Time
 }
 
-// NewRefresher creates a new data refresher
+// NewRefresher creates a new data refresher.
+// A refreshTimeout <= 0 falls back to defaultRefreshTimeout.
 func NewRefresher(
 	dataSource *datasource.AggregatedDataSource,
 	cache *TTLCache,
 	refreshInterval time.Duration,
+	refreshTimeout time.Duration,
 	namespace string,
 	logger *zap.Logger,
 ) *Refresher {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	if refreshTimeout <= 0 {
+		refreshTimeout = defaultRefreshTimeout
+	}
+
 	return &Refresher{
 		dataSource:      dataSource,
 		cache:           cache,
 		refreshInterval: refreshInterval,
+		refreshTimeout:  refreshTimeout,
 		namespace:       namespace,
 		logger:          logger,
 		ctx:             ctx,
@@ -64,6 +75,7 @@ func (r *Refresher) Start() error {
 
 	r.logger.Info("Starting data refresher",
 		zap.Duration("interval", r.refreshInterval),
+		zap.Duration("timeout", r.refreshTimeout),
 		zap.String("namespace", r.namespace),
 	)
 
@@ -119,13 +131,18 @@ func (r *Refresher) run() {
 	}
 }
 
-// refresh performs a single refresh operation
+// refresh performs a single refresh operation.
+// The round runs under its own deadline so that a stalled data source cannot
+// block the background refresh loop (or Stop) indefinitely.
 func (r *Refresher) refresh() {
 	r.logger.Debug("Refreshing cluster data")
 
 	startTime := time.Now()
 
-	data, err := r.dataSource.GetClusterData(r.ctx, r.namespace)
+	ctx, cancel := context.WithTimeout(r.ctx, r.refreshTimeout)
+	defer cancel()
+
+	data, err := r.dataSource.GetClusterData(ctx, r.namespace)
 	if err != nil {
 		r.mu.Lock()
 		r.lastError = err
@@ -133,6 +150,7 @@ func (r *Refresher) refresh() {
 
 		r.logger.Error("Failed to refresh cluster data",
 			zap.Error(err),
+			zap.Duration("timeout", r.refreshTimeout),
 			zap.Duration("elapsed", time.Since(startTime)),
 		)
 		return
@@ -141,7 +159,7 @@ func (r *Refresher) refresh() {
 	r.computeNetworkRates(data.Summary)
 
 	// Update cache
-	if err := r.cache.Set(r.ctx, data); err != nil {
+	if err := r.cache.Set(ctx, data); err != nil {
 		r.logger.Error("Failed to update cache",
 			zap.Error(err),
 		)
@@ -151,7 +169,6 @@ func (r *Refresher) refresh() {
 	now := time.Now()
 	r.mu.Lock()
 	r.lastError = nil
-	r.lastUpdate = now
 	if data.Summary != nil {
 		snapshot := *data.Summary
 		r.lastSummary = &snapshot
@@ -237,54 +254,4 @@ func (r *Refresher) RefreshNow() error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.lastError
-}
-
-// GetStatus returns the current refresher status
-func (r *Refresher) GetStatus() RefresherStatus {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	return RefresherStatus{
-		IsRunning:  r.isRunning,
-		LastUpdate: r.lastUpdate,
-		LastError:  r.lastError,
-		Interval:   r.refreshInterval,
-	}
-}
-
-// RefresherStatus represents the current state of the refresher
-type RefresherStatus struct {
-	IsRunning  bool
-	LastUpdate time.Time
-	LastError  error
-	Interval   time.Duration
-}
-
-// SetInterval updates the refresh interval
-func (r *Refresher) SetInterval(interval time.Duration) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	r.logger.Info("Updating refresh interval",
-		zap.Duration("old_interval", r.refreshInterval),
-		zap.Duration("new_interval", interval),
-	)
-
-	r.refreshInterval = interval
-}
-
-// SetNamespace updates the namespace filter
-func (r *Refresher) SetNamespace(namespace string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	r.logger.Info("Updating namespace filter",
-		zap.String("old_namespace", r.namespace),
-		zap.String("new_namespace", namespace),
-	)
-
-	r.namespace = namespace
-
-	// Trigger immediate refresh with new namespace
-	go r.refresh()
 }

@@ -21,6 +21,21 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// Client-side request budget for the API Server.
+//
+// client-go defaults to QPS=5 / Burst=10, which throttles the 12+ List calls a
+// single refresh issues and stretches every refresh cycle. The values below
+// keep the client-side limiter out of the way while still bounding bursts.
+const (
+	apiServerQPS   = 30
+	apiServerBurst = 60
+
+	// defaultAPIServerTimeout bounds a single API Server request when the caller
+	// does not configure one, so a hung API Server cannot block a refresh
+	// forever.
+	defaultAPIServerTimeout = 10 * time.Second
+)
+
 // APIServerClient implements DataSource using Kubernetes API Server
 type APIServerClient struct {
 	clientset *kubernetes.Clientset
@@ -36,8 +51,9 @@ type APIServerClient struct {
 	cacheValidityDuration time.Duration
 }
 
-// NewAPIServerClient creates a new API Server client
-func NewAPIServerClient(kubeconfig, context string, logger *zap.Logger) (*APIServerClient, error) {
+// NewAPIServerClient creates a new API Server client.
+// A timeout <= 0 falls back to defaultAPIServerTimeout.
+func NewAPIServerClient(kubeconfig, context string, timeout time.Duration, logger *zap.Logger) (*APIServerClient, error) {
 	var config *rest.Config
 	var err error
 
@@ -75,6 +91,16 @@ func NewAPIServerClient(kubeconfig, context string, logger *zap.Logger) (*APISer
 		}
 	}
 
+	if timeout <= 0 {
+		timeout = defaultAPIServerTimeout
+	}
+
+	// Bound every request and lift the client-side rate limit above the
+	// client-go defaults (QPS=5, Burst=10) that throttle a full refresh.
+	config.Timeout = timeout
+	config.QPS = apiServerQPS
+	config.Burst = apiServerBurst
+
 	// Create clientset
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
@@ -90,6 +116,9 @@ func NewAPIServerClient(kubeconfig, context string, logger *zap.Logger) (*APISer
 
 	logger.Info("API Server client initialized",
 		zap.String("host", config.Host),
+		zap.Duration("request_timeout", config.Timeout),
+		zap.Float32("qps", config.QPS),
+		zap.Int("burst", config.Burst),
 		zap.Duration("cache_validity", client.cacheValidityDuration),
 	)
 
