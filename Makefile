@@ -2,8 +2,9 @@
 
 # Build variables
 BINARY_NAME=k8s-monitor
-VERSION?=v0.1.0-dev
+VERSION?=v0.1.1
 BUILD_TIME=$(shell date '+%Y-%m-%d_%H:%M:%S_%Z')
+GOPATH?=$(shell go env GOPATH)
 LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)"
 
 # Go commands
@@ -68,6 +69,7 @@ run: build ## Build and run the application
 
 install: build ## Install the binary to $GOPATH/bin
 	@echo "📥 Installing $(BINARY_NAME)..."
+	@mkdir -p $(GOPATH)/bin
 	cp $(BUILD_DIR)/$(BINARY_NAME) $(GOPATH)/bin/
 	@echo "✅ Installed to $(GOPATH)/bin/$(BINARY_NAME)"
 

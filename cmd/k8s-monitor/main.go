@@ -55,10 +55,10 @@ func init() {
 	// Configure klog to suppress client-go logs in TUI mode
 	// klog writes to stderr by default, which pollutes the TUI
 	klog.InitFlags(nil)
-	flag.Set("logtostderr", "false")       // Don't log to stderr
-	flag.Set("alsologtostderr", "false")   // Don't also log to stderr
-	flag.Set("stderrthreshold", "FATAL")   // Only FATAL errors to stderr
-	flag.Set("v", "0")                     // Minimal verbosity
+	flag.Set("logtostderr", "false")     // Don't log to stderr
+	flag.Set("alsologtostderr", "false") // Don't also log to stderr
+	flag.Set("stderrthreshold", "FATAL") // Only FATAL errors to stderr
+	flag.Set("v", "0")                   // Minimal verbosity
 
 	// Add Go flags to pflag so Cobra can parse them
 	// This avoids conflicts when global flags are placed before subcommands
@@ -109,9 +109,11 @@ func runConsole(cmd *cobra.Command, args []string) error {
 		config.LogLevel = "debug"
 	}
 
-	// Override refresh interval from flag
-	if refresh, _ := cmd.Flags().GetInt("refresh"); refresh > 0 {
-		config.RefreshInterval = time.Duration(refresh) * time.Second
+	// Override refresh interval flag only if user explicitly specified it
+	if cmd.Flags().Changed("refresh") {
+		if refresh, _ := cmd.Flags().GetInt("refresh"); refresh > 0 {
+			config.RefreshInterval = time.Duration(refresh) * time.Second
+		}
 	}
 
 	// Override no-color flag
