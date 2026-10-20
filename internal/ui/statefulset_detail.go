@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yourusername/k8s-monitor/internal/model"
+	"github.com/chenpu/k8s-monitor/internal/model"
 )
 
 // renderStatefulSetDetail renders the statefulset detail view

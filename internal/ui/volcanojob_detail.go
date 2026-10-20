@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yourusername/k8s-monitor/internal/model"
+	"github.com/chenpu/k8s-monitor/internal/model"
 )
 
 // renderVolcanoJobDetail renders the Volcano job detail view

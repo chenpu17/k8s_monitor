@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/yourusername/k8s-monitor/internal/diagnostic"
-	"github.com/yourusername/k8s-monitor/internal/model"
+	"github.com/chenpu/k8s-monitor/internal/diagnostic"
+	"github.com/chenpu/k8s-monitor/internal/model"
 )
 
 // renderAlerts renders the alerts view

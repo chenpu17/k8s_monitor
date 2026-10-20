@@ -10,7 +10,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yourusername/k8s-monitor/internal/model"
+	"github.com/chenpu/k8s-monitor/internal/model"
 )
 
 // ExportFormat represents the export file format

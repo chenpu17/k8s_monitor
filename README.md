@@ -32,7 +32,7 @@ k8s-monitor is a terminal-based monitoring tool for Kubernetes clusters, designe
 #### From Source
 
 ```bash
-git clone https://github.com/yourusername/k8s-monitor.git
+git clone https://github.com/chenpu/k8s-monitor.git
 cd k8s-monitor
 make build
 sudo make install
@@ -41,7 +41,7 @@ sudo make install
 #### Using Go Install
 
 ```bash
-go install github.com/yourusername/k8s-monitor/cmd/k8s-monitor@latest
+go install github.com/chenpu/k8s-monitor/cmd/k8s-monitor@latest
 ```
 
 ### Usage
@@ -461,7 +461,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📧 Contact
 
-For questions, suggestions, or issues, please [open an issue](https://github.com/yourusername/k8s-monitor/issues) on GitHub.
+For questions, suggestions, or issues, please [open an issue](https://github.com/chenpu/k8s-monitor/issues) on GitHub.
 
 ---
 

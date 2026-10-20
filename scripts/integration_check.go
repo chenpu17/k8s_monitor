@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/yourusername/k8s-monitor/internal/datasource"
+	"github.com/chenpu/k8s-monitor/internal/datasource"
 	"k8s.io/client-go/util/homedir"
 )
 

@@ -99,7 +99,7 @@
 
 ```go
 // go.mod
-module github.com/yourusername/k8s-monitor
+module github.com/chenpu/k8s-monitor
 
 go 1.21
 

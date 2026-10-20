@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yourusername/k8s-monitor/internal/model"
+	"github.com/chenpu/k8s-monitor/internal/model"
 	corev1 "k8s.io/api/core/v1"
 )
 

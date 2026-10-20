@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yourusername/k8s-monitor/internal/diagnostic"
-	"github.com/yourusername/k8s-monitor/internal/model"
+	"github.com/chenpu/k8s-monitor/internal/diagnostic"
+	"github.com/chenpu/k8s-monitor/internal/model"
 	"go.uber.org/zap"
 )
 

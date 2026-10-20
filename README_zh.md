@@ -32,7 +32,7 @@ k8s-monitor 是一个基于终端的 Kubernetes 集群监控工具，专为需�
 #### 从源码构建
 
 ```bash
-git clone https://github.com/yourusername/k8s-monitor.git
+git clone https://github.com/chenpu/k8s-monitor.git
 cd k8s-monitor
 make build
 sudo make install
@@ -41,7 +41,7 @@ sudo make install
 #### 使用 Go Install
 
 ```bash
-go install github.com/yourusername/k8s-monitor/cmd/k8s-monitor@latest
+go install github.com/chenpu/k8s-monitor/cmd/k8s-monitor@latest
 ```
 
 ### 使用方法
@@ -461,7 +461,7 @@ make test-coverage
 
 ## 📧 联系方式
 
-如有问题、建议或问题，请在 GitHub 上[提交 issue](https://github.com/yourusername/k8s-monitor/issues)。
+如有问题、建议或问题，请在 GitHub 上[提交 issue](https://github.com/chenpu/k8s-monitor/issues)。
 
 ---
 

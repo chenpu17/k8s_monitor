@@ -625,7 +625,7 @@ k8s-monitor console --kubeconfig local-kubeconfig
 - See [README.md](../README.md) for installation instructions
 - See [CHANGELOG.md](../CHANGELOG.md) for release notes
 - Check [docs/development_plan.md](development_plan.md) for upcoming features
-- Report issues at [GitHub Issues](https://github.com/yourusername/k8s-monitor/issues)
+- Report issues at [GitHub Issues](https://github.com/chenpu/k8s-monitor/issues)
 
 ---
 

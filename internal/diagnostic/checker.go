@@ -1,7 +1,7 @@
 package diagnostic
 
 import (
-	"github.com/yourusername/k8s-monitor/internal/model"
+	"github.com/chenpu/k8s-monitor/internal/model"
 )
 
 // GetRecommendedAction returns the recommended action for a specific alert type

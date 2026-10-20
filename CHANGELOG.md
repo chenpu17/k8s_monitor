@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-10-20
+
+### Fixed
+- Overview workload counts (Deployments/StatefulSets/DaemonSets/Jobs/CronJobs) now use real list results instead of non-existent label conventions
+- Volcano job NPU resource parsing uses `resource.ParseQuantity`, fixing fractional cores ("1.5" -> 1000m) and fractional memory ("1.5Gi" -> 0)
+- NPU-Exporter client: concurrent access is mutex-protected; clusters with multiple NPU nodes skip per-node enrichment instead of fabricating data from a single node
+- Kubelet metrics: node and pod metrics now come from a single Summary API request per node (previously two)
+- API Server client: explicit REST timeout plus tuned QPS/Burst; background refresh rounds are bounded by a context deadline (`refresh.timeout`, default 30s)
+- `--refresh` only overrides the config file when actually passed on the command line
+- Detail view scrolling could stop one line short of the bottom; map-based detail sections render in sorted order so content no longer jitters on every refresh
+- Export actions snapshot the current view/data before the async command runs
+- `<no value>` placeholder in the network stats line; digit and Tab keys no longer switch views while a filter/search is active
+- Describe/YAML actions in resource detail views work again (App now proxies the data source)
+
+### Added
+- Running `k8s-monitor` without arguments launches the interactive console (the `console` subcommand still works)
+- MIT LICENSE file; module path moved to `github.com/chenpu/k8s-monitor`
+- New test suites for app/cache/datasource/ui, including a rendering-determinism oracle for detail scrolling
+
+### Changed
+- Documentation (README/README_zh/CLAUDE.md/sample config) aligned with the real viper configuration keys
+
+---
+
 ## [0.1.0] - 2025-01-14
 
 ### Overview
@@ -147,13 +171,13 @@ Flags:
 
 ```bash
 # From source
-git clone https://github.com/yourusername/k8s-monitor.git
+git clone https://github.com/chenpu/k8s-monitor.git
 cd k8s-monitor
 make build
 sudo make install
 
 # Using Go install
-go install github.com/yourusername/k8s-monitor/cmd/k8s-monitor@latest
+go install github.com/chenpu/k8s-monitor/cmd/k8s-monitor@latest
 ```
 
 ### Development Timeline
@@ -207,4 +231,6 @@ go install github.com/yourusername/k8s-monitor/cmd/k8s-monitor@latest
 
 ---
 
-[0.1.0]: https://github.com/yourusername/k8s-monitor/releases/tag/v0.1.0
+[0.1.0]: https://github.com/chenpu/k8s-monitor/releases/tag/v0.1.0
+
+[0.1.1]: https://github.com/chenpu/k8s-monitor/releases/tag/v0.1.1

@@ -7,8 +7,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yourusername/k8s-monitor/internal/i18n"
-	"github.com/yourusername/k8s-monitor/internal/model"
+	"github.com/chenpu/k8s-monitor/internal/i18n"
+	"github.com/chenpu/k8s-monitor/internal/model"
 	"go.uber.org/zap"
 )
 
