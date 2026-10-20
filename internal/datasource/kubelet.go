@@ -20,7 +20,7 @@ const (
 	defaultHTTPTimeout = 3 * time.Second // Reduced from 10s to 3s for faster failover
 )
 
-// KubeletClient implements MetricsSource using kubelet Summary API
+// KubeletClient reads node and pod metrics from the kubelet Summary API
 type KubeletClient struct {
 	httpClient *http.Client
 	config     *rest.Config
@@ -81,19 +81,42 @@ func NewKubeletClient(config *rest.Config, useProxy, insecure bool, logger *zap.
 	return client, nil
 }
 
-// GetNodeMetrics retrieves CPU/Memory/Network metrics for a node
-func (c *KubeletClient) GetNodeMetrics(ctx context.Context, nodeName string) (cpuMillicores int64, memoryBytes int64, networkRxBytes int64, networkTxBytes int64, networkTimestamp time.Time, err error) {
-	c.logger.Debug("Fetching node metrics from kubelet",
+// GetNodeAndPodsMetrics retrieves node-level CPU/Memory/Network metrics and the
+// metrics of every pod running on that node.
+//
+// The kubelet /stats/summary endpoint returns node and pod data in a single
+// response, so one call per node is all a caller needs: fetching the node
+// metrics and the pod metrics separately would hit the same heavyweight API
+// Server proxy URL twice.
+func (c *KubeletClient) GetNodeAndPodsMetrics(ctx context.Context, nodeName string) (cpuMillicores int64, memoryBytes int64, networkRxBytes int64, networkTxBytes int64, networkTimestamp time.Time, podMetrics map[string]*model.PodData, err error) {
+	c.logger.Debug("Fetching node and pod metrics from kubelet",
 		zap.String("node", nodeName),
 		zap.Bool("use_proxy", c.useProxy),
 	)
 
 	summary, err := c.fetchSummary(ctx, nodeName)
 	if err != nil {
-		return 0, 0, 0, 0, time.Time{}, fmt.Errorf("failed to fetch summary: %w", err)
+		return 0, 0, 0, 0, time.Time{}, nil, fmt.Errorf("failed to fetch summary: %w", err)
 	}
 
-	// Extract node-level metrics
+	cpuMillicores, memoryBytes, networkRxBytes, networkTxBytes, networkTimestamp = extractNodeMetrics(summary)
+	podMetrics = extractPodMetrics(summary)
+
+	c.logger.Debug("Node and pod metrics fetched successfully",
+		zap.String("node", nodeName),
+		zap.Int64("cpu_millicores", cpuMillicores),
+		zap.Int64("memory_bytes", memoryBytes),
+		zap.Int64("network_rx_bytes", networkRxBytes),
+		zap.Int64("network_tx_bytes", networkTxBytes),
+		zap.Time("network_timestamp", networkTimestamp),
+		zap.Int("pod_count", len(podMetrics)),
+	)
+
+	return cpuMillicores, memoryBytes, networkRxBytes, networkTxBytes, networkTimestamp, podMetrics, nil
+}
+
+// extractNodeMetrics extracts the node-level metrics from a kubelet summary
+func extractNodeMetrics(summary *KubeletSummary) (cpuMillicores int64, memoryBytes int64, networkRxBytes int64, networkTxBytes int64, networkTimestamp time.Time) {
 	if summary.Node.CPU != nil && summary.Node.CPU.UsageNanoCores != nil {
 		cpuMillicores = int64(*summary.Node.CPU.UsageNanoCores / 1000000) // nanocores to millicores
 	}
@@ -131,42 +154,12 @@ func (c *KubeletClient) GetNodeMetrics(ctx context.Context, nodeName string) (cp
 		}
 	}
 
-	c.logger.Debug("Node metrics fetched successfully",
-		zap.String("node", nodeName),
-		zap.Int64("cpu_millicores", cpuMillicores),
-		zap.Int64("memory_bytes", memoryBytes),
-		zap.Int64("network_rx_bytes", networkRxBytes),
-		zap.Int64("network_tx_bytes", networkTxBytes),
-		zap.Time("network_timestamp", networkTimestamp),
-	)
-
-	return cpuMillicores, memoryBytes, networkRxBytes, networkTxBytes, networkTimestamp, nil
+	return cpuMillicores, memoryBytes, networkRxBytes, networkTxBytes, networkTimestamp
 }
 
-// GetPodMetrics retrieves CPU/Memory metrics for a pod
-func (c *KubeletClient) GetPodMetrics(ctx context.Context, namespace, podName string) (cpuMillicores int64, memoryBytes int64, err error) {
-	c.logger.Debug("Fetching pod metrics from kubelet",
-		zap.String("namespace", namespace),
-		zap.String("pod", podName),
-	)
-
-	// We need to know which node the pod is on
-	// This should be provided by the caller or we need to query API Server first
-	// For now, we'll return an error indicating this limitation
-	return 0, 0, fmt.Errorf("GetPodMetrics requires node name - use GetAllPodMetrics instead")
-}
-
-// GetAllPodMetricsOnNode retrieves metrics for all pods on a specific node
-func (c *KubeletClient) GetAllPodMetricsOnNode(ctx context.Context, nodeName string) (map[string]*model.PodData, error) {
-	c.logger.Debug("Fetching all pod metrics on node",
-		zap.String("node", nodeName),
-	)
-
-	summary, err := c.fetchSummary(ctx, nodeName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch summary: %w", err)
-	}
-
+// extractPodMetrics extracts the per-pod metrics from a kubelet summary,
+// keyed by "namespace/name".
+func extractPodMetrics(summary *KubeletSummary) map[string]*model.PodData {
 	// Build map of pod metrics
 	podMetrics := make(map[string]*model.PodData)
 	for _, pod := range summary.Pods {
@@ -249,12 +242,7 @@ func (c *KubeletClient) GetAllPodMetricsOnNode(ctx context.Context, nodeName str
 		podMetrics[key] = podData
 	}
 
-	c.logger.Debug("Pod metrics fetched successfully",
-		zap.String("node", nodeName),
-		zap.Int("pod_count", len(podMetrics)),
-	)
-
-	return podMetrics, nil
+	return podMetrics
 }
 
 // fetchSummary fetches the summary from kubelet

@@ -29,21 +29,6 @@ type DataSource interface {
 	Close() error
 }
 
-// MetricsSource defines the interface for pod/node metrics providers
-type MetricsSource interface {
-	// GetNodeMetrics retrieves CPU/Memory/Network metrics for a node
-	GetNodeMetrics(ctx context.Context, nodeName string) (cpuMillicores int64, memoryBytes int64, networkRxBytes int64, networkTxBytes int64, err error)
-
-	// GetPodMetrics retrieves CPU/Memory metrics for a pod
-	GetPodMetrics(ctx context.Context, namespace, podName string) (cpuMillicores int64, memoryBytes int64, err error)
-
-	// Name returns the metrics source name
-	Name() string
-
-	// Close cleans up resources
-	Close() error
-}
-
 // Helper functions to convert Kubernetes API objects to internal models
 
 // ConvertNode converts a Kubernetes Node to NodeData
@@ -208,16 +193,16 @@ func ConvertNode(node *corev1.Node) *model.NodeData {
 			var npuMetrics struct {
 				Timestamp string `json:"timestamp"`
 				Chips     []struct {
-					NPU     int     `json:"npu"`
-					Chip    int     `json:"chip"`
-					PhyID   int     `json:"phy_id"`
-					BusID   string  `json:"bus_id"`
-					Health  string  `json:"health"`
-					Power   float64 `json:"power"`
-					Temp    int     `json:"temp"`
-					AICore  int     `json:"aicore"`
-					HBMUsed int64   `json:"hbm_used"`
-					HBMTotal int64  `json:"hbm_total"`
+					NPU      int     `json:"npu"`
+					Chip     int     `json:"chip"`
+					PhyID    int     `json:"phy_id"`
+					BusID    string  `json:"bus_id"`
+					Health   string  `json:"health"`
+					Power    float64 `json:"power"`
+					Temp     int     `json:"temp"`
+					AICore   int     `json:"aicore"`
+					HBMUsed  int64   `json:"hbm_used"`
+					HBMTotal int64   `json:"hbm_total"`
 				} `json:"chips"`
 			}
 			if err := json.Unmarshal([]byte(npuMetricsJSON), &npuMetrics); err == nil {
@@ -260,7 +245,7 @@ func ConvertNode(node *corev1.Node) *model.NodeData {
 					nodeData.NPUUtilization = totalAICore / float64(len(npuMetrics.Chips))
 					nodeData.NPUTemperature = int(totalTemp / float64(len(npuMetrics.Chips)))
 					nodeData.NPUPower = int(totalPower)
-					nodeData.NPUMemoryUsed = totalHBMUsed * 1024 * 1024 // Convert MB to bytes
+					nodeData.NPUMemoryUsed = totalHBMUsed * 1024 * 1024   // Convert MB to bytes
 					nodeData.NPUMemoryTotal = totalHBMTotal * 1024 * 1024 // Convert MB to bytes
 					if totalHBMTotal > 0 {
 						nodeData.NPUMemoryUtil = float64(totalHBMUsed) / float64(totalHBMTotal) * 100
