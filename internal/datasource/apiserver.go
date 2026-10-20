@@ -42,12 +42,8 @@ type APIServerClient struct {
 	config    *rest.Config
 	logger    *zap.Logger
 
-	// Cache for incremental updates
-	nodesResourceVersion  string
-	podsResourceVersion   string
-	eventsResourceVersion string
-	lastNodesFetch        time.Time
-	lastPodsFetch         time.Time
+	// cacheValidityDuration is reported in the initialisation log only; no
+	// refresh path gates on it, every call issues a fresh List.
 	cacheValidityDuration time.Duration
 }
 
@@ -182,7 +178,13 @@ func (c *APIServerClient) GetPods(ctx context.Context, namespace string) ([]*mod
 	return pods, nil
 }
 
-// GetEvents retrieves recent events, optionally filtered by type
+// GetEvents retrieves recent events, optionally filtered by type.
+//
+// eventTypes is applied client-side, after the List. Pass nil to keep every
+// event: corev1.Event.Type is a free-form string, so callers that need "all
+// types" cannot express it as a server-side field selector. The result is
+// ordered most-recent-first and holds at most limit events (limit <= 0 means
+// unlimited).
 func (c *APIServerClient) GetEvents(ctx context.Context, namespace string, eventTypes []string, limit int) ([]*model.EventData, error) {
 	c.logger.Debug("Fetching events from API Server",
 		zap.String("namespace", namespace),

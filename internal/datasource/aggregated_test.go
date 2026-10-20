@@ -2,6 +2,7 @@ package datasource
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/chenpu/k8s-monitor/internal/model"
@@ -280,4 +281,91 @@ func (m *mockDataSource) Name() string {
 
 func (m *mockDataSource) Close() error {
 	return nil
+}
+
+// filteringDataSource records what GetClusterData asks GetEvents for and
+// applies the same client-side type filter the real API Server client does, so
+// a test can observe whether the aggregated source drops event types before
+// they reach the summary the UI renders.
+type filteringDataSource struct {
+	events        []*model.EventData
+	gotEventTypes []string
+	gotLimit      int
+}
+
+func (f *filteringDataSource) GetNodes(context.Context) ([]*model.NodeData, error) {
+	return []*model.NodeData{}, nil
+}
+
+func (f *filteringDataSource) GetPods(context.Context, string) ([]*model.PodData, error) {
+	return []*model.PodData{}, nil
+}
+
+func (f *filteringDataSource) GetEvents(_ context.Context, _ string, eventTypes []string, limit int) ([]*model.EventData, error) {
+	f.gotEventTypes = eventTypes
+	f.gotLimit = limit
+
+	filtered := make([]*model.EventData, 0, len(f.events))
+	for _, event := range f.events {
+		if len(eventTypes) > 0 && !slices.Contains(eventTypes, event.Type) {
+			continue
+		}
+		filtered = append(filtered, event)
+	}
+	if limit > 0 && len(filtered) > limit {
+		filtered = filtered[:limit]
+	}
+	return filtered, nil
+}
+
+func (f *filteringDataSource) Name() string { return "Filtering" }
+
+func (f *filteringDataSource) Close() error { return nil }
+
+// TestGetClusterDataKeepsEveryEventType guards the events pipeline end to end.
+// The overview panel renders Summary.ErrorEvents, which buildClusterSummary
+// increments for events of type "Error". Passing a Normal/Warning type filter
+// down to GetEvents dropped exactly those events, pinning the counter at zero.
+func TestGetClusterDataKeepsEveryEventType(t *testing.T) {
+	source := &filteringDataSource{
+		events: []*model.EventData{
+			{Type: "Normal", Reason: "Scheduled"},
+			{Type: "Warning", Reason: "BackOff"},
+			{Type: "Error", Reason: "Custom"},
+		},
+	}
+
+	agg := NewAggregatedDataSource(source, nil, zap.NewNop(), 1)
+
+	data, err := agg.GetClusterData(context.Background(), "")
+	if err != nil {
+		t.Fatalf("GetClusterData returned error: %v", err)
+	}
+
+	if len(source.gotEventTypes) != 0 {
+		t.Errorf("GetClusterData requested event types %v, want no type filter: "+
+			"corev1.Event.Type is a free-form string and the summary counts \"Error\" events",
+			source.gotEventTypes)
+	}
+	if source.gotLimit != 100 {
+		t.Errorf("GetClusterData requested limit %d, want 100", source.gotLimit)
+	}
+
+	gotTypes := make([]string, 0, len(data.Events))
+	for _, event := range data.Events {
+		gotTypes = append(gotTypes, event.Type)
+	}
+	if want := []string{"Normal", "Warning", "Error"}; !slices.Equal(gotTypes, want) {
+		t.Errorf("ClusterData.Events types = %v, want %v", gotTypes, want)
+	}
+
+	if data.Summary.TotalEvents != 3 {
+		t.Errorf("Summary.TotalEvents = %d, want 3", data.Summary.TotalEvents)
+	}
+	if data.Summary.WarningEvents != 1 {
+		t.Errorf("Summary.WarningEvents = %d, want 1", data.Summary.WarningEvents)
+	}
+	if data.Summary.ErrorEvents != 1 {
+		t.Errorf("Summary.ErrorEvents = %d, want 1", data.Summary.ErrorEvents)
+	}
 }

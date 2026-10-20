@@ -74,7 +74,7 @@ func (a *AggregatedDataSource) GetEvents(ctx context.Context, namespace string, 
 
 // GetClusterData retrieves complete cluster data with metrics enrichment
 func (a *AggregatedDataSource) GetClusterData(ctx context.Context, namespace string) (*model.ClusterData, error) {
-	a.logger.Info("Fetching cluster data")
+	a.logger.Debug("Fetching cluster data")
 
 	// Fetch basic data from API Server
 	nodes, err := a.apiServer.GetNodes(ctx)
@@ -87,7 +87,12 @@ func (a *AggregatedDataSource) GetClusterData(ctx context.Context, namespace str
 		return nil, fmt.Errorf("failed to get pods: %w", err)
 	}
 
-	events, err := a.apiServer.GetEvents(ctx, namespace, []string{"Normal", "Warning"}, 100)
+	// No event-type filter is passed: corev1.Event.Type is a free-form string
+	// that the API Server does not constrain to Normal/Warning, and
+	// buildClusterSummary counts events of type "Error". Filtering here made
+	// that counter structurally unreachable, so the events it counted were the
+	// exact ones the filter dropped.
+	events, err := a.apiServer.GetEvents(ctx, namespace, nil, 100)
 	if err != nil {
 		a.logger.Warn("Failed to get events, continuing without them",
 			zap.Error(err),
@@ -230,7 +235,7 @@ func (a *AggregatedDataSource) GetClusterData(ctx context.Context, namespace str
 		VolcanoSummary: volcanoSummary,
 	}
 
-	a.logger.Info("Cluster data fetched successfully",
+	a.logger.Debug("Cluster data fetched successfully",
 		zap.Int("nodes", len(nodes)),
 		zap.Int("pods", len(pods)),
 		zap.Int("events", len(events)),
@@ -358,7 +363,7 @@ func (a *AggregatedDataSource) enrichWithKubeletMetrics(ctx context.Context, nod
 	}
 
 	wg.Wait()
-	a.logger.Info("Kubelet metrics enrichment completed",
+	a.logger.Debug("Kubelet metrics enrichment completed",
 		zap.Duration("total_elapsed", time.Since(startTime)),
 		zap.Int("nodes", len(nodes)),
 	)

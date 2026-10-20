@@ -176,7 +176,7 @@ func (r *Refresher) refresh() {
 	}
 	r.mu.Unlock()
 
-	r.logger.Info("Cluster data refreshed successfully",
+	r.logger.Debug("Cluster data refreshed successfully",
 		zap.Duration("elapsed", time.Since(startTime)),
 		zap.Int("nodes", len(data.Nodes)),
 		zap.Int("pods", len(data.Pods)),
