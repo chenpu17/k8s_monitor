@@ -120,17 +120,20 @@ func (m *Model) renderServices() string {
 		}
 	}
 
-	// Header with stats
-	header := fmt.Sprintf("%s  (%s: %d • %s: %s • %s: %s • %s: %d)",
+	// Header with stats. network.stats_detailed is a whole sentence carrying the
+	// WithEP/Without/Total template variables, so it must be rendered through TF
+	// with real values (calling T() alone leaves the placeholders as <no value>).
+	detailedStats := m.TF("network.stats_detailed", map[string]interface{}{
+		"WithEP":  StyleStatusReady.Render(fmt.Sprintf("%d", servicesWithEndpoints)),
+		"Without": StyleStatusNotReady.Render(fmt.Sprintf("%d", servicesWithoutEndpoints)),
+		"Total":   totalEndpoints,
+	})
+
+	header := fmt.Sprintf("%s  (%s: %d • %s)",
 		StyleSubHeader.Render(m.T("network.services_endpoints")),
 		m.T("common.total"),
 		totalServices,
-		m.T("network.stats_detailed"),
-		StyleStatusReady.Render(fmt.Sprintf("%d", servicesWithEndpoints)),
-		m.T("network.stats_detailed"),
-		StyleStatusNotReady.Render(fmt.Sprintf("%d", servicesWithoutEndpoints)),
-		m.T("network.endpoints"),
-		totalEndpoints,
+		detailedStats,
 	)
 	rows = append(rows, header)
 	rows = append(rows, "")

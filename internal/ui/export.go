@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/yourusername/k8s-monitor/internal/model"
 )
 
 // ExportFormat represents the export file format
@@ -65,6 +66,12 @@ func getExportDir() (string, error) {
 
 // exportData exports the current view data to a file
 func (m *Model) exportData(format ExportFormat) tea.Cmd {
+	// Snapshot the state the export reads: the returned command runs on its own
+	// goroutine while Update keeps mutating the model, so reading m.currentView
+	// or m.clusterData from inside the closure would race with the UI.
+	view := m.currentView
+	data := m.clusterData
+
 	return func() tea.Msg {
 		// Get export directory
 		exportDir, err := getExportDir()
@@ -76,19 +83,19 @@ func (m *Model) exportData(format ExportFormat) tea.Cmd {
 		var filename string
 		var exportErr error
 
-		switch m.currentView {
+		switch view {
 		case ViewNodes:
 			filename = fmt.Sprintf("k8s-nodes-%s", timestamp)
-			exportErr = m.exportNodes(exportDir, filename, format)
+			exportErr = m.exportNodes(data, exportDir, filename, format)
 		case ViewPods:
 			filename = fmt.Sprintf("k8s-pods-%s", timestamp)
-			exportErr = m.exportPods(exportDir, filename, format)
+			exportErr = m.exportPods(data, exportDir, filename, format)
 		case ViewEvents:
 			filename = fmt.Sprintf("k8s-events-%s", timestamp)
-			exportErr = m.exportEvents(exportDir, filename, format)
+			exportErr = m.exportEvents(data, exportDir, filename, format)
 		case ViewNetwork:
 			filename = fmt.Sprintf("k8s-services-%s", timestamp)
-			exportErr = m.exportServices(exportDir, filename, format)
+			exportErr = m.exportServices(data, exportDir, filename, format)
 		default:
 			return exportErrorMsg{err: fmt.Errorf("export not supported for this view")}
 		}
@@ -103,46 +110,46 @@ func (m *Model) exportData(format ExportFormat) tea.Cmd {
 			ext = ".json"
 		}
 		fullPath := filepath.Join(exportDir, filename+ext)
-		count := m.getExportCount()
+		count := m.getExportCount(view, data)
 
 		return exportSuccessMsg{filePath: fullPath, count: count}
 	}
 }
 
 // getExportCount returns the number of items exported
-func (m *Model) getExportCount() int {
-	if m.clusterData == nil {
+func (m *Model) getExportCount(view ViewType, data *model.ClusterData) int {
+	if data == nil {
 		return 0
 	}
 
-	switch m.currentView {
+	switch view {
 	case ViewNodes:
-		return len(m.clusterData.Nodes)
+		return len(data.Nodes)
 	case ViewPods:
-		return len(m.clusterData.Pods)
+		return len(data.Pods)
 	case ViewEvents:
-		return len(m.clusterData.Events)
+		return len(data.Events)
 	case ViewNetwork:
-		return len(m.clusterData.Services)
+		return len(data.Services)
 	default:
 		return 0
 	}
 }
 
 // exportNodes exports nodes data
-func (m *Model) exportNodes(exportDir, filename string, format ExportFormat) error {
-	if m.clusterData == nil || len(m.clusterData.Nodes) == 0 {
+func (m *Model) exportNodes(data *model.ClusterData, exportDir, filename string, format ExportFormat) error {
+	if data == nil || len(data.Nodes) == 0 {
 		return fmt.Errorf("no nodes data to export")
 	}
 
 	if format == ExportCSV {
-		return m.exportNodesCSV(exportDir, filename+".csv")
+		return m.exportNodesCSV(data, exportDir, filename+".csv")
 	}
-	return m.exportNodesJSON(exportDir, filename+".json")
+	return m.exportNodesJSON(data, exportDir, filename+".json")
 }
 
 // exportNodesCSV exports nodes to CSV format
-func (m *Model) exportNodesCSV(exportDir, filename string) error {
+func (m *Model) exportNodesCSV(data *model.ClusterData, exportDir, filename string) error {
 	fullPath := filepath.Join(exportDir, filename)
 	file, err := os.Create(fullPath)
 	if err != nil {
@@ -168,7 +175,7 @@ func (m *Model) exportNodesCSV(exportDir, filename string) error {
 	}
 
 	// Write data
-	for _, node := range m.clusterData.Nodes {
+	for _, node := range data.Nodes {
 		age := formatAge(time.Since(node.CreationTimestamp))
 		roles := strings.Join(node.Roles, ",")
 		if roles == "" {
@@ -193,7 +200,7 @@ func (m *Model) exportNodesCSV(exportDir, filename string) error {
 }
 
 // exportNodesJSON exports nodes to JSON format
-func (m *Model) exportNodesJSON(exportDir, filename string) error {
+func (m *Model) exportNodesJSON(data *model.ClusterData, exportDir, filename string) error {
 	fullPath := filepath.Join(exportDir, filename)
 	file, err := os.Create(fullPath)
 	if err != nil {
@@ -203,23 +210,23 @@ func (m *Model) exportNodesJSON(exportDir, filename string) error {
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(m.clusterData.Nodes)
+	return encoder.Encode(data.Nodes)
 }
 
 // exportPods exports pods data
-func (m *Model) exportPods(exportDir, filename string, format ExportFormat) error {
-	if m.clusterData == nil || len(m.clusterData.Pods) == 0 {
+func (m *Model) exportPods(data *model.ClusterData, exportDir, filename string, format ExportFormat) error {
+	if data == nil || len(data.Pods) == 0 {
 		return fmt.Errorf("no pods data to export")
 	}
 
 	if format == ExportCSV {
-		return m.exportPodsCSV(exportDir, filename+".csv")
+		return m.exportPodsCSV(data, exportDir, filename+".csv")
 	}
-	return m.exportPodsJSON(exportDir, filename+".json")
+	return m.exportPodsJSON(data, exportDir, filename+".json")
 }
 
 // exportPodsCSV exports pods to CSV format
-func (m *Model) exportPodsCSV(exportDir, filename string) error {
+func (m *Model) exportPodsCSV(data *model.ClusterData, exportDir, filename string) error {
 	fullPath := filepath.Join(exportDir, filename)
 	file, err := os.Create(fullPath)
 	if err != nil {
@@ -246,7 +253,7 @@ func (m *Model) exportPodsCSV(exportDir, filename string) error {
 	}
 
 	// Write data
-	for _, pod := range m.clusterData.Pods {
+	for _, pod := range data.Pods {
 		age := formatAge(time.Since(pod.CreationTimestamp))
 
 		record := []string{
@@ -268,7 +275,7 @@ func (m *Model) exportPodsCSV(exportDir, filename string) error {
 }
 
 // exportPodsJSON exports pods to JSON format
-func (m *Model) exportPodsJSON(exportDir, filename string) error {
+func (m *Model) exportPodsJSON(data *model.ClusterData, exportDir, filename string) error {
 	fullPath := filepath.Join(exportDir, filename)
 	file, err := os.Create(fullPath)
 	if err != nil {
@@ -278,23 +285,23 @@ func (m *Model) exportPodsJSON(exportDir, filename string) error {
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(m.clusterData.Pods)
+	return encoder.Encode(data.Pods)
 }
 
 // exportEvents exports events data
-func (m *Model) exportEvents(exportDir, filename string, format ExportFormat) error {
-	if m.clusterData == nil || len(m.clusterData.Events) == 0 {
+func (m *Model) exportEvents(data *model.ClusterData, exportDir, filename string, format ExportFormat) error {
+	if data == nil || len(data.Events) == 0 {
 		return fmt.Errorf("no events data to export")
 	}
 
 	if format == ExportCSV {
-		return m.exportEventsCSV(exportDir, filename+".csv")
+		return m.exportEventsCSV(data, exportDir, filename+".csv")
 	}
-	return m.exportEventsJSON(exportDir, filename+".json")
+	return m.exportEventsJSON(data, exportDir, filename+".json")
 }
 
 // exportEventsCSV exports events to CSV format
-func (m *Model) exportEventsCSV(exportDir, filename string) error {
+func (m *Model) exportEventsCSV(data *model.ClusterData, exportDir, filename string) error {
 	fullPath := filepath.Join(exportDir, filename)
 	file, err := os.Create(fullPath)
 	if err != nil {
@@ -312,7 +319,7 @@ func (m *Model) exportEventsCSV(exportDir, filename string) error {
 	}
 
 	// Write data
-	for _, event := range m.clusterData.Events {
+	for _, event := range data.Events {
 		age := formatAge(time.Since(event.LastTimestamp))
 
 		record := []string{
@@ -332,7 +339,7 @@ func (m *Model) exportEventsCSV(exportDir, filename string) error {
 }
 
 // exportEventsJSON exports events to JSON format
-func (m *Model) exportEventsJSON(exportDir, filename string) error {
+func (m *Model) exportEventsJSON(data *model.ClusterData, exportDir, filename string) error {
 	fullPath := filepath.Join(exportDir, filename)
 	file, err := os.Create(fullPath)
 	if err != nil {
@@ -342,23 +349,23 @@ func (m *Model) exportEventsJSON(exportDir, filename string) error {
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(m.clusterData.Events)
+	return encoder.Encode(data.Events)
 }
 
 // exportServices exports services data
-func (m *Model) exportServices(exportDir, filename string, format ExportFormat) error {
-	if m.clusterData == nil || len(m.clusterData.Services) == 0 {
+func (m *Model) exportServices(data *model.ClusterData, exportDir, filename string, format ExportFormat) error {
+	if data == nil || len(data.Services) == 0 {
 		return fmt.Errorf("no services data to export")
 	}
 
 	if format == ExportCSV {
-		return m.exportServicesCSV(exportDir, filename+".csv")
+		return m.exportServicesCSV(data, exportDir, filename+".csv")
 	}
-	return m.exportServicesJSON(exportDir, filename+".json")
+	return m.exportServicesJSON(data, exportDir, filename+".json")
 }
 
 // exportServicesCSV exports services to CSV format
-func (m *Model) exportServicesCSV(exportDir, filename string) error {
+func (m *Model) exportServicesCSV(data *model.ClusterData, exportDir, filename string) error {
 	fullPath := filepath.Join(exportDir, filename)
 	file, err := os.Create(fullPath)
 	if err != nil {
@@ -376,7 +383,7 @@ func (m *Model) exportServicesCSV(exportDir, filename string) error {
 	}
 
 	// Write data
-	for _, svc := range m.clusterData.Services {
+	for _, svc := range data.Services {
 		age := formatAge(time.Since(svc.CreationTimestamp))
 
 		// Format external IPs
@@ -413,7 +420,7 @@ func (m *Model) exportServicesCSV(exportDir, filename string) error {
 }
 
 // exportServicesJSON exports services to JSON format
-func (m *Model) exportServicesJSON(exportDir, filename string) error {
+func (m *Model) exportServicesJSON(data *model.ClusterData, exportDir, filename string) error {
 	fullPath := filepath.Join(exportDir, filename)
 	file, err := os.Create(fullPath)
 	if err != nil {
@@ -423,5 +430,5 @@ func (m *Model) exportServicesJSON(exportDir, filename string) error {
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(m.clusterData.Services)
+	return encoder.Encode(data.Services)
 }

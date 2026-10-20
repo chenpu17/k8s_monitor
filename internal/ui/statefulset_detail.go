@@ -149,7 +149,8 @@ func (m *Model) renderStatefulSetSelector(sts *model.StatefulSetData) string {
 	if len(sts.Selector) == 0 {
 		info = append(info, StyleTextMuted.Render("  No selector configured"))
 	} else {
-		for key, value := range sts.Selector {
+		for _, key := range sortedKeys(sts.Selector) {
+			value := sts.Selector[key]
 			info = append(info, fmt.Sprintf("  %s: %s",
 				StyleTextSecondary.Render(key),
 				value))
@@ -163,7 +164,8 @@ func (m *Model) renderStatefulSetSelector(sts *model.StatefulSetData) string {
 	if len(sts.Labels) == 0 {
 		info = append(info, StyleTextMuted.Render("  No labels"))
 	} else {
-		for key, value := range sts.Labels {
+		for _, key := range sortedKeys(sts.Labels) {
+			value := sts.Labels[key]
 			info = append(info, fmt.Sprintf("  %s: %s",
 				StyleTextSecondary.Render(key),
 				value))

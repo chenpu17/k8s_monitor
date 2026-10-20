@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
@@ -193,9 +192,9 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 
 			if !ok {
 				return commandOutputMsg{
-					title: "Error",
+					title:   "Error",
 					content: "API client does not support describe functionality",
-					err: fmt.Errorf("unsupported operation"),
+					err:     fmt.Errorf("unsupported operation"),
 				}
 			}
 
@@ -208,9 +207,9 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 
 			if err != nil {
 				return commandOutputMsg{
-					title: "Describe Error",
+					title:   "Describe Error",
 					content: err.Error(),
-					err: err,
+					err:     err,
 				}
 			}
 
@@ -222,7 +221,7 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 			}
 
 			return commandOutputMsg{
-				title: title,
+				title:   title,
 				content: content,
 			}
 		}
@@ -241,9 +240,9 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 
 			if !ok {
 				return commandOutputMsg{
-					title: "Error",
+					title:   "Error",
 					content: "API client does not support YAML export",
-					err: fmt.Errorf("unsupported operation"),
+					err:     fmt.Errorf("unsupported operation"),
 				}
 			}
 
@@ -256,9 +255,9 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 
 			if err != nil {
 				return commandOutputMsg{
-					title: "Get YAML Error",
+					title:   "Get YAML Error",
 					content: err.Error(),
-					err: err,
+					err:     err,
 				}
 			}
 
@@ -270,7 +269,7 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 			}
 
 			return commandOutputMsg{
-				title: title,
+				title:   title,
 				content: content,
 			}
 		}
@@ -284,31 +283,12 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 		}
 
 		if name != "" {
-			// Actually copy to clipboard
-			err := clipboard.WriteAll(name)
-			if err != nil {
-				m.exportMessage = fmt.Sprintf("❌ Copy failed: %v", err)
-			} else {
-				m.exportMessage = fmt.Sprintf("✅ Copied: %s", name)
-			}
-			return tea.Tick(time.Second*2, func(time.Time) tea.Msg {
-				return clearExportMessageMsg{}
-			})
+			return copyToClipboard(name)
 		}
 
 	case ActionCopyNamespaceName:
 		if m.selectedPod != nil {
-			fullName := fmt.Sprintf("%s/%s", m.selectedPod.Namespace, m.selectedPod.Name)
-			// Actually copy to clipboard
-			err := clipboard.WriteAll(fullName)
-			if err != nil {
-				m.exportMessage = fmt.Sprintf("❌ Copy failed: %v", err)
-			} else {
-				m.exportMessage = fmt.Sprintf("✅ Copied: %s", fullName)
-			}
-			return tea.Tick(time.Second*2, func(time.Time) tea.Msg {
-				return clearExportMessageMsg{}
-			})
+			return copyToClipboard(fmt.Sprintf("%s/%s", m.selectedPod.Namespace, m.selectedPod.Name))
 		}
 
 	case ActionShowEvents:
@@ -327,6 +307,21 @@ type commandOutputMsg struct {
 	title   string
 	content string
 	err     error
+}
+
+// clipboardResultMsg is sent when an asynchronous clipboard write finishes
+type clipboardResultMsg struct {
+	text string
+	err  error
+}
+
+// copyToClipboard writes text to the system clipboard. On Linux the clipboard
+// libraries spawn a helper process (xclip/xsel), which can block for a long
+// time, so the write must not run on the UI goroutine.
+func copyToClipboard(text string) tea.Cmd {
+	return func() tea.Msg {
+		return clipboardResultMsg{text: text, err: clipboard.WriteAll(text)}
+	}
 }
 
 // clearExportMessageMsg is sent to clear the export message

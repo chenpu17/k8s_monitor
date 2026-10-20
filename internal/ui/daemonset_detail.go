@@ -155,7 +155,8 @@ func (m *Model) renderDaemonSetSelector(ds *model.DaemonSetData) string {
 	if len(ds.Selector) == 0 {
 		info = append(info, StyleTextMuted.Render("  No selector configured"))
 	} else {
-		for key, value := range ds.Selector {
+		for _, key := range sortedKeys(ds.Selector) {
+			value := ds.Selector[key]
 			info = append(info, fmt.Sprintf("  %s: %s",
 				StyleTextSecondary.Render(key),
 				value))
@@ -169,7 +170,8 @@ func (m *Model) renderDaemonSetSelector(ds *model.DaemonSetData) string {
 	if len(ds.Labels) == 0 {
 		info = append(info, StyleTextMuted.Render("  No labels"))
 	} else {
-		for key, value := range ds.Labels {
+		for _, key := range sortedKeys(ds.Labels) {
+			value := ds.Labels[key]
 			info = append(info, fmt.Sprintf("  %s: %s",
 				StyleTextSecondary.Render(key),
 				value))

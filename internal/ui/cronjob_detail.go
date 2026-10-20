@@ -174,7 +174,8 @@ func (m *Model) renderCronJobSelector(cj *model.CronJobData) string {
 	if len(cj.Labels) == 0 {
 		info = append(info, StyleTextMuted.Render("  No labels"))
 	} else {
-		for key, value := range cj.Labels {
+		for _, key := range sortedKeys(cj.Labels) {
+			value := cj.Labels[key]
 			info = append(info, fmt.Sprintf("  %s: %s",
 				StyleTextSecondary.Render(key),
 				value))

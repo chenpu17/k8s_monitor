@@ -225,7 +225,8 @@ func (m *Model) renderServiceSelector(svc *model.ServiceData) string {
 	if len(svc.Selector) == 0 {
 		info = append(info, StyleTextMuted.Render("  No selector configured"))
 	} else {
-		for key, value := range svc.Selector {
+		for _, key := range sortedKeys(svc.Selector) {
+			value := svc.Selector[key]
 			info = append(info, fmt.Sprintf("  %s: %s",
 				StyleTextSecondary.Render(key),
 				value))
@@ -239,7 +240,8 @@ func (m *Model) renderServiceSelector(svc *model.ServiceData) string {
 	if len(svc.Labels) == 0 {
 		info = append(info, StyleTextMuted.Render("  No labels"))
 	} else {
-		for key, value := range svc.Labels {
+		for _, key := range sortedKeys(svc.Labels) {
+			value := svc.Labels[key]
 			info = append(info, fmt.Sprintf("  %s: %s",
 				StyleTextSecondary.Render(key),
 				value))

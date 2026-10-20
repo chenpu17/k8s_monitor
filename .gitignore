@@ -39,3 +39,6 @@ config/*.local.yaml
 # Temporary files
 /tmp/
 *.tmp
+
+# Verification screenshots
+.ui-shots/

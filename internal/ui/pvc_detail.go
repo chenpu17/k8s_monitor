@@ -97,7 +97,8 @@ func (m *Model) renderPVCDetail() string {
 		lines = append(lines, "")
 		lines = append(lines, StyleSubHeader.Render("🏷️  Labels"))
 		lines = append(lines, renderSeparator(m.width))
-		for key, value := range pvc.Labels {
+		for _, key := range sortedKeys(pvc.Labels) {
+			value := pvc.Labels[key]
 			if len(key)+len(value) > 70 {
 				lines = append(lines, fmt.Sprintf("  %s: %s...", key, value[:60]))
 			} else {
@@ -112,7 +113,8 @@ func (m *Model) renderPVCDetail() string {
 		lines = append(lines, StyleSubHeader.Render("📝 Annotations"))
 		lines = append(lines, renderSeparator(m.width))
 		count := 0
-		for key, value := range pvc.Annotations {
+		for _, key := range sortedKeys(pvc.Annotations) {
+			value := pvc.Annotations[key]
 			if count >= 5 {
 				lines = append(lines, StyleTextMuted.Render(fmt.Sprintf("  ... and %d more", len(pvc.Annotations)-5)))
 				break

@@ -13,7 +13,7 @@ import (
 func (m *Model) renderNodes() string {
 	nodes := m.getFilteredNodes()
 	if len(nodes) == 0 {
-		return m.T("views.nodes.no_nodes")
+		return m.T("msg.no_nodes")
 	}
 
 	// Sort nodes before rendering and cache

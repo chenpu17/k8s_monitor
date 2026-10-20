@@ -171,7 +171,8 @@ func (m *Model) renderDeploymentSelector(deploy *model.DeploymentData) string {
 	if len(deploy.Selector) == 0 {
 		info = append(info, StyleTextMuted.Render("  No selector configured"))
 	} else {
-		for key, value := range deploy.Selector {
+		for _, key := range sortedKeys(deploy.Selector) {
+			value := deploy.Selector[key]
 			info = append(info, fmt.Sprintf("  %s: %s",
 				StyleTextSecondary.Render(key),
 				value))
@@ -185,7 +186,8 @@ func (m *Model) renderDeploymentSelector(deploy *model.DeploymentData) string {
 	if len(deploy.Labels) == 0 {
 		info = append(info, StyleTextMuted.Render("  No labels"))
 	} else {
-		for key, value := range deploy.Labels {
+		for _, key := range sortedKeys(deploy.Labels) {
+			value := deploy.Labels[key]
 			info = append(info, fmt.Sprintf("  %s: %s",
 				StyleTextSecondary.Render(key),
 				value))

@@ -79,8 +79,8 @@ type MetricSnapshot struct {
 	Timestamp   time.Time
 
 	// Cluster-wide NPU summary
-	ClusterNPUCapacity   int64 // Total NPU capacity across all nodes
-	ClusterNPUAllocated  int64 // Total NPUs allocated to pods
+	ClusterNPUCapacity    int64 // Total NPU capacity across all nodes
+	ClusterNPUAllocated   int64 // Total NPUs allocated to pods
 	ClusterNPUAllocatable int64 // Total allocatable NPUs
 }
 
@@ -93,8 +93,8 @@ type NodeMetric struct {
 	Timestamp      time.Time // Kubelet-provided timestamp for accurate rate calculation
 
 	// NPU metrics (Ascend AI accelerators)
-	NPUCapacity   int64 // Total NPU capacity on this node
-	NPUAllocated  int64 // NPUs allocated to pods on this node
+	NPUCapacity    int64 // Total NPU capacity on this node
+	NPUAllocated   int64 // NPUs allocated to pods on this node
 	NPUAllocatable int64 // Allocatable NPUs on this node
 }
 
@@ -154,10 +154,10 @@ type Model struct {
 	selectedSuperPod    *SuperPodInfo          // Currently selected SuperPod for detail view
 
 	// Job pod selection state
-	jobPodSelectedIndex         int  // Selected pod index in job detail view
-	volcanoJobPodSelectedIndex  int  // Selected pod index in volcano job detail view
-	fromJobDetail               bool // True when navigating from job detail to pod detail
-	fromVolcanoJobDetail        bool // True when navigating from volcano job detail to pod detail
+	jobPodSelectedIndex        int  // Selected pod index in job detail view
+	volcanoJobPodSelectedIndex int  // Selected pod index in volcano job detail view
+	fromJobDetail              bool // True when navigating from job detail to pod detail
+	fromVolcanoJobDetail       bool // True when navigating from volcano job detail to pod detail
 
 	// Filter state
 	filterMode      bool   // True when in filter mode
@@ -483,7 +483,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Number keys for quick view switching
 		case msg.String() == "1":
-			if !m.detailMode {
+			if !m.detailMode && !m.filterMode {
 				m.currentView = ViewOverview
 				m.scrollOffset = 0
 				m.selectedIndex = 0
@@ -491,7 +491,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case msg.String() == "2":
-			if !m.detailMode {
+			if !m.detailMode && !m.filterMode {
 				m.currentView = ViewNodes
 				m.scrollOffset = 0
 				m.selectedIndex = 0
@@ -499,7 +499,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case msg.String() == "3":
-			if !m.detailMode {
+			if !m.detailMode && !m.filterMode {
 				m.currentView = ViewPods
 				m.scrollOffset = 0
 				m.selectedIndex = 0
@@ -507,7 +507,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case msg.String() == "4":
-			if !m.detailMode {
+			if !m.detailMode && !m.filterMode {
 				m.currentView = ViewWorkloads
 				m.scrollOffset = 0
 				m.selectedIndex = 0
@@ -515,7 +515,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case msg.String() == "5":
-			if !m.detailMode {
+			if !m.detailMode && !m.filterMode {
 				m.currentView = ViewNetwork
 				m.scrollOffset = 0
 				m.selectedIndex = 0
@@ -523,7 +523,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case msg.String() == "6":
-			if !m.detailMode {
+			if !m.detailMode && !m.filterMode {
 				m.currentView = ViewStorage
 				m.scrollOffset = 0
 				m.selectedIndex = 0
@@ -531,7 +531,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case msg.String() == "7":
-			if !m.detailMode {
+			if !m.detailMode && !m.filterMode {
 				m.currentView = ViewEvents
 				m.scrollOffset = 0
 				m.selectedIndex = 0
@@ -539,7 +539,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case msg.String() == "8":
-			if !m.detailMode {
+			if !m.detailMode && !m.filterMode {
 				m.currentView = ViewAlerts
 				m.scrollOffset = 0
 				m.selectedIndex = 0
@@ -548,7 +548,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case msg.String() == "9":
 			// Only switch to Queues view if Volcano is available
-			if !m.detailMode && m.hasVolcanoQueues() {
+			if !m.detailMode && !m.filterMode && m.hasVolcanoQueues() {
 				m.currentView = ViewQueues
 				m.scrollOffset = 0
 				m.selectedIndex = 0
@@ -557,7 +557,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case msg.String() == "0":
 			// Only switch to Topology view if SuperPod info is available
-			if !m.detailMode && m.hasSuperPodTopology() {
+			if !m.detailMode && !m.filterMode && m.hasSuperPodTopology() {
 				m.currentView = ViewTopology
 				m.scrollOffset = 0
 				m.selectedIndex = 0
@@ -566,16 +566,28 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.Tab):
 			// Tab key switches views in list mode
-			if !m.detailMode {
-				// Determine max views based on available features
-				maxViews := 8 // Base: Overview, Nodes, Pods, Workloads, Network, Storage, Events, Alerts
+			if !m.detailMode && !m.filterMode {
+				// Build the list of currently available views; must stay in sync with renderViewTabs
+				views := []ViewType{
+					ViewOverview, ViewNodes, ViewPods, ViewWorkloads,
+					ViewNetwork, ViewStorage, ViewEvents, ViewAlerts,
+				}
 				if m.hasVolcanoQueues() {
-					maxViews = 9 // Include ViewQueues
+					views = append(views, ViewQueues)
 				}
 				if m.hasSuperPodTopology() {
-					maxViews = 10 // Include ViewTopology
+					views = append(views, ViewTopology)
 				}
-				m.currentView = (m.currentView + 1) % ViewType(maxViews)
+
+				// Advance to the next available view, wrapping around
+				next := views[0]
+				for i, v := range views {
+					if v == m.currentView {
+						next = views[(i+1)%len(views)]
+						break
+					}
+				}
+				m.currentView = next
 				m.scrollOffset = 0 // Reset scroll when switching views
 				m.selectedIndex = 0
 			}
@@ -611,7 +623,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.jobPodSelectedIndex < displayCount && m.jobPodSelectedIndex < len(jobPods) {
 					m.selectedPod = jobPods[m.jobPodSelectedIndex]
 					m.currentView = ViewPodDetail
-					m.detailMode = true  // BUGFIX: Must set detailMode to true for "l" key to work
+					m.detailMode = true // BUGFIX: Must set detailMode to true for "l" key to work
 					m.fromJobDetail = true
 					m.detailScrollOffset = 0
 				}
@@ -986,7 +998,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.selectedPod = selectedPod
 					m.selectedContainer = selectedPod.ContainerStates[0].Name
 					m.logsMode = true // Enter logs mode
-						return m, m.fetchLogs()
+					return m, m.fetchLogs()
 				}
 				return m, nil
 			}
@@ -1008,7 +1020,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// TODO: In future, implement container selection UI
 				m.selectedContainer = m.selectedPod.ContainerStates[0].Name
 				m.logsMode = true // Enter logs mode
-					return m, m.fetchLogs()
+				return m, m.fetchLogs()
 			}
 			return m, nil
 
@@ -1138,9 +1150,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				// Scroll up in detail view
-				if m.detailScrollOffset > 0 {
-					m.detailScrollOffset--
-				}
+				m.detailScrollBy(-1)
 				return m, nil
 			}
 			// Overview and Network views use line-based scrolling
@@ -1243,7 +1253,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				// Scroll down in detail view
-				m.detailScrollOffset++
+				m.detailScrollBy(1)
 				return m, nil
 			}
 			// Overview and Network views use line-based scrolling
@@ -1286,11 +1296,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if pageSize < 1 {
 					pageSize = 1
 				}
-				if m.detailScrollOffset >= pageSize {
-					m.detailScrollOffset -= pageSize
-				} else {
-					m.detailScrollOffset = 0
-				}
+				m.detailScrollBy(-pageSize)
 				return m, nil
 			}
 			// Overview and Network views use line-based scrolling
@@ -1363,7 +1369,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if pageSize < 1 {
 					pageSize = 1
 				}
-				m.detailScrollOffset += pageSize
+				m.detailScrollBy(pageSize)
 				return m, nil
 			}
 			// Overview and Network views use line-based scrolling
@@ -1584,6 +1590,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return clearExportMessageMsg{}
 		})
 
+	case clipboardResultMsg:
+		if msg.err != nil {
+			m.exportMessage = fmt.Sprintf("❌ Copy failed: %v", msg.err)
+		} else {
+			m.exportMessage = fmt.Sprintf("✅ Copied: %s", msg.text)
+		}
+		return m, tea.Tick(time.Second*2, func(time.Time) tea.Msg {
+			return clearExportMessageMsg{}
+		})
+
 	case commandOutputMsg:
 		// Display command output in viewer mode
 		m.commandOutputMode = true
@@ -1713,6 +1729,164 @@ func (m *Model) View() string {
 	}
 
 	return result
+}
+
+// renderDetailContent renders the content of the current detail view.
+func (m *Model) renderDetailContent() string {
+	switch m.currentView {
+	case ViewNodeDetail:
+		return m.renderNodeDetail()
+	case ViewPodDetail:
+		return m.renderPodDetail()
+	case ViewEventDetail:
+		return m.renderEventDetail()
+	case ViewJobDetail:
+		return m.renderJobDetail()
+	case ViewServiceDetail:
+		return m.renderServiceDetail()
+	case ViewDeploymentDetail:
+		return m.renderDeploymentDetail()
+	case ViewStatefulSetDetail:
+		return m.renderStatefulSetDetail()
+	case ViewDaemonSetDetail:
+		return m.renderDaemonSetDetail()
+	case ViewCronJobDetail:
+		return m.renderCronJobDetail()
+	case ViewPVDetail:
+		return m.renderPVDetail()
+	case ViewPVCDetail:
+		return m.renderPVCDetail()
+	case ViewVolcanoJobDetail:
+		return m.renderVolcanoJobDetail()
+	case ViewQueueDetail:
+		return m.renderQueueDetail()
+	case ViewTopologyDetail:
+		return m.renderSuperPodDetail()
+	default:
+		return ""
+	}
+}
+
+// renderDetailAt renders the content of the current detail view at the given
+// scroll offset, leaving the model's own offset untouched.
+func (m *Model) renderDetailAt(offset int) string {
+	saved := m.detailScrollOffset
+	m.detailScrollOffset = offset
+	content := m.renderDetailContent()
+	m.detailScrollOffset = saved
+	return content
+}
+
+// sortedKeys returns the keys of a map in a stable order. Detail renderers that
+// walk a map directly produce a different line order on every render (Go
+// randomises map iteration), which makes the labels/annotations block flicker on
+// every refresh and leaves the scroll clamp without a deterministic view to
+// compare against.
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// detailWindowKey canonicalises a rendered detail window so that two renders of
+// the same window compare equal. The renderers sort the map keys they display,
+// but a renderer that walks a map unsorted would come out in a different line
+// order on every render; comparing the sorted lines keeps that noise from being
+// mistaken for scroll movement.
+func detailWindowKey(content string) string {
+	lines := strings.Split(content, "\n")
+	sort.Strings(lines)
+	return strings.Join(lines, "\n")
+}
+
+// detailViewMoves reports whether the detail renderer produces different content
+// for the given offset and the next one, i.e. whether the view still travels
+// between the two. The renderers clamp the offset they are handed to their own
+// maximum, so the bottom page and everything past it render the same window and
+// this returns false from the bottom page onwards.
+func (m *Model) detailViewMoves(offset int) bool {
+	if offset < 0 {
+		return false
+	}
+	return detailWindowKey(m.renderDetailAt(offset)) != detailWindowKey(m.renderDetailAt(offset+1))
+}
+
+// detailOffsetValid reports whether the detail renderer honours the given
+// offset, i.e. whether that offset is a scroll position inside the content. The
+// offset is valid when the view travelled on the way to it (or when it is the
+// first line). detailViewMoves alone cannot be used as the validity test: it is
+// false at the bottom page itself (the renderer clamps the next offset back onto
+// the same window), which would put the bottom page - and with it the last line
+// of the content - out of reach.
+func (m *Model) detailOffsetValid(offset int) bool {
+	if offset <= 0 {
+		return true
+	}
+	return m.detailViewMoves(offset - 1)
+}
+
+// detailScrollTarget returns the largest valid offset in [from, to], where from
+// is an offset known to be valid. Valid offsets form a prefix of the range, so
+// the boundary can be found by bisection.
+func (m *Model) detailScrollTarget(from, to int) int {
+	if from < 0 {
+		from = 0
+	}
+	if to <= from {
+		return from
+	}
+	if m.detailOffsetValid(to) {
+		return to
+	}
+
+	// The content ends somewhere between from and to; find where.
+	lo, hi := from, to
+	for lo+1 < hi {
+		mid := lo + (hi-lo)/2
+		if m.detailOffsetValid(mid) {
+			lo = mid
+		} else {
+			hi = mid
+		}
+	}
+	return lo
+}
+
+// detailScrollLimit returns the offset the detail renderer actually displays for
+// the given offset. The model's offset can sit past the end of the content when
+// the content shrinks underneath it (a refresh can shorten a detail view), and
+// the renderer then shows the last page for any of those offsets.
+func (m *Model) detailScrollLimit(offset int) int {
+	if offset <= 0 {
+		return 0
+	}
+	if m.detailOffsetValid(offset) {
+		return offset // still inside the content
+	}
+	// The offset is past the end: the renderer shows the last page.
+	return m.detailScrollTarget(0, offset)
+}
+
+// detailScrollBy moves the detail view scroll offset by delta lines without ever
+// stepping past the end of the content. Scrolling down is bounded by probing the
+// renderer for the last valid offset; scrolling up starts from the offset that is
+// actually on screen, so a single ↑ always moves the view exactly one line - also
+// after the offset had been left dangling past the end by a content refresh.
+func (m *Model) detailScrollBy(delta int) {
+	if delta < 0 {
+		offset := m.detailScrollLimit(m.detailScrollOffset) + delta
+		if offset < 0 {
+			offset = 0
+		}
+		m.detailScrollOffset = offset
+		return
+	}
+	// A dangling offset means the view already shows the last page, so scrolling
+	// down is a no-op until ↑ normalizes the offset.
+	m.detailScrollOffset = m.detailScrollTarget(m.detailScrollOffset, m.detailScrollOffset+delta)
 }
 
 // renderHeader renders the header
@@ -1885,9 +2059,9 @@ func (m *Model) renderViewTabs() string {
 	}
 
 	type viewTab struct {
-		number int
+		number  int
 		nameKey string
-		view   ViewType
+		view    ViewType
 	}
 
 	tabs := []viewTab{
@@ -2025,7 +2199,7 @@ func (m *Model) initLogsScrollPosition() {
 		maxScroll = 0
 	}
 	m.logsScrollOffset = maxScroll // Start at bottom
-	m.logsAutoScroll = true         // Enable auto-scroll by default
+	m.logsAutoScroll = true        // Enable auto-scroll by default
 }
 
 // getLogsDisplayLineCount calculates the total number of display lines after wrapping

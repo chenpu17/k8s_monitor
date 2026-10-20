@@ -13,7 +13,7 @@ import (
 func (m *Model) renderPods() string {
 	pods := m.getFilteredPods()
 	if len(pods) == 0 {
-		return m.T("views.pods.no_pods")
+		return m.T("msg.no_pods")
 	}
 
 	// Sort pods and cache
