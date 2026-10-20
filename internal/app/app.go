@@ -82,6 +82,14 @@ func (a *App) Run() error {
 func (a *App) startUI() error {
 	a.logger.Info("Starting UI", zap.String("locale", a.config.Locale))
 
+	// Must run before the first render: styles are package-level and bound to
+	// the lipgloss default renderer, whose color profile is cached on first use
+	if a.config.NoColor {
+		ui.SetColorMode("never")
+	} else {
+		ui.SetColorMode(a.config.ColorMode)
+	}
+
 	uiModel := ui.NewModel(a, a.logger, a.config.RefreshInterval, a.config.Locale, a.version, a.config.LogTailLines)
 	p := tea.NewProgram(uiModel, tea.WithAltScreen())
 
