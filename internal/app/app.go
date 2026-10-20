@@ -97,7 +97,7 @@ func (a *App) initDataSources() error {
 	a.logger.Info("Initializing data sources")
 
 	// Create API Server client
-	apiServer, err := datasource.NewAPIServerClient(a.config.Kubeconfig, a.config.Context, a.logger)
+	apiServer, err := datasource.NewAPIServerClient(a.config.Kubeconfig, a.config.Context, a.config.Timeout, a.logger)
 	if err != nil {
 		return fmt.Errorf("failed to create API Server client: %w", err)
 	}
@@ -146,6 +146,7 @@ func (a *App) initDataSources() error {
 		a.dataSource,
 		a.cache,
 		a.config.RefreshInterval,
+		a.config.Timeout,
 		a.config.Namespace,
 		a.logger,
 	)
@@ -172,6 +173,38 @@ func (a *App) GetPodLogs(ctx context.Context, namespace, podName, containerName 
 		return "", fmt.Errorf("data source not initialized")
 	}
 	return a.dataSource.GetPodLogs(ctx, namespace, podName, containerName, tailLines)
+}
+
+// DescribePod returns kubectl describe output for a pod
+func (a *App) DescribePod(ctx context.Context, namespace, podName string) (string, error) {
+	if a.dataSource == nil {
+		return "", fmt.Errorf("data source not initialized")
+	}
+	return a.dataSource.DescribePod(ctx, namespace, podName)
+}
+
+// DescribeNode returns kubectl describe output for a node
+func (a *App) DescribeNode(ctx context.Context, nodeName string) (string, error) {
+	if a.dataSource == nil {
+		return "", fmt.Errorf("data source not initialized")
+	}
+	return a.dataSource.DescribeNode(ctx, nodeName)
+}
+
+// GetPodYAML returns YAML representation of a pod
+func (a *App) GetPodYAML(ctx context.Context, namespace, podName string) (string, error) {
+	if a.dataSource == nil {
+		return "", fmt.Errorf("data source not initialized")
+	}
+	return a.dataSource.GetPodYAML(ctx, namespace, podName)
+}
+
+// GetNodeYAML returns YAML representation of a node
+func (a *App) GetNodeYAML(ctx context.Context, nodeName string) (string, error) {
+	if a.dataSource == nil {
+		return "", fmt.Errorf("data source not initialized")
+	}
+	return a.dataSource.GetNodeYAML(ctx, nodeName)
 }
 
 // ForceRefresh triggers an immediate data refresh

@@ -52,7 +52,7 @@ func LoadConfig(configFile string) (*Config, error) {
 	viper.SetDefault("cluster.namespace", "")
 
 	viper.SetDefault("refresh.interval", "2s")
-	viper.SetDefault("refresh.timeout", "5s")
+	viper.SetDefault("refresh.timeout", "30s")
 	viper.SetDefault("refresh.max_concurrent", 10)
 
 	viper.SetDefault("cache.ttl", "60s")
@@ -122,7 +122,7 @@ func LoadConfig(configFile string) (*Config, error) {
 		cfg.RefreshInterval = 2 * time.Second
 	}
 	if cfg.Timeout <= 0 {
-		cfg.Timeout = 5 * time.Second
+		cfg.Timeout = 30 * time.Second
 	}
 	if cfg.MaxConcurrent <= 0 {
 		cfg.MaxConcurrent = 10
