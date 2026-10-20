@@ -47,8 +47,8 @@ go install github.com/yourusername/k8s-monitor/cmd/k8s-monitor@latest
 ### 使用方法
 
 ```bash
-# 启动交互式控制台
-k8s-monitor console
+# 启动交互式控制台（直接不带参数运行也是进入控制台）
+k8s-monitor [console]
 
 # 指定 kubeconfig 文件
 k8s-monitor console --kubeconfig ~/.kube/config

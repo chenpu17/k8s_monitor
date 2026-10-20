@@ -47,8 +47,8 @@ go install github.com/yourusername/k8s-monitor/cmd/k8s-monitor@latest
 ### Usage
 
 ```bash
-# Start the interactive console
-k8s-monitor console
+# Start the interactive console (running without arguments also works)
+k8s-monitor [console]
 
 # Specify kubeconfig
 k8s-monitor console --kubeconfig ~/.kube/config

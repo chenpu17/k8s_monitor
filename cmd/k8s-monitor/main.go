@@ -37,11 +37,12 @@ var rootCmd = &cobra.Command{
 for Kubernetes clusters. It provides real-time cluster health overview,
 node status, workload monitoring, and quick diagnostics.
 
+Run it without arguments (or with the "console" subcommand) to launch
+the interactive TUI console.
+
 Built with ❤️  using Bubble Tea and client-go.`,
 	Version: fmt.Sprintf("%s (built: %s)", Version, BuildTime),
-	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Help()
-	},
+	RunE:    runConsole, // default action: launch the interactive console
 }
 
 var consoleCmd = &cobra.Command{
@@ -75,13 +76,14 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "enable verbose logging")
 	rootCmd.PersistentFlags().StringVarP(&locale, "locale", "l", "en", "interface language (en, zh)")
 
-	// Console command flags
-	consoleCmd.Flags().IntP("refresh", "r", 2, "refresh interval in seconds")
-	consoleCmd.Flags().BoolP("no-color", "", false, "disable color output")
-	consoleCmd.Flags().BoolP("insecure-kubelet", "", false, "skip TLS verification for kubelet metrics (use in test environments)")
-	consoleCmd.Flags().IntP("max-concurrent", "m", 10, "maximum concurrent kubelet queries (default: 10)")
-	consoleCmd.Flags().IntP("log-tail-lines", "", 200, "number of log lines to fetch (default: 200)")
-	consoleCmd.Flags().StringP("npu-exporter", "", "", "NPU-Exporter endpoint URL (e.g., http://npu-exporter.kube-system:8082)")
+	// Console flags are persistent so they work both with and without the
+	// explicit "console" subcommand (bare invocation defaults to console)
+	rootCmd.PersistentFlags().IntP("refresh", "r", 2, "refresh interval in seconds")
+	rootCmd.PersistentFlags().BoolP("no-color", "", false, "disable color output")
+	rootCmd.PersistentFlags().BoolP("insecure-kubelet", "", false, "skip TLS verification for kubelet metrics (use in test environments)")
+	rootCmd.PersistentFlags().IntP("max-concurrent", "m", 10, "maximum concurrent kubelet queries (default: 10)")
+	rootCmd.PersistentFlags().IntP("log-tail-lines", "", 200, "number of log lines to fetch (default: 200)")
+	rootCmd.PersistentFlags().StringP("npu-exporter", "", "", "NPU-Exporter endpoint URL (e.g., http://npu-exporter.kube-system:8082)")
 }
 
 func runConsole(cmd *cobra.Command, args []string) error {
