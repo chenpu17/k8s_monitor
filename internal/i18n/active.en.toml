@@ -695,6 +695,9 @@ other = "Error fetching logs: {{.Error}}"
 [logs.loading]
 other = "Loading logs..."
 
+[logs.empty]
+other = "No logs for this container"
+
 [logs.no_containers]
 other = "No containers available"
 

@@ -695,6 +695,9 @@ other = "获取日志出错：{{.Error}}"
 [logs.loading]
 other = "加载日志中..."
 
+[logs.empty]
+other = "该容器暂无日志"
+
 [logs.no_containers]
 other = "无可用容器"
 

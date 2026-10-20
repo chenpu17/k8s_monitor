@@ -4,10 +4,35 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// printableRunes returns the printable runes typed in a key message.
+// bubbletea merges burst-typed or pasted characters into a single multi-rune
+// KeyMsg, so filtering on len(msg.String()) == 1 would drop that input
+// entirely. Space is excluded; it arrives as KeySpace and is handled above.
+func printableRunes(msg tea.KeyMsg) []rune {
+	if msg.Type != tea.KeyRunes {
+		return nil
+	}
+	out := make([]rune, 0, len(msg.Runes))
+	for _, r := range msg.Runes {
+		if unicode.IsPrint(r) && r != ' ' {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// isNameRune reports whether r is accepted in the list search text
+// (alphanumerics, dash, underscore, dot).
+func isNameRune(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+		(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.'
+}
 
 // Update handles messages
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -80,28 +105,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !isSpecialKey {
 				// Handle text input for logs search mode
 				if m.logsSearchMode {
-					if len(msg.String()) == 1 {
-						char := msg.String()
-						// Allow most printable characters for log search
-						if char >= " " && char <= "~" {
-							m.logsSearchText += char
-							m.logsScrollOffset = 0
-							return m, nil
-						}
+					if chars := printableRunes(msg); len(chars) > 0 {
+						m.logsSearchText += string(chars)
+						m.logsScrollOffset = 0
+						return m, nil
 					}
 				}
 				// Handle text input for normal search mode
 				if m.searchMode {
-					if len(msg.String()) == 1 {
-						char := msg.String()
-						// Allow alphanumeric, dash, underscore, dot
-						if (char >= "a" && char <= "z") || (char >= "A" && char <= "Z") ||
-							(char >= "0" && char <= "9") || char == "-" || char == "_" || char == "." {
-							m.searchText += char
-							m.scrollOffset = 0
-							m.selectedIndex = 0
-							return m, nil
+					accepted := ""
+					for _, r := range printableRunes(msg) {
+						if isNameRune(r) {
+							accepted += string(r)
 						}
+					}
+					if accepted != "" {
+						m.searchText += accepted
+						m.scrollOffset = 0
+						m.selectedIndex = 0
+						return m, nil
 					}
 				}
 				// If we get here, it's not a printable character we handle
@@ -470,6 +492,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.logsAutoScroll = false  // Reset auto-scroll
 				m.selectedContainer = ""
 				m.containerLogs = ""
+				m.logsFetched = false
 				m.logsScrollOffset = 0
 				m.logsError = ""
 				return m, nil
@@ -633,6 +656,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.selectedPod = selectedPod
 						m.selectedContainer = selectedPod.ContainerStates[0].Name
 						m.logsMode = true // Enter logs mode
+						m.logsFetched = false
 						return m, m.fetchLogs()
 					}
 
@@ -640,6 +664,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.selectedPod = selectedPod
 					m.selectedContainer = selectedPod.ContainerStates[0].Name
 					m.logsMode = true // Enter logs mode
+					m.logsFetched = false
 					return m, m.fetchLogs()
 				}
 				return m, nil
@@ -655,6 +680,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(m.selectedPod.ContainerStates) == 1 {
 					m.selectedContainer = m.selectedPod.ContainerStates[0].Name
 					m.logsMode = true // Enter logs mode
+					m.logsFetched = false
 					return m, m.fetchLogs()
 				}
 
@@ -662,6 +688,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// TODO: In future, implement container selection UI
 				m.selectedContainer = m.selectedPod.ContainerStates[0].Name
 				m.logsMode = true // Enter logs mode
+				m.logsFetched = false
 				return m, m.fetchLogs()
 			}
 			return m, nil
@@ -1048,14 +1075,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			if m.logsSearchMode {
 				// Handle printable characters (allow more characters for log search)
-				if len(msg.String()) == 1 {
-					char := msg.String()
-					// Allow most printable characters for log search
-					if char >= " " && char <= "~" {
-						m.logsSearchText += char
-						m.logsScrollOffset = 0
-						return m, nil
-					}
+				if chars := printableRunes(msg); len(chars) > 0 {
+					m.logsSearchText += string(chars)
+					m.logsScrollOffset = 0
+					return m, nil
 				}
 				// Handle backspace
 				if msg.Type == tea.KeyBackspace || msg.Type == tea.KeyDelete {
@@ -1074,16 +1097,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.searchMode {
 				// Handle printable characters
-				if len(msg.String()) == 1 {
-					char := msg.String()
-					// Allow alphanumeric, dash, underscore, dot
-					if (char >= "a" && char <= "z") || (char >= "A" && char <= "Z") ||
-						(char >= "0" && char <= "9") || char == "-" || char == "_" || char == "." {
-						m.searchText += char
-						m.scrollOffset = 0
-						m.selectedIndex = 0
-						return m, nil
+				accepted := ""
+				for _, r := range printableRunes(msg) {
+					if isNameRune(r) {
+						accepted += string(r)
 					}
+				}
+				if accepted != "" {
+					m.searchText += accepted
+					m.scrollOffset = 0
+					m.selectedIndex = 0
+					return m, nil
 				}
 				// Handle backspace
 				if msg.Type == tea.KeyBackspace || msg.Type == tea.KeyDelete {
@@ -1153,10 +1177,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.logsError = msg.err.Error()
 			m.containerLogs = ""
+			m.logsFetched = false
 			m.cachedLogLines = nil
 			m.cachedLogLinesSource = ""
 		} else {
 			m.logsError = ""
+			m.logsFetched = true
 			wasEmpty := m.containerLogs == ""
 			m.containerLogs = msg.logs
 

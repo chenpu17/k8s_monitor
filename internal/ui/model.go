@@ -185,6 +185,7 @@ type Model struct {
 	logsLastUpdate    time.Time // Last time logs were refreshed
 	selectedContainer string    // Selected container name for logs
 	containerLogs     string    // Fetched logs content
+	logsFetched       bool      // True once a fetch completed successfully (logs may legitimately be empty)
 	logsScrollOffset  int       // Scroll offset for logs
 	logsError         string    // Error message if logs fetch failed
 

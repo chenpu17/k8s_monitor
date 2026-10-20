@@ -75,9 +75,14 @@ func (m *Model) renderLogs() string {
 		return strings.Join(sections, "\n")
 	}
 
-	// Show loading if no logs yet
+	// Show loading if no logs yet, or an empty state once the fetch
+	// completed successfully but the container has no output
 	if m.containerLogs == "" {
-		sections = append(sections, StyleTextMuted.Render(m.T("logs.loading")))
+		if m.logsFetched {
+			sections = append(sections, StyleTextMuted.Render(m.T("logs.empty")))
+		} else {
+			sections = append(sections, StyleTextMuted.Render(m.T("logs.loading")))
+		}
 		return strings.Join(sections, "\n")
 	}
 
