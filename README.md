@@ -2,7 +2,7 @@
 
 [English](README.md) | [中文](README_zh.md)
 
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > A lightweight, read-only terminal UI monitoring tool for Kubernetes clusters
@@ -15,7 +15,7 @@ k8s-monitor is a terminal-based monitoring tool for Kubernetes clusters, designe
 
 ### Key Features
 
-- **🎯 Comprehensive Views**: 8 specialized views covering all cluster resources
+- **🎯 Comprehensive Views**: 8 core views plus Volcano Queues and SuperPod Topology when the cluster provides them
 - **📊 Resource Monitoring**: Real-time CPU/Memory/Network metrics with visual progress bars
 - **🚀 NPU Monitoring**: Huawei Ascend NPU support with detailed chip metrics
 - **📈 Trend Analysis**: Historical metrics tracking with trend indicators
@@ -139,7 +139,7 @@ k8s-monitor --help
 ### Advanced Features
 
 - **Vim-style Navigation**: `j/k` for up/down, `Enter` for details, `Esc` to go back
-- **Fast View Switching**: Number keys `1-8` for instant navigation
+- **Fast View Switching**: Number keys `1-8` for the core views, `9` for Queues (requires Volcano), `0` for Topology (requires SuperPod)
 - **Flexible Filtering**: Filter by namespace, status, labels
 - **Full-text Search**: Search resources by name
 - **Data Export**: Export view data to CSV/JSON
@@ -154,8 +154,10 @@ k8s-monitor --help
 |-----|--------|
 | `q` / `Ctrl+C` | Quit application |
 | `r` | Manual refresh |
-| `1-8` | Switch to specific view (1=Overview, 2=Nodes, 3=Pods, etc.) |
-| `Tab` | Cycle through views |
+| `1-8` | Switch to a core view (1=Overview, 2=Nodes, 3=Pods, 4=Workloads, 5=Network, 6=Storage, 7=Events, 8=Alerts) |
+| `9` | Switch to Queues view (only when Volcano Queues are detected) |
+| `0` | Switch to Topology view (only when SuperPod topology is detected) |
+| `Tab` | Cycle through the currently available views |
 
 ### List View Keys
 | Key | Action |
@@ -203,36 +205,45 @@ Configuration file locations (searched in order):
 2. `$HOME/.k8s-monitor/config.yaml`
 3. `/etc/k8s-monitor/config.yaml`
 
-Example configuration:
+The file must be named `config.yaml`; `config/default.yaml` in this repository is only a sample. Copy it into place to use it:
+
+```bash
+cp config/default.yaml config/config.yaml
+```
+
+Example configuration (all keys are optional; values shown are the built-in defaults):
 
 ```yaml
 cluster:
-  kubeconfig: ~/.kube/config
-  context: ""
-  namespace: ""
+  # Use an absolute path - "~" is not expanded. Leave empty to fall back to
+  # $HOME/.kube/config (or in-cluster config when running inside a pod).
+  kubeconfig: ""
+  context: ""                  # Kubernetes context (empty = current context)
+  namespace: ""                # Namespace to monitor (empty = all namespaces)
 
 refresh:
-  interval: 2s        # Auto-refresh interval
-  cache_ttl: 10s      # Cache time-to-live
+  interval: 2s                 # Auto-refresh interval
+  timeout: 30s                 # Timeout for API requests to the cluster
+  max_concurrent: 10           # Max concurrent kubelet queries
 
-performance:
-  max_concurrent: 10  # Max concurrent kubelet queries
-  log_tail_lines: 200 # Number of log lines to fetch
+cache:
+  ttl: 60s                     # Cache time-to-live
 
 ui:
-  locale: en          # Interface language (en/zh)
-  color_mode: auto    # Color mode (auto/always/never)
-  default_view: overview
+  locale: en                   # Interface language (en/zh)
+  log_tail_lines: 200          # Number of log lines to fetch
 
-logging:
-  level: info         # Log level (debug/info/warn/error)
-  file: /tmp/k8s-monitor.log
+kubelet:
+  # Test environments only - skip kubelet TLS verification
+  insecure: false
 
 # NPU monitoring (Huawei Ascend)
-# npu_exporter: ""    # Custom NPU-Exporter endpoint (default: auto-detect via K8s API proxy)
+npu_exporter:
+  endpoint: ""                 # Custom NPU-Exporter endpoint (default: auto-detect via K8s API proxy)
 
-# For test environments only - skip kubelet TLS verification
-# insecure_kubelet: false
+logging:
+  level: info                  # Log level (debug/info/warn/error)
+  file: /tmp/k8s-monitor.log
 ```
 
 ### NPU Monitoring Setup
@@ -315,7 +326,7 @@ To enable NPU monitoring for Huawei Ascend accelerators:
 
 ### Prerequisites
 
-- Go 1.21+ (Go 1.24+ recommended)
+- Go 1.24+
 - Access to a Kubernetes cluster (for testing)
 - kubectl configured with valid kubeconfig
 
@@ -378,11 +389,11 @@ k8s-monitor/
 | `internal/datasource` | ~4,600 | Data sources (API Server, Kubelet, NPU-Exporter, Volcano) |
 | `internal/model` | ~700 | Data models and types |
 | `internal/cache` | ~550 | TTL cache and background refresh |
-| `internal/app` | ~420 | Application core and configuration |
+| `internal/app` | ~540 | Application core and configuration |
 | `internal/i18n` | ~120 | Internationalization support |
 | `cmd/` | ~190 | CLI entry point |
 
-- **51 Go source files** across the codebase
+- **52 Go source files** across the codebase
 - **Zero external runtime dependencies** - single static binary
 - **Two languages supported** - English and Chinese
 

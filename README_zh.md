@@ -2,7 +2,7 @@
 
 [English](README.md) | [中文](README_zh.md)
 
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > 轻量级、只读的 Kubernetes 集群终端监控工具
@@ -15,7 +15,7 @@ k8s-monitor 是一个基于终端的 Kubernetes 集群监控工具，专为需�
 
 ### 核心特性
 
-- **🎯 全面视图**：8 个专门视图覆盖所有集群资源
+- **🎯 全面视图**：8 个核心视图，集群提供 Volcano Queues / SuperPod Topology 时额外显示对应视图
 - **📊 资源监控**：实时 CPU/内存/网络指标，带可视化进度条
 - **🚀 NPU 监控**：华为昇腾 NPU 支持，提供详细芯片指标
 - **📈 趋势分析**：历史指标跟踪和趋势指示器
@@ -139,7 +139,7 @@ k8s-monitor --help
 ### 高级功能
 
 - **Vim 风格导航**：`j/k` 上下移动，`Enter` 查看详情，`Esc` 返回
-- **快速视图切换**：数字键 `1-8` 快速导航
+- **快速视图切换**：数字键 `1-8` 切换核心视图，`9` 切换 Queues（需 Volcano），`0` 切换 Topology（需 SuperPod）
 - **灵活过滤**：按命名空间、状态、标签过滤
 - **全文搜索**：按名称搜索资源
 - **数据导出**：导出视图数据为 CSV/JSON
@@ -154,8 +154,10 @@ k8s-monitor --help
 |-----|------|
 | `q` / `Ctrl+C` | 退出应用 |
 | `r` | 手动刷新 |
-| `1-8` | 切换到特定视图（1=概览，2=节点，3=Pod，等） |
-| `Tab` | 循环切换视图 |
+| `1-8` | 切换到核心视图（1=概览，2=节点，3=Pod，4=工作负载，5=网络，6=存储，7=事件，8=告警） |
+| `9` | 切换到 Queues 视图（仅在检测到 Volcano Queues 时可用） |
+| `0` | 切换到 Topology 视图（仅在检测到 SuperPod 拓扑时可用） |
+| `Tab` | 在当前可用视图间循环切换 |
 
 ### 列表视图快捷键
 | 按键 | 操作 |
@@ -203,36 +205,45 @@ k8s-monitor --help
 2. `$HOME/.k8s-monitor/config.yaml`
 3. `/etc/k8s-monitor/config.yaml`
 
-配置示例：
+文件名必须为 `config.yaml`；仓库中的 `config/default.yaml` 只是示例。使用前请复制到位：
+
+```bash
+cp config/default.yaml config/config.yaml
+```
+
+配置示例（所有键均可选，下列取值为内置默认值）：
 
 ```yaml
 cluster:
-  kubeconfig: ~/.kube/config
-  context: ""
-  namespace: ""
+  # 请使用绝对路径 - 不会展开 "~"。留空则回退到 $HOME/.kube/config
+  # （在 Pod 内运行时回退到 in-cluster 配置）。
+  kubeconfig: ""
+  context: ""                  # Kubernetes 上下文（留空 = 当前上下文）
+  namespace: ""                # 监控的命名空间（留空 = 所有命名空间）
 
 refresh:
-  interval: 2s        # 自动刷新间隔
-  cache_ttl: 10s      # 缓存过期时间
+  interval: 2s                 # 自动刷新间隔
+  timeout: 30s                 # 集群 API 请求超时
+  max_concurrent: 10           # 最大并发 kubelet 查询数
 
-performance:
-  max_concurrent: 10  # 最大并发 kubelet 查询数
-  log_tail_lines: 200 # 获取的日志行数
+cache:
+  ttl: 60s                     # 缓存过期时间
 
 ui:
-  locale: zh          # 界面语言（en/zh）
-  color_mode: auto    # 颜色模式（auto/always/never）
-  default_view: overview
+  locale: zh                   # 界面语言（en/zh）
+  log_tail_lines: 200          # 获取的日志行数
 
-logging:
-  level: info         # 日志级别（debug/info/warn/error）
-  file: /tmp/k8s-monitor.log
+kubelet:
+  # 仅用于测试环境 - 跳过 kubelet TLS 验证
+  insecure: false
 
 # NPU 监控（华为昇腾）
-# npu_exporter: ""    # 自定义 NPU-Exporter 端点（默认：通过 K8s API 代理自动检测）
+npu_exporter:
+  endpoint: ""                 # 自定义 NPU-Exporter 端点（默认：通过 K8s API 代理自动检测）
 
-# 仅用于测试环境 - 跳过 kubelet TLS 验证
-# insecure_kubelet: false
+logging:
+  level: info                  # 日志级别（debug/info/warn/error）
+  file: /tmp/k8s-monitor.log
 ```
 
 ### NPU 监控配置
@@ -315,7 +326,7 @@ logging:
 
 ### 前置要求
 
-- Go 1.21+（推荐 Go 1.24+）
+- Go 1.24+
 - 访问 Kubernetes 集群（用于测试）
 - kubectl 配置有效的 kubeconfig
 
@@ -378,11 +389,11 @@ k8s-monitor/
 | `internal/datasource` | ~4,600 | 数据源（API Server、Kubelet、NPU-Exporter、Volcano） |
 | `internal/model` | ~700 | 数据模型和类型定义 |
 | `internal/cache` | ~550 | TTL 缓存和后台刷新 |
-| `internal/app` | ~420 | 应用核心和配置 |
+| `internal/app` | ~540 | 应用核心和配置 |
 | `internal/i18n` | ~120 | 国际化支持 |
 | `cmd/` | ~190 | CLI 入口 |
 
-- **51 个 Go 源文件**
+- **52 个 Go 源文件**
 - **零运行时外部依赖** - 单一静态二进制
 - **支持两种语言** - 中文和英文
 

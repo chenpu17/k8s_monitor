@@ -1,5 +1,17 @@
 # k8s-monitor Configuration File
-# This file contains default configuration for k8s-monitor
+#
+# NOTE: This file is a SAMPLE and is NOT loaded automatically.
+# viper searches for a file literally named "config.yaml" in:
+#   1. ./config/config.yaml
+#   2. $HOME/.k8s-monitor/config.yaml
+#   3. /etc/k8s-monitor/config.yaml
+# To use it, copy this file to one of those locations:
+#   cp config/default.yaml config/config.yaml
+#
+# The keys below are the commonly used settings. All values shown are the
+# built-in defaults; remove a key to fall back to its default. For the full
+# set of keys viper reads (including ones with no runtime effect yet), see
+# internal/app/config.go.
 
 cluster:
   # Path to kubeconfig file. Leave empty to use default ($HOME/.kube/config)
@@ -13,10 +25,10 @@ cluster:
 
 refresh:
   # Auto-refresh interval (format: 10s, 1m, etc.)
-  interval: 10s
+  interval: 2s
 
-  # Request timeout
-  timeout: 5s
+  # Timeout for API requests to the cluster (format: 10s, 1m, etc.)
+  timeout: 30s
 
   # Maximum concurrent requests to API server/kubelet
   max_concurrent: 10
@@ -25,47 +37,21 @@ cache:
   # Cache entry TTL
   ttl: 60s
 
-  # Maximum number of cache entries
-  max_entries: 1000
-
-datasource:
-  # Data source priority: apiserver, kubelet, metrics-server
-  priority:
-    - apiserver
-    - kubelet
-    - metrics-server
-
-  kubelet:
-    # Kubelet port
-    port: 10250
-
-    # Access mode: auto (try direct, fallback to proxy), direct, proxy
-    use_proxy: auto
-
-    # Kubelet request timeout
-    timeout: 5s
-
 ui:
-  # Color mode: auto, always, never
-  color_mode: auto
-
-  # Default view: overview, node, workload
-  default_view: overview
-
-  # Maximum rows to display in tables
-  max_rows: 100
+  # Interface language: en or zh
+  locale: en
 
   # Number of log lines to fetch when viewing pod logs
   log_tail_lines: 200
 
-filter:
-  # Default namespace filter (empty means all)
-  default_namespace: ""
+kubelet:
+  # Skip TLS verification when talking to kubelet (test environments only)
+  insecure: false
 
-  # Namespaces to exclude from display
-  exclude_namespaces: []
-    # - kube-system
-    # - kube-public
+npu_exporter:
+  # Custom NPU-Exporter endpoint. Leave empty to auto-detect via the
+  # Kubernetes API proxy (e.g. http://npu-exporter.kube-system:8082)
+  endpoint: ""
 
 logging:
   # Log level: debug, info, warn, error
@@ -73,9 +59,3 @@ logging:
 
   # Log file path
   file: /tmp/k8s-monitor.log
-
-  # Max log file size in MB
-  max_size: 100
-
-  # Max number of log backups
-  max_backups: 3

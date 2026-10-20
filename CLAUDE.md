@@ -153,11 +153,13 @@ The UI supports multiple views (see `ViewType` enum in `internal/ui/model.go`):
 - `ViewStorage`: PersistentVolumes and PersistentVolumeClaims
 - `ViewEvents`: Cluster events
 - `ViewAlerts`: Health alerts
+- `ViewQueues`: Volcano Queues (AI/HPC), shown only when Volcano Queues are detected
+- `ViewTopology`: SuperPod topology (Ascend NPU), shown only when SuperPod topology is detected
 - Detail views for each resource type
 
 ### Keyboard Navigation
 
-- **Global**: `q`/`Ctrl+C` quit, `r` refresh, `1-8` switch views, `tab` cycle views
+- **Global**: `q`/`Ctrl+C` quit, `r` refresh, `1-8` switch core views, `9` Queues (requires Volcano), `0` Topology (requires SuperPod), `tab` cycle views
 - **List views**: `↑`/`k` up, `↓`/`j` down, `PgUp`/`PgDn` page, `enter` detail, `s` sort, `/` search
 - **Detail views**: `↑`/`↓` scroll, `esc` back, `l` logs (pods), `a` actions
 - **Search mode**: Type to filter, `backspace` delete, `esc` cancel
@@ -238,16 +240,22 @@ Configuration sources (in order of precedence):
 2. Config file (YAML): `./config/config.yaml`, `~/.k8s-monitor/config.yaml`, `/etc/k8s-monitor/config.yaml`
 3. Default values
 
-Key configuration options:
-- `kubeconfig`: Path to kubeconfig file
-- `context`: Kubernetes context to use
-- `namespace`: Namespace filter (empty = all)
-- `refresh_interval`: Auto-refresh interval (default: 2s)
-- `cache_ttl`: Cache TTL (default: 10s)
-- `max_concurrent`: Max concurrent kubelet queries (default: 10)
-- `log_tail_lines`: Number of log lines to fetch (default: 200)
-- `locale`: UI language (`en` or `zh`)
-- `insecure_kubelet`: Skip kubelet TLS verification (test only)
+Key configuration options (nested YAML keys, as read by `internal/app/config.go`):
+- `cluster.kubeconfig`: Path to kubeconfig file (default: `$HOME/.kube/config`)
+- `cluster.context`: Kubernetes context to use
+- `cluster.namespace`: Namespace filter (empty = all)
+- `refresh.interval`: Auto-refresh interval (default: 2s)
+- `refresh.timeout`: Timeout for API requests to the cluster (default: 30s)
+- `refresh.max_concurrent`: Max concurrent kubelet queries (default: 10)
+- `cache.ttl`: Cache TTL (default: 60s)
+- `ui.locale`: UI language (`en` or `zh`)
+- `ui.log_tail_lines`: Number of log lines to fetch (default: 200)
+- `kubelet.insecure`: Skip kubelet TLS verification (test only)
+- `npu_exporter.endpoint`: Custom NPU-Exporter endpoint (empty = auto-detect)
+- `logging.level`: Log level (default: `info`)
+- `logging.file`: Log file path (default: `/tmp/k8s-monitor.log`)
+
+Note: `config/default.yaml` in this repository is a sample only — viper looks for a file named `config.yaml` in `./config`, `$HOME/.k8s-monitor`, and `/etc/k8s-monitor`.
 
 ## Common Pitfalls
 
