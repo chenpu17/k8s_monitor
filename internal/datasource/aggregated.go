@@ -17,17 +17,17 @@ const kubeletAccessCheckTTL = time.Minute
 // AggregatedDataSource combines API Server and kubelet data sources
 // It automatically handles fallback and data enrichment
 type AggregatedDataSource struct {
-	apiServer          DataSource
-	apiServerClient    *APIServerClient
-	kubeletClient      *KubeletClient
-	volcanoClient      *VolcanoClient
-	npuExporterClient  *NPUExporterClient
-	logger             *zap.Logger
-	mu                 sync.RWMutex
-	maxConcurrent      int // Maximum concurrent kubelet queries
-	kubeletAccessMu    sync.RWMutex
-	kubeletAccess      *diagnostic.KubeletAccessStatus
-	kubeletSkipReason  string
+	apiServer         DataSource
+	apiServerClient   *APIServerClient
+	kubeletClient     *KubeletClient
+	volcanoClient     *VolcanoClient
+	npuExporterClient *NPUExporterClient
+	logger            *zap.Logger
+	mu                sync.RWMutex
+	maxConcurrent     int // Maximum concurrent kubelet queries
+	kubeletAccessMu   sync.RWMutex
+	kubeletAccess     *diagnostic.KubeletAccessStatus
+	kubeletSkipReason string
 }
 
 // NewAggregatedDataSource creates a new aggregated data source
@@ -176,7 +176,13 @@ func (a *AggregatedDataSource) GetClusterData(ctx context.Context, namespace str
 	}
 
 	// Build cluster summary
-	summary := a.buildClusterSummary(nodes, pods, events, services, pvs, pvcs)
+	summary := a.buildClusterSummary(nodes, pods, events, services, pvs, pvcs, workloadLists{
+		deployments:  deployments,
+		statefulsets: statefulsets,
+		daemonsets:   daemonsets,
+		jobs:         jobs,
+		cronjobs:     cronjobs,
+	})
 
 	// Fetch Volcano data if client is available
 	var volcanoJobs []*model.VolcanoJobData
@@ -273,8 +279,8 @@ func (a *AggregatedDataSource) enrichWithKubeletMetrics(ctx context.Context, nod
 
 			nodeStartTime := time.Now()
 
-			// Get node metrics (including network)
-			cpuMillicores, memoryBytes, networkRx, networkTx, networkTimestamp, err := a.kubeletClient.GetNodeMetrics(ctx, n.Name)
+			// Get node metrics (including network) and pod metrics in one kubelet summary fetch
+			cpuMillicores, memoryBytes, networkRx, networkTx, networkTimestamp, podMetricsMap, err := a.kubeletClient.GetNodeAndPodsMetrics(ctx, n.Name)
 			if err != nil {
 				a.mu.Lock()
 				n.HasKubeletMetrics = false
@@ -286,7 +292,7 @@ func (a *AggregatedDataSource) enrichWithKubeletMetrics(ctx context.Context, nod
 				n.NetworkTimestamp = time.Time{}
 				a.mu.Unlock()
 
-				a.logger.Debug("Failed to get node metrics",
+				a.logger.Debug("Failed to get kubelet metrics",
 					zap.String("node", n.Name),
 					zap.Duration("elapsed", time.Since(nodeStartTime)),
 					zap.Error(err),
@@ -317,26 +323,8 @@ func (a *AggregatedDataSource) enrichWithKubeletMetrics(ctx context.Context, nod
 			if n.PodAllocatable > 0 {
 				n.PodUsagePercent = float64(n.PodCount) / float64(n.PodAllocatable) * 100
 			}
-			a.mu.Unlock()
 
-			// Get pod metrics on this node
-			podMetricsMap, err := a.kubeletClient.GetAllPodMetricsOnNode(ctx, n.Name)
-			if err != nil {
-				a.mu.Lock()
-				if n.HasKubeletMetrics {
-					n.KubeletError = err.Error()
-				}
-				a.mu.Unlock()
-				a.logger.Debug("Failed to get pod metrics",
-					zap.String("node", n.Name),
-					zap.Duration("elapsed", time.Since(nodeStartTime)),
-					zap.Error(err),
-				)
-				return
-			}
-
-			// Update pod data
-			a.mu.Lock()
+			// Update pod data from the same summary response
 			for _, pod := range podsByNode[n.Name] {
 				key := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 				if metrics, ok := podMetricsMap[key]; ok {
@@ -362,7 +350,7 @@ func (a *AggregatedDataSource) enrichWithKubeletMetrics(ctx context.Context, nod
 			}
 			a.mu.Unlock()
 
-			a.logger.Debug("Node metrics fetched",
+			a.logger.Debug("Node and pod metrics fetched",
 				zap.String("node", n.Name),
 				zap.Duration("elapsed", time.Since(nodeStartTime)),
 			)
@@ -376,12 +364,34 @@ func (a *AggregatedDataSource) enrichWithKubeletMetrics(ctx context.Context, nod
 	)
 }
 
+// workloadLists groups the workload objects listed from the API Server so that
+// buildClusterSummary can report real counts. Each list is already scoped to the
+// requested namespace (empty namespace means all namespaces), so the counts
+// mirror the same scope as the pods, events, services and storage in the summary.
+type workloadLists struct {
+	deployments  []*model.DeploymentData
+	statefulsets []*model.StatefulSetData
+	daemonsets   []*model.DaemonSetData
+	jobs         []*model.JobData
+	cronjobs     []*model.CronJobData
+}
+
+// applyWorkloadCounts fills the workload counters from the real workload lists
+func applyWorkloadCounts(summary *model.ClusterSummary, workloads workloadLists) {
+	summary.TotalDeployments = len(workloads.deployments)
+	summary.TotalStatefulSets = len(workloads.statefulsets)
+	summary.TotalDaemonSets = len(workloads.daemonsets)
+	summary.TotalJobs = len(workloads.jobs)
+	summary.TotalCronJobs = len(workloads.cronjobs)
+}
+
 // buildClusterSummary builds cluster summary statistics
-func (a *AggregatedDataSource) buildClusterSummary(nodes []*model.NodeData, pods []*model.PodData, events []*model.EventData, services []*model.ServiceData, pvs []*model.PVData, pvcs []*model.PVCData) *model.ClusterSummary {
+func (a *AggregatedDataSource) buildClusterSummary(nodes []*model.NodeData, pods []*model.PodData, events []*model.EventData, services []*model.ServiceData, pvs []*model.PVData, pvcs []*model.PVCData, workloads workloadLists) *model.ClusterSummary {
 	summary := &model.ClusterSummary{
 		TotalNodes: len(nodes),
 		TotalPods:  len(pods),
 	}
+	applyWorkloadCounts(summary, workloads)
 
 	errorSet := make(map[string]struct{})
 
@@ -497,12 +507,7 @@ func (a *AggregatedDataSource) buildClusterSummary(nodes []*model.NodeData, pods
 		}
 	}
 
-	// Aggregate pod resources and count workloads
-	deployments := make(map[string]bool)
-	statefulSets := make(map[string]bool)
-	daemonSets := make(map[string]bool)
-	jobs := make(map[string]bool)
-	cronJobs := make(map[string]bool)
+	// Aggregate pod resources
 
 	// Track pods with high restart counts for Top 5
 	type podWithRestarts struct {
@@ -581,34 +586,7 @@ func (a *AggregatedDataSource) buildClusterSummary(nodes []*model.NodeData, pods
 			summary.MemoryRequested += pod.MemoryRequest
 			summary.MemoryLimited += pod.MemoryLimit
 		}
-
-		// Count workloads by owner reference (from labels)
-		if ownerKind, ok := pod.Labels["app.kubernetes.io/component"]; ok {
-			ownerName := pod.Labels["app.kubernetes.io/name"]
-			key := pod.Namespace + "/" + ownerName
-			switch ownerKind {
-			case "deployment":
-				deployments[key] = true
-			case "statefulset":
-				statefulSets[key] = true
-			case "daemonset":
-				daemonSets[key] = true
-			}
-		}
-		// Also check owner-kind annotation or name prefix
-		if job, ok := pod.Labels["job-name"]; ok {
-			jobs[pod.Namespace+"/"+job] = true
-		}
-		if cronjob, ok := pod.Labels["batch.kubernetes.io/cronjob"]; ok {
-			cronJobs[pod.Namespace+"/"+cronjob] = true
-		}
 	}
-
-	summary.TotalDeployments = len(deployments)
-	summary.TotalStatefulSets = len(statefulSets)
-	summary.TotalDaemonSets = len(daemonSets)
-	summary.TotalJobs = len(jobs)
-	summary.TotalCronJobs = len(cronJobs)
 
 	// Sort and select Top 5 high restart pods using sort.Slice (O(n log n))
 	if len(highRestartCandidates) > 0 {
@@ -1174,4 +1152,36 @@ func (a *AggregatedDataSource) GetPodLogs(ctx context.Context, namespace, podNam
 		return "", fmt.Errorf("API server client not available")
 	}
 	return a.apiServerClient.GetPodLogs(ctx, namespace, podName, containerName, tailLines)
+}
+
+// DescribePod returns kubectl describe output for a pod
+func (a *AggregatedDataSource) DescribePod(ctx context.Context, namespace, podName string) (string, error) {
+	if a.apiServerClient == nil {
+		return "", fmt.Errorf("API server client not available")
+	}
+	return a.apiServerClient.DescribePod(ctx, namespace, podName)
+}
+
+// DescribeNode returns kubectl describe output for a node
+func (a *AggregatedDataSource) DescribeNode(ctx context.Context, nodeName string) (string, error) {
+	if a.apiServerClient == nil {
+		return "", fmt.Errorf("API server client not available")
+	}
+	return a.apiServerClient.DescribeNode(ctx, nodeName)
+}
+
+// GetPodYAML returns YAML representation of a pod
+func (a *AggregatedDataSource) GetPodYAML(ctx context.Context, namespace, podName string) (string, error) {
+	if a.apiServerClient == nil {
+		return "", fmt.Errorf("API server client not available")
+	}
+	return a.apiServerClient.GetPodYAML(ctx, namespace, podName)
+}
+
+// GetNodeYAML returns YAML representation of a node
+func (a *AggregatedDataSource) GetNodeYAML(ctx context.Context, nodeName string) (string, error) {
+	if a.apiServerClient == nil {
+		return "", fmt.Errorf("API server client not available")
+	}
+	return a.apiServerClient.GetNodeYAML(ctx, nodeName)
 }

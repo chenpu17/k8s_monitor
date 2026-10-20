@@ -169,9 +169,8 @@ func (c *VolcanoClient) convertVolcanoJob(obj *unstructured.Unstructured) *model
 							for resName, qty := range requests {
 								if strings.Contains(resName, "huawei.com/") && strings.Contains(strings.ToLower(resName), "ascend") {
 									if qtyStr, ok := qty.(string); ok {
-										// Parse quantity (e.g., "16")
-										var npuVal int64
-										fmt.Sscanf(qtyStr, "%d", &npuVal)
+										// Parse quantity (e.g., "16"); count-type, no unit conversion
+										npuVal := parseCountQuantity(qtyStr)
 										taskData.NPURequest = npuVal
 										job.NPURequested += npuVal * int64(taskData.Replicas)
 										if job.NPUResourceName == "" {
@@ -426,16 +425,15 @@ func parseResourceQuantity(s string) int64 {
 	if s == "" {
 		return 0
 	}
-	// Handle millicores (e.g., "1000m")
-	if strings.HasSuffix(s, "m") {
-		var val int64
-		fmt.Sscanf(s, "%dm", &val)
-		return val
+	// Use resource.ParseQuantity for proper handling of various formats
+	// (e.g., "1000m", "1.5", "0.5"), which also covers decimal cores
+	q, err := resource.ParseQuantity(s)
+	if err != nil {
+		// Malformed quantity: treat as zero rather than guessing a value
+		return 0
 	}
-	// Handle plain number - assume it's in cores, convert to millicores
-	var val int64
-	fmt.Sscanf(s, "%d", &val)
-	return val * 1000
+	// MilliValue rounds up to the nearest millicore (e.g., "1.5" -> 1500m)
+	return q.MilliValue()
 }
 
 // parseCountQuantity parses a count-type resource (e.g., NPU, pods)
@@ -461,26 +459,14 @@ func parseMemoryQuantity(s string) int64 {
 	if s == "" {
 		return 0
 	}
-	var val int64
-	if strings.HasSuffix(s, "Ki") {
-		fmt.Sscanf(s, "%dKi", &val)
-		return val * 1024
+	// Use resource.ParseQuantity for proper handling of binary (Ki/Mi/Gi/Ti)
+	// and decimal (k/M/G/T) suffixes as well as fractional values
+	q, err := resource.ParseQuantity(s)
+	if err != nil {
+		// Malformed quantity: treat as zero rather than guessing a value
+		return 0
 	}
-	if strings.HasSuffix(s, "Mi") {
-		fmt.Sscanf(s, "%dMi", &val)
-		return val * 1024 * 1024
-	}
-	if strings.HasSuffix(s, "Gi") {
-		fmt.Sscanf(s, "%dGi", &val)
-		return val * 1024 * 1024 * 1024
-	}
-	if strings.HasSuffix(s, "Ti") {
-		fmt.Sscanf(s, "%dTi", &val)
-		return val * 1024 * 1024 * 1024 * 1024
-	}
-	// Plain bytes
-	fmt.Sscanf(s, "%d", &val)
-	return val
+	return q.Value()
 }
 
 // BuildVolcanoSummary builds summary statistics for Volcano resources

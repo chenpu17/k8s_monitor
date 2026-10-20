@@ -14,9 +14,9 @@ func TestParseCountQuantity(t *testing.T) {
 		{"plain integer", "16", 16},
 		{"zero", "0", 0},
 		{"large number", "1000", 1000},
-		{"with decimal", "0.5", 1},        // resource.ParseQuantity rounds 0.5 up to 1
-		{"kubernetes quantity", "8", 8},   // Plain number
-		{"negative", "-5", -5},            // Negative should work
+		{"with decimal", "0.5", 1},      // resource.ParseQuantity rounds 0.5 up to 1
+		{"kubernetes quantity", "8", 8}, // Plain number
+		{"negative", "-5", -5},          // Negative should work
 	}
 
 	for _, tt := range tests {
@@ -37,9 +37,15 @@ func TestParseResourceQuantity(t *testing.T) {
 	}{
 		{"empty string", "", 0},
 		{"millicores", "1000m", 1000},
-		{"cores to millicores", "4", 4000},    // 4 cores = 4000m
+		{"cores to millicores", "4", 4000}, // 4 cores = 4000m
 		{"half core millicores", "500m", 500},
 		{"zero", "0", 0},
+		{"thousand five hundred millicores", "1500m", 1500},
+		{"fractional cores", "1.5", 1500},   // 1.5 cores = 1500m
+		{"half core", "0.5", 500},           // 0.5 cores = 500m
+		{"two cores", "2", 2000},            // 2 cores = 2000m
+		{"garbage", "abc", 0},               // unparseable -> 0
+		{"garbage with suffix", "abc m", 0}, // unparseable -> 0
 	}
 
 	for _, tt := range tests {
@@ -64,6 +70,11 @@ func TestParseMemoryQuantity(t *testing.T) {
 		{"gigabytes", "1Gi", 1024 * 1024 * 1024},
 		{"terabytes", "1Ti", 1024 * 1024 * 1024 * 1024},
 		{"plain bytes", "1048576", 1048576},
+		{"fractional gigabytes", "1.5Gi", 1610612736}, // 1.5 * 1024^3
+		{"megabytes five hundred twelve", "512Mi", 536870912},
+		{"plain bytes 1024", "1024", 1024},
+		{"garbage", "abc", 0},                // unparseable -> 0
+		{"garbage with suffix", "abc Gi", 0}, // unparseable -> 0
 	}
 
 	for _, tt := range tests {
