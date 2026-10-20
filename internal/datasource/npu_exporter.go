@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yourusername/k8s-monitor/internal/model"
@@ -32,44 +33,50 @@ const (
 )
 
 // NPUExporterClient provides access to NPU metrics from NPU-Exporter
+// It is safe for concurrent use: the refresh loop, the ForceRefresh path and
+// the UI-triggered data lookups may all call it at the same time.
 type NPUExporterClient struct {
-	restClient      rest.Interface
-	httpClient      *http.Client
-	serviceEndpoint string // Custom endpoint override (e.g., "http://localhost:8082")
-	useProxy        bool   // Whether to use K8s API proxy (default true)
-	serviceName     string // NPU-Exporter service name
-	serviceNS       string // NPU-Exporter namespace
-	servicePort     string // NPU-Exporter port
-	logger          *zap.Logger
-	available       bool
+	restClient  rest.Interface
+	httpClient  *http.Client
+	serviceName string // NPU-Exporter service name
+	serviceNS   string // NPU-Exporter namespace
+	servicePort string // NPU-Exporter port
+	logger      *zap.Logger
+
+	// mu guards the mutable fields below. It is never held while performing
+	// network I/O, so a slow exporter cannot block other goroutines.
+	mu              sync.Mutex
+	serviceEndpoint string    // Custom endpoint override (e.g., "http://localhost:8082")
+	useProxy        bool      // Whether to use K8s API proxy (default true)
+	available       bool      // Whether the last request to NPU-Exporter succeeded
 	lastFailure     time.Time // Time of last failure, used for retry backoff
 }
 
 // NPUChipMetrics represents detailed NPU chip metrics from NPU-Exporter
 type NPUChipMetrics struct {
-	ID                int
-	ModelName         string
-	PCIeBusInfo       string
-	VdieID            string
-	PodName           string
-	Namespace         string
-	ContainerName     string
-	Utilization       float64 // AI Core utilization %
-	VectorUtilization float64 // Vector utilization %
-	HBMTotalMemory    int64   // bytes
-	HBMUsedMemory     int64   // bytes
-	Temperature       int     // Celsius
-	Power             float64 // Watts
-	HealthStatus      int     // 1 = healthy, 0 = unhealthy
-	AICoreCurrentFreq int     // MHz
-	BandwidthRx       float64 // MB/s
-	BandwidthTx       float64 // MB/s
-	Voltage           float64 // V
-	LinkStatus        int     // 1 = up, 0 = down
-	LinkSpeed         int     // link speed
-	LinkUpNum         int     // number of links up
-	NetworkStatus     int
-	ErrorCode         int
+	ID                 int
+	ModelName          string
+	PCIeBusInfo        string
+	VdieID             string
+	PodName            string
+	Namespace          string
+	ContainerName      string
+	Utilization        float64 // AI Core utilization %
+	VectorUtilization  float64 // Vector utilization %
+	HBMTotalMemory     int64   // bytes
+	HBMUsedMemory      int64   // bytes
+	Temperature        int     // Celsius
+	Power              float64 // Watts
+	HealthStatus       int     // 1 = healthy, 0 = unhealthy
+	AICoreCurrentFreq  int     // MHz
+	BandwidthRx        float64 // MB/s
+	BandwidthTx        float64 // MB/s
+	Voltage            float64 // V
+	LinkStatus         int     // 1 = up, 0 = down
+	LinkSpeed          int     // link speed
+	LinkUpNum          int     // number of links up
+	NetworkStatus      int
+	ErrorCode          int
 	HBMEccSingleBitErr int64
 	HBMEccDoubleBitErr int64
 	RoCETxAllPktNum    int64
@@ -114,37 +121,76 @@ func NewNPUExporterClient(config *rest.Config, logger *zap.Logger) (*NPUExporter
 // SetEndpoint allows overriding the default NPU-Exporter endpoint
 // When a custom endpoint is set, direct HTTP access is used instead of K8s API proxy
 func (c *NPUExporterClient) SetEndpoint(endpoint string) {
+	c.mu.Lock()
 	c.serviceEndpoint = endpoint
 	c.useProxy = false // Use direct HTTP when custom endpoint is provided
+	c.mu.Unlock()
+
 	c.logger.Info("NPU-Exporter using custom endpoint", zap.String("endpoint", endpoint))
+}
+
+// inBackoff reports whether a recent failure should suppress new requests
+func (c *NPUExporterClient) inBackoff() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return !c.lastFailure.IsZero() && time.Since(c.lastFailure) < npuExporterRetryDelay
+}
+
+// isAvailable reports whether the last request to NPU-Exporter succeeded
+func (c *NPUExporterClient) isAvailable() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.available
+}
+
+// recordSuccess marks NPU-Exporter as reachable and clears the retry backoff
+func (c *NPUExporterClient) recordSuccess() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.available = true
+	c.lastFailure = time.Time{}
+}
+
+// recordFailure marks NPU-Exporter as unreachable and arms the retry backoff
+func (c *NPUExporterClient) recordFailure() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.available = false
+	c.lastFailure = time.Now()
+}
+
+// endpointConfig returns the endpoint settings to use for the next request
+func (c *NPUExporterClient) endpointConfig() (useProxy bool, endpoint string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.useProxy, c.serviceEndpoint
 }
 
 // CheckAvailability checks if NPU-Exporter is available
 // Uses retry backoff to avoid repeated failures blocking the refresh cycle
 func (c *NPUExporterClient) CheckAvailability(ctx context.Context) error {
+	_, _, err := c.checkAvailability(ctx)
+	return err
+}
+
+// checkAvailability probes NPU-Exporter and returns the metrics it fetched,
+// so callers can reuse that response instead of issuing a second request
+func (c *NPUExporterClient) checkAvailability(ctx context.Context) (map[int]*NPUChipMetrics, int, error) {
 	// Check if we should skip due to recent failure (retry backoff)
-	if !c.lastFailure.IsZero() && time.Since(c.lastFailure) < npuExporterRetryDelay {
-		return fmt.Errorf("NPU-Exporter recently failed, waiting for retry backoff")
+	if c.inBackoff() {
+		return nil, 0, fmt.Errorf("NPU-Exporter recently failed, waiting for retry backoff")
 	}
 
 	// Create a timeout context for the availability check
 	timeoutCtx, cancel := context.WithTimeout(ctx, npuExporterTimeout)
 	defer cancel()
 
-	_, _, err := c.GetMetrics(timeoutCtx)
-	if err != nil {
-		c.available = false
-		c.lastFailure = time.Now()
-		return err
-	}
-	c.available = true
-	c.lastFailure = time.Time{} // Clear failure time on success
-	return nil
+	return c.GetMetrics(timeoutCtx)
 }
 
 // IsAvailable returns whether NPU-Exporter is available
 func (c *NPUExporterClient) IsAvailable() bool {
-	return c.available
+	return c.isAvailable()
 }
 
 // fetchMetricsViaProxy fetches metrics using Kubernetes API server proxy
@@ -173,8 +219,8 @@ func (c *NPUExporterClient) fetchMetricsViaProxy(ctx context.Context) (io.ReadCl
 }
 
 // fetchMetricsDirect fetches metrics using direct HTTP
-func (c *NPUExporterClient) fetchMetricsDirect(ctx context.Context) (io.ReadCloser, error) {
-	url := c.serviceEndpoint + "/metrics"
+func (c *NPUExporterClient) fetchMetricsDirect(ctx context.Context, endpoint string) (io.ReadCloser, error) {
+	url := endpoint + "/metrics"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -196,22 +242,24 @@ func (c *NPUExporterClient) fetchMetricsDirect(ctx context.Context) (io.ReadClos
 
 // GetMetrics fetches all NPU metrics from NPU-Exporter
 func (c *NPUExporterClient) GetMetrics(ctx context.Context) (map[int]*NPUChipMetrics, int, error) {
+	useProxy, endpoint := c.endpointConfig()
+
 	var body io.ReadCloser
 	var err error
 
-	if c.useProxy {
+	if useProxy {
 		body, err = c.fetchMetricsViaProxy(ctx)
 	} else {
-		body, err = c.fetchMetricsDirect(ctx)
+		body, err = c.fetchMetricsDirect(ctx, endpoint)
 	}
 
 	if err != nil {
-		c.available = false
+		c.recordFailure()
 		return nil, 0, err
 	}
 	defer body.Close()
 
-	c.available = true
+	c.recordSuccess()
 	return c.parseMetrics(body)
 }
 
@@ -351,38 +399,13 @@ func (c *NPUExporterClient) parseMetrics(body io.Reader) (map[int]*NPUChipMetric
 // EnrichNodeData enriches node data with NPU metrics from NPU-Exporter
 func (c *NPUExporterClient) EnrichNodeData(ctx context.Context, nodes []*model.NodeData) error {
 	// Skip if recently failed (retry backoff)
-	if !c.lastFailure.IsZero() && time.Since(c.lastFailure) < npuExporterRetryDelay {
+	if c.inBackoff() {
 		c.logger.Debug("NPU-Exporter in backoff period, skipping enrichment")
 		return nil
 	}
 
-	// Create timeout context to prevent blocking the refresh cycle
-	timeoutCtx, cancel := context.WithTimeout(ctx, npuExporterTimeout)
-	defer cancel()
-
-	if !c.available {
-		if err := c.CheckAvailability(timeoutCtx); err != nil {
-			c.logger.Debug("NPU-Exporter not available, skipping enrichment", zap.Error(err))
-			return nil // Not an error, just skip enrichment
-		}
-	}
-
-	chipMetrics, npuCount, err := c.GetMetrics(timeoutCtx)
-	if err != nil {
-		c.logger.Warn("Failed to get NPU metrics", zap.Error(err))
-		c.lastFailure = time.Now()
-		return nil // Don't fail, just skip enrichment
-	}
-
-	// Clear failure time on success
-	c.lastFailure = time.Time{}
-
-	c.logger.Debug("Got NPU metrics from NPU-Exporter",
-		zap.Int("npu_count", npuCount),
-		zap.Int("chip_count", len(chipMetrics)),
-	)
-
-	// Count NPU nodes in the cluster
+	// Count NPU nodes before any network call: with no NPU nodes there is
+	// nothing to enrich and the request would be wasted.
 	var npuNodes []*model.NodeData
 	for _, node := range nodes {
 		if node.NPUCapacity > 0 {
@@ -395,6 +418,46 @@ func (c *NPUExporterClient) EnrichNodeData(ctx context.Context, nodes []*model.N
 		return nil
 	}
 
+	// NPU-Exporter is reached through a ClusterIP Service, so the response comes
+	// from a single exporter pod on a single node and carries no node identity.
+	// Spreading those chips over several nodes would fabricate per-node data,
+	// so only a single-NPU-node cluster is enriched.
+	if len(npuNodes) > 1 {
+		c.logger.Warn("metrics from single exporter cannot be attributed to specific nodes, skipping per-node enrichment",
+			zap.Int("npu_nodes", len(npuNodes)),
+		)
+		return nil
+	}
+
+	// Create timeout context to prevent blocking the refresh cycle
+	timeoutCtx, cancel := context.WithTimeout(ctx, npuExporterTimeout)
+	defer cancel()
+
+	var chipMetrics map[int]*NPUChipMetrics
+	var npuCount int
+	var err error
+
+	if c.isAvailable() {
+		chipMetrics, npuCount, err = c.GetMetrics(timeoutCtx)
+		if err != nil {
+			c.logger.Warn("Failed to get NPU metrics", zap.Error(err))
+			return nil // Don't fail, just skip enrichment
+		}
+	} else {
+		// The availability probe returns the metrics of the same request, so
+		// the first refresh does not fetch them twice.
+		chipMetrics, npuCount, err = c.checkAvailability(timeoutCtx)
+		if err != nil {
+			c.logger.Debug("NPU-Exporter not available, skipping enrichment", zap.Error(err))
+			return nil // Not an error, just skip enrichment
+		}
+	}
+
+	c.logger.Debug("Got NPU metrics from NPU-Exporter",
+		zap.Int("npu_count", npuCount),
+		zap.Int("chip_count", len(chipMetrics)),
+	)
+
 	// Convert chip metrics map to sorted slice for consistent assignment
 	chips := make([]*NPUChipMetrics, 0, len(chipMetrics))
 	for _, chip := range chipMetrics {
@@ -404,37 +467,7 @@ func (c *NPUExporterClient) EnrichNodeData(ctx context.Context, nodes []*model.N
 		return chips[i].ID < chips[j].ID
 	})
 
-	// Strategy for chip distribution:
-	// 1. Single NPU node: Assign all chips to it
-	// 2. Multiple NPU nodes with chip count matching first node's capacity:
-	//    Assume single-node metrics (via Service LB), assign only to first node
-	// 3. Multiple NPU nodes with chip count > any single node's capacity:
-	//    Distribute chips proportionally based on NPUAllocatable
-
-	if len(npuNodes) == 1 {
-		// Single NPU node - assign all chips
-		c.enrichSingleNode(npuNodes[0], chips)
-	} else {
-		// Multiple NPU nodes - need to determine distribution strategy
-		totalChips := len(chips)
-		// Calculate expected chips for first node (NPU count * chips per NPU)
-		firstNodeExpectedChips := int(npuNodes[0].NPUAllocatable) * chipsPerNPU
-
-		// Check if metrics likely come from a single node (Service load balanced to one pod)
-		if totalChips > 0 && totalChips <= firstNodeExpectedChips {
-			// Metrics count suggests single node source, warn and assign to first node only
-			c.logger.Warn("NPU metrics count suggests single-node source in multi-node cluster",
-				zap.Int("chip_count", totalChips),
-				zap.Int("npu_nodes", len(npuNodes)),
-				zap.Int("first_node_expected_chips", firstNodeExpectedChips),
-				zap.String("hint", "Consider using headless Service or querying each node directly"),
-			)
-			c.enrichSingleNode(npuNodes[0], chips)
-		} else {
-			// Distribute chips across nodes based on expected capacity
-			c.distributeChipsToNodes(npuNodes, chips)
-		}
-	}
+	c.enrichSingleNode(npuNodes[0], chips)
 
 	return nil
 }
@@ -491,47 +524,6 @@ func (c *NPUExporterClient) enrichSingleNode(node *model.NodeData, chips []*NPUC
 		zap.Float64("utilization", node.NPUUtilization),
 		zap.Int("chips", len(node.NPUChips)),
 	)
-}
-
-// distributeChipsToNodes distributes chips to multiple nodes based on NPUAllocatable
-func (c *NPUExporterClient) distributeChipsToNodes(nodes []*model.NodeData, chips []*NPUChipMetrics) {
-	if len(chips) == 0 || len(nodes) == 0 {
-		return
-	}
-
-	// Distribute chips to nodes based on expected capacity
-	chipIndex := 0
-	for _, node := range nodes {
-		// Calculate expected chips for this node (NPU count * chips per NPU)
-		expectedChips := int(node.NPUAllocatable) * chipsPerNPU
-		if expectedChips <= 0 {
-			continue
-		}
-
-		// Assign expectedChips chips to this node
-		endIndex := chipIndex + expectedChips
-		if endIndex > len(chips) {
-			endIndex = len(chips)
-		}
-
-		if chipIndex >= len(chips) {
-			// No more chips to assign
-			break
-		}
-
-		nodeChips := chips[chipIndex:endIndex]
-		c.enrichSingleNode(node, nodeChips)
-
-		chipIndex = endIndex
-	}
-
-	// Log warning if we have leftover chips
-	if chipIndex < len(chips) {
-		c.logger.Warn("Some NPU chips not assigned to any node",
-			zap.Int("unassigned_chips", len(chips)-chipIndex),
-			zap.Int("total_chips", len(chips)),
-		)
-	}
 }
 
 // convertChipMetrics converts NPUChipMetrics to model.NPUChipData
