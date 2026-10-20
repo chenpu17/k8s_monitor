@@ -143,9 +143,9 @@ type ClusterSummary struct {
 	NPUChipType     string // e.g., "Ascend910", "Ascend310"
 
 	// Topology information (Volcano HyperNode)
-	HyperClusterID   string // volcano.sh/hypercluster
-	HyperNodeCount   int    // Number of HyperNodes (Tier 1)
-	SuperPodCount    int    // Number of SuperPods
+	HyperClusterID string // volcano.sh/hypercluster
+	HyperNodeCount int    // Number of HyperNodes (Tier 1)
+	SuperPodCount  int    // Number of SuperPods
 
 	LastRefreshTime time.Time
 
@@ -168,14 +168,14 @@ const (
 	AlertTypeNodeMemoryHigh     AlertType = "node_memory_high"
 
 	// Pod alert types
-	AlertTypePodOOMKilled         AlertType = "pod_oom_killed"
-	AlertTypePodCrashLoopBackOff  AlertType = "pod_crash_loop"
-	AlertTypePodImagePullBackOff  AlertType = "pod_image_pull"
-	AlertTypePodHighRestarts      AlertType = "pod_high_restarts"
-	AlertTypePodPendingTooLong    AlertType = "pod_pending_long"
-	AlertTypePodFailed            AlertType = "pod_failed"
-	AlertTypePodEvicted           AlertType = "pod_evicted"
-	AlertTypePodUnschedulable     AlertType = "pod_unschedulable"
+	AlertTypePodOOMKilled        AlertType = "pod_oom_killed"
+	AlertTypePodCrashLoopBackOff AlertType = "pod_crash_loop"
+	AlertTypePodImagePullBackOff AlertType = "pod_image_pull"
+	AlertTypePodHighRestarts     AlertType = "pod_high_restarts"
+	AlertTypePodPendingTooLong   AlertType = "pod_pending_long"
+	AlertTypePodFailed           AlertType = "pod_failed"
+	AlertTypePodEvicted          AlertType = "pod_evicted"
+	AlertTypePodUnschedulable    AlertType = "pod_unschedulable"
 
 	// Service alert types
 	AlertTypeServiceNoEndpoints AlertType = "service_no_endpoints"
@@ -249,28 +249,28 @@ type NPUChipData struct {
 	HBMTotal int64   `json:"hbm_total"` // HBM memory total in MB
 
 	// Extended metrics from NPU-Exporter
-	VectorUtil       float64 `json:"vector_util"`        // Vector utilization percentage
-	Voltage          float64 `json:"voltage"`            // Voltage in V
-	AICoreFreq       int     `json:"aicore_freq"`        // AI Core frequency in MHz
-	LinkStatus       int     `json:"link_status"`        // Link status (1=up, 0=down)
-	LinkSpeed        int     `json:"link_speed"`         // Link speed
-	LinkUpNum        int     `json:"link_up_num"`        // Number of links up
-	NetworkStatus    int     `json:"network_status"`     // Network status
-	ErrorCode        int     `json:"error_code"`         // Error code
-	HBMEccSingleErr  int64   `json:"hbm_ecc_single"`     // HBM ECC single-bit errors
-	HBMEccDoubleErr  int64   `json:"hbm_ecc_double"`     // HBM ECC double-bit errors
-	RoCETxPkts       int64   `json:"roce_tx_pkts"`       // RoCE TX packets
-	RoCERxPkts       int64   `json:"roce_rx_pkts"`       // RoCE RX packets
-	RoCETxErrPkts    int64   `json:"roce_tx_err_pkts"`   // RoCE TX error packets
-	RoCERxErrPkts    int64   `json:"roce_rx_err_pkts"`   // RoCE RX error packets
-	BandwidthRx      float64 `json:"bandwidth_rx"`       // Bandwidth RX in MB/s
-	BandwidthTx      float64 `json:"bandwidth_tx"`       // Bandwidth TX in MB/s
+	VectorUtil      float64 `json:"vector_util"`      // Vector utilization percentage
+	Voltage         float64 `json:"voltage"`          // Voltage in V
+	AICoreFreq      int     `json:"aicore_freq"`      // AI Core frequency in MHz
+	LinkStatus      int     `json:"link_status"`      // Link status (1=up, 0=down)
+	LinkSpeed       int     `json:"link_speed"`       // Link speed
+	LinkUpNum       int     `json:"link_up_num"`      // Number of links up
+	NetworkStatus   int     `json:"network_status"`   // Network status
+	ErrorCode       int     `json:"error_code"`       // Error code
+	HBMEccSingleErr int64   `json:"hbm_ecc_single"`   // HBM ECC single-bit errors
+	HBMEccDoubleErr int64   `json:"hbm_ecc_double"`   // HBM ECC double-bit errors
+	RoCETxPkts      int64   `json:"roce_tx_pkts"`     // RoCE TX packets
+	RoCERxPkts      int64   `json:"roce_rx_pkts"`     // RoCE RX packets
+	RoCETxErrPkts   int64   `json:"roce_tx_err_pkts"` // RoCE TX error packets
+	RoCERxErrPkts   int64   `json:"roce_rx_err_pkts"` // RoCE RX error packets
+	BandwidthRx     float64 `json:"bandwidth_rx"`     // Bandwidth RX in MB/s
+	BandwidthTx     float64 `json:"bandwidth_tx"`     // Bandwidth TX in MB/s
 }
 
 // NPUMetricsData represents the full NPU metrics from node annotation
 type NPUMetricsData struct {
-	Timestamp time.Time      `json:"timestamp"`
-	Chips     []NPUChipData  `json:"chips"`
+	Timestamp time.Time     `json:"timestamp"`
+	Chips     []NPUChipData `json:"chips"`
 }
 
 // NodeData represents a Kubernetes node with metrics
@@ -300,9 +300,9 @@ type NodeData struct {
 	PodCount    int
 
 	// Network metrics (from kubelet)
-	NetworkRxBytes     int64     // Total received bytes
-	NetworkTxBytes     int64     // Total transmitted bytes
-	NetworkTimestamp   time.Time // Kubelet-provided timestamp for network metrics
+	NetworkRxBytes   int64     // Total received bytes
+	NetworkTxBytes   int64     // Total transmitted bytes
+	NetworkTimestamp time.Time // Kubelet-provided timestamp for network metrics
 
 	// Derived metrics
 	CPUUsagePercent    float64
@@ -330,17 +330,17 @@ type NodeData struct {
 	NPUDriverVersion string // e.g., "7.7.0.9.220-25.2.1" from os.modelarts.node/npu.firmware.driver.version
 
 	// NPU runtime metrics (from annotations or external metrics)
-	NPUUtilization    float64 // AI Core utilization percentage (0-100)
-	NPUMemoryTotal    int64   // HBM total in bytes
-	NPUMemoryUsed     int64   // HBM used in bytes
-	NPUMemoryUtil     float64 // HBM utilization percentage (0-100)
-	NPUTemperature    int     // NPU temperature in Celsius
-	NPUPower          int     // NPU power consumption in Watts
-	NPUHealthStatus   string  // Health status: "Healthy", "Warning", "Unhealthy"
-	NPUErrorCount     int     // Number of NPU errors detected
-	NPUAICoreCount    int     // Number of AI cores per NPU
-	NPUMetricsTime    time.Time // Timestamp of last metrics update
-	NPUChips          []NPUChipData // Detailed per-chip metrics from collector
+	NPUUtilization  float64       // AI Core utilization percentage (0-100)
+	NPUMemoryTotal  int64         // HBM total in bytes
+	NPUMemoryUsed   int64         // HBM used in bytes
+	NPUMemoryUtil   float64       // HBM utilization percentage (0-100)
+	NPUTemperature  int           // NPU temperature in Celsius
+	NPUPower        int           // NPU power consumption in Watts
+	NPUHealthStatus string        // Health status: "Healthy", "Warning", "Unhealthy"
+	NPUErrorCount   int           // Number of NPU errors detected
+	NPUAICoreCount  int           // Number of AI cores per NPU
+	NPUMetricsTime  time.Time     // Timestamp of last metrics update
+	NPUChips        []NPUChipData // Detailed per-chip metrics from collector
 
 	// Topology information (from node labels)
 	HyperNodeID    string // volcano.sh/hypernode
@@ -619,8 +619,8 @@ type VolcanoTaskData struct {
 // HyperNodeData represents a Volcano HyperNode (network topology)
 type HyperNodeData struct {
 	Name      string
-	Tier      int    // 1 = SuperPod level, 2 = HyperCluster level
-	NodeCount int    // Number of physical nodes
+	Tier      int // 1 = SuperPod level, 2 = HyperCluster level
+	NodeCount int // Number of physical nodes
 	Members   []HyperNodeMember
 	Labels    map[string]string
 
@@ -645,10 +645,10 @@ type QueueData struct {
 	CreationTimestamp time.Time
 
 	// Deserved resources (quotas)
-	CPUDeserved    int64  // millicores
-	MemoryDeserved int64  // bytes
-	NPUDeserved    int64  // NPU count
-	PodDeserved    int64  // Pod count limit
+	CPUDeserved    int64 // millicores
+	MemoryDeserved int64 // bytes
+	NPUDeserved    int64 // NPU count
+	PodDeserved    int64 // Pod count limit
 
 	// Allocated resources (current usage from status)
 	CPUAllocated    int64 // millicores

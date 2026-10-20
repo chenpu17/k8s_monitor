@@ -8,9 +8,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/chenpu/k8s-monitor/internal/app"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/chenpu/k8s-monitor/internal/app"
 	"go.uber.org/zap"
 	"k8s.io/klog/v2"
 )
