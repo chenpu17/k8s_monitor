@@ -23,19 +23,23 @@ k8s-monitor 的 NPU-Exporter 客户端把服务名、命名空间、端口和路
 
 ## 2. 镜像
 
-镜像**必须按你自己的授权渠道替换**,YAML 中已用醒目注释标出。仓库里能确认的两个来源:
-
-1. **华为云 CCE 官方 npu-exporter**(本仓库 README 已记录的引用):
+1. **华为云 CCE 官方 npu-exporter**(YAML 当前引用):
    `swr.cn-north-12.myhuaweicloud.com/hwofficial/npu-exporter:2.3.2`
-   —— 与节点上实际运行的设备插件同属 `swr.*.myhuaweicloud.com/hwofficial/` 家族
-   (设备插件实测为 `swr.cn-east-4.myhuaweicloud.com/hwofficial/huawei-npu-device-plugin:2.10.1`),
-   因此同区域的 `hwofficial` 仓库是最省事的来源。**本仓库未验证该 tag 是否存在**,
-   `kubectl apply` 前请先确认。
+   —— **已实测可用**(2026-10-21,华为云 CCE aarch64 节点,Huawei Cloud EulerOS 2.0):拉取成功(约 324 MB),
+   配合下文参数正常采集 8×910B1 芯片指标,与节点上实测的设备插件
+   (`swr.cn-east-4.myhuaweicloud.com/hwofficial/huawei-npu-device-plugin:2.10.1`)同属 `hwofficial` 家族。
 2. **MindX DL npu-exporter**(Ascend Hub 发行,等价实现):
    【需按 ascendhub 许可获取/替换】镜像受许可限制,需从你自己的 Ascend Hub 订阅拉取后替换 YAML 中的 `image`。
 
-未联网、也未在集群中部署过 npu-exporter,因此**没有任何镜像 tag 是实测验证过的**;
-上述两条只是获取途径,YAML 里的注释同时说明了该改哪里。
+### v2.3.2 的参数要求(实测踩坑)
+
+- **`-ip` 必填**:不传时启动即退出,报 `the listen ip is invalid`。YAML 用 downward API 把
+  `status.podIP`(hostNetwork 下即节点主网卡地址)传给它,避免绑 0.0.0.0(工具自身也不推荐多网卡宿主绑 0.0.0.0)。
+- `-port` 默认即 `8082`,与客户端硬编码一致,无需显式传。
+- `-containerMode` 默认 `docker`,与该 CCE 集群的实际运行时(docker 18.9.0)匹配;
+  **containerd 集群需改 `containerd`** 并挂载对应 socket,否则芯片→Pod 归因退化。
+- `-updateTime 2`:指标缓存刷新 2s,配合 k8s-monitor 默认 2s 自动刷新。
+- 用 `docker run <image> npu-exporter -h`(或探针 pod)可查看任意 tag 的完整 flag 表。
 
 ## 3. YAML 中各项取值的来源
 

@@ -105,6 +105,14 @@ spec:
           #   Replace the image below with the exact tag you are entitled to.
           image: swr.cn-north-12.myhuaweicloud.com/hwofficial/npu-exporter:2.3.2
           imagePullPolicy: IfNotPresent
+          # v2.3.2 (verified on this image) requires an explicit -ip: without
+          # it the exporter exits with "the listen ip is invalid". -port
+          # already defaults to 8082; -containerMode defaults to "docker",
+          # which matches the CCE docker runtime (switch to "containerd" on
+          # containerd clusters to keep chip->pod attribution).
+          command: ["/bin/sh", "-c"]
+          args:
+            - exec /usr/local/bin/npu-exporter -ip "${POD_IP}" -updateTime 2
           securityContext:
             # Required to talk to the driver/dcmi device nodes.
             privileged: true
@@ -118,6 +126,14 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: spec.nodeName
+            # With hostNetwork the pod IP is the node's primary address, so
+            # binding to it follows the exporter's own advice for multi-NIC
+            # hosts (the RoCE addresses stay unbound).
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.podIP
             # Driver/dcmi libraries live on the host; the mounts below expose
             # them at the same paths the device plugin uses.
             - name: LD_LIBRARY_PATH
@@ -145,6 +161,10 @@ spec:
             - name: localtime
               mountPath: /etc/localtime
               readOnly: true
+            # hwlog writes npu-exporter.log under /var/log/mindx-dl by default;
+            # an emptyDir keeps that writable without touching the host.
+            - name: npu-exporter-log
+              mountPath: /var/log/mindx-dl
       volumes:
         - name: ascend-driver
           hostPath:
@@ -168,3 +188,5 @@ spec:
           hostPath:
             path: /etc/localtime
             type: File
+        - name: npu-exporter-log
+          emptyDir: {}
