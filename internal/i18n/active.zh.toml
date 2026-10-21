@@ -213,6 +213,80 @@ other = "（显示 {{.Start}}-{{.End}}，共 {{.Total}}）"
 other = "阈值"
 
 # ============================================================================
+# 告警消息
+# ============================================================================
+# 由告警视图通过 alert.MessageKey 渲染。英文文案与数据层消息逐字一致；
+# 无 key 的告警携带集群回传原文，不做翻译。
+[alert.node_not_ready]
+other = "节点状态为 {{.Status}}"
+
+[alert.node_memory_pressure]
+other = "节点存在内存压力"
+
+[alert.node_disk_pressure]
+other = "节点存在磁盘压力"
+
+[alert.node_pid_pressure]
+other = "节点存在 PID 压力"
+
+[alert.node_cpu_critical]
+other = "节点 CPU 使用率严重过高"
+
+[alert.node_cpu_high]
+other = "节点 CPU 使用率过高"
+
+[alert.node_memory_critical]
+other = "节点内存使用率严重过高"
+
+[alert.node_memory_high]
+other = "节点内存使用率过高"
+
+[alert.npu_chip_fault]
+other = "NPU 芯片 {{.Chips}} 被设备插件上报故障"
+
+[alert.npu_monitor_degraded]
+other = "NPU 监控降级：NPU-Exporter 不可达，芯片指标与阈值告警已暂停，直至其恢复响应"
+
+[alert.pod_oom_killed]
+other = "容器 {{.Container}} 已被 OOMKilled 终止"
+
+[alert.pod_crash_loop]
+other = "容器 {{.Container}} 处于 CrashLoopBackOff 状态"
+
+[alert.pod_image_pull]
+other = "容器 {{.Container}} 拉取镜像失败"
+
+[alert.pod_high_restarts]
+other = "Pod 重启次数过多"
+
+[alert.pod_pending_long]
+other = "Pod 处于 Pending 状态时间过长"
+
+[alert.pod_failed]
+other = "Pod 处于 Failed 状态"
+
+[alert.service_no_endpoints]
+other = "服务没有就绪的端点"
+
+[alert.pvc_pending_long]
+other = "PVC 处于 Pending 状态时间过长"
+
+[alert.npu_temp_high]
+other = "NPU 芯片 {{.Chips}} 温度过高（最高 {{.Max}}°C）"
+
+[alert.npu_ecc_double_bit]
+other = "NPU 芯片 {{.Chips}} 出现 HBM 双位 ECC 错误（不可纠正）"
+
+[alert.npu_ecc_single_bit]
+other = "NPU 芯片 {{.Chips}} 出现 HBM 单位 ECC 错误（可纠正）"
+
+[alert.npu_link_down]
+other = "NPU 芯片 {{.Chips}} 链路中断"
+
+[alert.npu_error_code]
+other = "NPU 芯片 {{.Chips}} 上报错误码"
+
+# ============================================================================
 # 存储视图
 # ============================================================================
 [storage.title]

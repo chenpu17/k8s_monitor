@@ -309,8 +309,13 @@ func (m *Model) renderAlertRow(alert model.Alert) string {
 		resource = fmt.Sprintf("%s: %s", alert.ResourceType, alert.ResourceName)
 	}
 
-	// Format message
+	// Format message: keyed alerts render through the localizer so the message
+	// follows the UI locale; alerts without a key carry raw cluster-provided
+	// text and fall back to the stored (English) Message.
 	message := alert.Message
+	if alert.MessageKey != "" {
+		message = m.TF(alert.MessageKey, alert.MessageArgs)
+	}
 
 	// Format value/threshold
 	var valueStr string

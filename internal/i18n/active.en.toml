@@ -213,6 +213,81 @@ other = "(showing {{.Start}}-{{.End}} of {{.Total}})"
 other = "threshold"
 
 # ============================================================================
+# Alert Messages
+# ============================================================================
+# Rendered by the alerts view via alert.MessageKey. English values must stay
+# verbatim identical to the data-layer messages; alerts without a key carry
+# raw cluster-provided text and are not translated.
+[alert.node_not_ready]
+other = "Node is {{.Status}}"
+
+[alert.node_memory_pressure]
+other = "Node has memory pressure"
+
+[alert.node_disk_pressure]
+other = "Node has disk pressure"
+
+[alert.node_pid_pressure]
+other = "Node has PID pressure"
+
+[alert.node_cpu_critical]
+other = "Node CPU usage critical"
+
+[alert.node_cpu_high]
+other = "Node CPU usage high"
+
+[alert.node_memory_critical]
+other = "Node memory usage critical"
+
+[alert.node_memory_high]
+other = "Node memory usage high"
+
+[alert.npu_chip_fault]
+other = "NPU chip(s) {{.Chips}} reported faulty by the device plugin"
+
+[alert.npu_monitor_degraded]
+other = "NPU monitoring degraded: NPU-Exporter unreachable, chip metrics and threshold alerts suspended until it responds"
+
+[alert.pod_oom_killed]
+other = "Container {{.Container}} was OOMKilled"
+
+[alert.pod_crash_loop]
+other = "Container {{.Container}} in CrashLoopBackOff"
+
+[alert.pod_image_pull]
+other = "Container {{.Container}} failed to pull image"
+
+[alert.pod_high_restarts]
+other = "Pod has high restart count"
+
+[alert.pod_pending_long]
+other = "Pod pending for too long"
+
+[alert.pod_failed]
+other = "Pod is in Failed state"
+
+[alert.service_no_endpoints]
+other = "Service has no ready endpoints"
+
+[alert.pvc_pending_long]
+other = "PVC pending for too long"
+
+[alert.npu_temp_high]
+other = "NPU temperature high on chip(s) {{.Chips}} (max {{.Max}}°C)"
+
+[alert.npu_ecc_double_bit]
+other = "NPU HBM double-bit ECC error(s) on chip(s) {{.Chips}} (uncorrectable)"
+
+[alert.npu_ecc_single_bit]
+other = "NPU HBM single-bit ECC error(s) on chip(s) {{.Chips}} (correctable)"
+
+[alert.npu_link_down]
+other = "NPU link down on chip(s) {{.Chips}}"
+
+[alert.npu_error_code]
+other = "NPU reported error code on chip(s) {{.Chips}}"
+
+# ============================================================================
 # Storage View
 # ============================================================================
 [storage.title]

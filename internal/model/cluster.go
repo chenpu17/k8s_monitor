@@ -209,16 +209,23 @@ const (
 
 // Alert represents a resource alert
 type Alert struct {
-	Severity          AlertSeverity // Critical, Warning, Info
-	Category          string        // Resource, Pod, Node, Storage, Network, Service
-	AlertType         AlertType     // Specific alert type for i18n and actions
-	ResourceType      string        // Node, Pod, PVC, Service, etc.
-	ResourceName      string
-	Namespace         string // Empty for cluster-scoped resources
-	Message           string
-	Value             string // e.g., "95.2%", "3 restarts"
-	Threshold         string // e.g., "80%"
-	RecommendedAction string // Suggested action to resolve the alert
+	Severity     AlertSeverity // Critical, Warning, Info
+	Category     string        // Resource, Pod, Node, Storage, Network, Service
+	AlertType    AlertType     // Specific alert type for i18n and actions
+	ResourceType string        // Node, Pod, PVC, Service, etc.
+	ResourceName string
+	Namespace    string // Empty for cluster-scoped resources
+	Message      string
+	// MessageKey is the i18n key for the message (alert.<alert_type_slug>).
+	// Message keeps the original English text for export/log paths; the alerts
+	// view renders MessageKey through the localizer when it is set, and falls
+	// back to Message when it is empty (e.g. raw cluster-provided text).
+	MessageKey string `json:"message_key,omitempty"`
+	// MessageArgs holds the named template arguments for MessageKey.
+	MessageArgs       map[string]interface{} `json:"message_args,omitempty"`
+	Value             string                 // e.g., "95.2%", "3 restarts"
+	Threshold         string                 // e.g., "80%"
+	RecommendedAction string                 // Suggested action to resolve the alert
 	Timestamp         time.Time
 }
 

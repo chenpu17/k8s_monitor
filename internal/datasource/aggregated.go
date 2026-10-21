@@ -885,6 +885,8 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				ResourceType:      "Node",
 				ResourceName:      node.Name,
 				Message:           fmt.Sprintf("Node is %s", node.Status),
+				MessageKey:        "alert.node_not_ready",
+				MessageArgs:       map[string]interface{}{"Status": node.Status},
 				Value:             node.Status,
 				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeNotReady, "", node.Name),
 				Timestamp:         now,
@@ -900,6 +902,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				ResourceType:      "Node",
 				ResourceName:      node.Name,
 				Message:           "Node has memory pressure",
+				MessageKey:        "alert.node_memory_pressure",
 				Value:             "MemoryPressure",
 				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeMemoryPressure, "", node.Name),
 				Timestamp:         now,
@@ -913,6 +916,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				ResourceType:      "Node",
 				ResourceName:      node.Name,
 				Message:           "Node has disk pressure",
+				MessageKey:        "alert.node_disk_pressure",
 				Value:             "DiskPressure",
 				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeDiskPressure, "", node.Name),
 				Timestamp:         now,
@@ -926,6 +930,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				ResourceType:      "Node",
 				ResourceName:      node.Name,
 				Message:           "Node has PID pressure",
+				MessageKey:        "alert.node_pid_pressure",
 				Value:             "PIDPressure",
 				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodePIDPressure, "", node.Name),
 				Timestamp:         now,
@@ -941,6 +946,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				ResourceType:      "Node",
 				ResourceName:      node.Name,
 				Message:           "Node CPU usage critical",
+				MessageKey:        "alert.node_cpu_critical",
 				Value:             fmt.Sprintf("%.1f%%", node.CPUUsagePercent),
 				Threshold:         fmt.Sprintf("%.0f%%", nodeCPUCriticalThreshold),
 				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeCPUCritical, "", node.Name),
@@ -954,6 +960,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				ResourceType:      "Node",
 				ResourceName:      node.Name,
 				Message:           "Node CPU usage high",
+				MessageKey:        "alert.node_cpu_high",
 				Value:             fmt.Sprintf("%.1f%%", node.CPUUsagePercent),
 				Threshold:         fmt.Sprintf("%.0f%%", nodeCPUWarningThreshold),
 				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeCPUHigh, "", node.Name),
@@ -970,6 +977,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				ResourceType:      "Node",
 				ResourceName:      node.Name,
 				Message:           "Node memory usage critical",
+				MessageKey:        "alert.node_memory_critical",
 				Value:             fmt.Sprintf("%.1f%%", node.MemoryUsagePercent),
 				Threshold:         fmt.Sprintf("%.0f%%", nodeMemoryCriticalThreshold),
 				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeMemoryCritical, "", node.Name),
@@ -983,6 +991,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				ResourceType:      "Node",
 				ResourceName:      node.Name,
 				Message:           "Node memory usage high",
+				MessageKey:        "alert.node_memory_high",
 				Value:             fmt.Sprintf("%.1f%%", node.MemoryUsagePercent),
 				Threshold:         fmt.Sprintf("%.0f%%", nodeMemoryWarningThreshold),
 				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeMemoryHigh, "", node.Name),
@@ -1009,6 +1018,8 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 					ResourceType:      "Node",
 					ResourceName:      node.Name,
 					Message:           fmt.Sprintf("NPU chip(s) %s reported faulty by the device plugin", chips),
+					MessageKey:        "alert.npu_chip_fault",
+					MessageArgs:       map[string]interface{}{"Chips": chips},
 					Value:             "chips " + chips,
 					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPUChipFault, "", node.Name),
 					Timestamp:         now,
@@ -1019,6 +1030,8 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 		// Management-plane NPU faults (device / switch) from the fault-info annotation.
 		if fault := node.NPUFault; fault != nil {
 			if severity, report := npuDeviceFaultSeverity(fault.DeviceFaultLevel); report {
+				// No MessageKey: the message quotes fault-info annotation text
+				// verbatim, so the alerts view falls back to Message.
 				message := fmt.Sprintf("NPU device fault level %s", fault.DeviceFaultLevel)
 				if len(fault.DeviceFaultEvents) > 0 {
 					message += ": " + strings.Join(fault.DeviceFaultEvents, "; ")
@@ -1037,6 +1050,8 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 			}
 
 			if level := fault.SwitchFaultLevel; level != "" && !strings.EqualFold(level, "Normal") {
+				// No MessageKey: the message quotes fault-info annotation text
+				// verbatim, so the alerts view falls back to Message.
 				message := fmt.Sprintf("NPU switch fault level %s", level)
 				if fault.SwitchFaultName != "" {
 					message += " (" + fault.SwitchFaultName + ")"
@@ -1074,6 +1089,8 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 			if !strings.HasPrefix(string(condition.Type), model.NPUCheckConditionPrefix) || condition.Status != corev1.ConditionTrue {
 				continue
 			}
+			// No MessageKey: the message quotes the NT_ inspection condition
+			// text verbatim, so the alerts view falls back to Message.
 			message := fmt.Sprintf("NPU inspection check %s failed", condition.Type)
 			if detail := sanitizeNPUText(condition.Message, npuAlertMessageMaxLen); detail != "" {
 				message += ": " + detail
@@ -1112,6 +1129,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 					ResourceType:      "Node",
 					ResourceName:      node.Name,
 					Message:           "NPU monitoring degraded: NPU-Exporter unreachable, chip metrics and threshold alerts suspended until it responds",
+					MessageKey:        "alert.npu_monitor_degraded",
 					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPUMonitorDegraded, "", node.Name),
 					Timestamp:         now,
 				})
@@ -1133,6 +1151,8 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 					ResourceName:      pod.Name,
 					Namespace:         pod.Namespace,
 					Message:           fmt.Sprintf("Container %s was OOMKilled", container.Name),
+					MessageKey:        "alert.pod_oom_killed",
+					MessageArgs:       map[string]interface{}{"Container": container.Name},
 					Value:             fmt.Sprintf("%d restarts", container.RestartCount),
 					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePodOOMKilled, pod.Namespace, pod.Name),
 					Timestamp:         now,
@@ -1152,6 +1172,8 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 					ResourceName:      pod.Name,
 					Namespace:         pod.Namespace,
 					Message:           fmt.Sprintf("Container %s in CrashLoopBackOff", container.Name),
+					MessageKey:        "alert.pod_crash_loop",
+					MessageArgs:       map[string]interface{}{"Container": container.Name},
 					Value:             container.Reason,
 					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePodCrashLoopBackOff, pod.Namespace, pod.Name),
 					Timestamp:         now,
@@ -1171,6 +1193,8 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 					ResourceName:      pod.Name,
 					Namespace:         pod.Namespace,
 					Message:           fmt.Sprintf("Container %s failed to pull image", container.Name),
+					MessageKey:        "alert.pod_image_pull",
+					MessageArgs:       map[string]interface{}{"Container": container.Name},
 					Value:             container.Reason,
 					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePodImagePullBackOff, pod.Namespace, pod.Name),
 					Timestamp:         now,
@@ -1189,6 +1213,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				ResourceName:      pod.Name,
 				Namespace:         pod.Namespace,
 				Message:           "Pod has high restart count",
+				MessageKey:        "alert.pod_high_restarts",
 				Value:             fmt.Sprintf("%d restarts", pod.RestartCount),
 				Threshold:         fmt.Sprintf("%d", highRestartThreshold),
 				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePodHighRestarts, pod.Namespace, pod.Name),
@@ -1208,6 +1233,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 					ResourceName:      pod.Name,
 					Namespace:         pod.Namespace,
 					Message:           "Pod pending for too long",
+					MessageKey:        "alert.pod_pending_long",
 					Value:             fmt.Sprintf("%.0fm", pendingDuration.Minutes()),
 					Threshold:         fmt.Sprintf("%dm", pendingPodWarningMinutes),
 					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePodPendingTooLong, pod.Namespace, pod.Name),
@@ -1226,6 +1252,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				ResourceName:      pod.Name,
 				Namespace:         pod.Namespace,
 				Message:           "Pod is in Failed state",
+				MessageKey:        "alert.pod_failed",
 				Value:             pod.Phase,
 				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePodFailed, pod.Namespace, pod.Name),
 				Timestamp:         now,
@@ -1244,6 +1271,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				ResourceName:      svc.Name,
 				Namespace:         svc.Namespace,
 				Message:           "Service has no ready endpoints",
+				MessageKey:        "alert.service_no_endpoints",
 				Value:             "0 endpoints",
 				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeServiceNoEndpoints, svc.Namespace, svc.Name),
 				Timestamp:         now,
@@ -1264,6 +1292,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 					ResourceName:      pvc.Name,
 					Namespace:         pvc.Namespace,
 					Message:           "PVC pending for too long",
+					MessageKey:        "alert.pvc_pending_long",
 					Value:             fmt.Sprintf("%.0fm", pendingDuration.Minutes()),
 					Threshold:         fmt.Sprintf("%dm", pendingPodWarningMinutes),
 					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePVCPendingTooLong, pvc.Namespace, pvc.Name),
