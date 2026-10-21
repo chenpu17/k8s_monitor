@@ -1428,3 +1428,73 @@ func TestCollectAlertsNPUThresholdsRealClusterHealthy(t *testing.T) {
 		t.Fatalf("got %d NPU alerts on a healthy node, want 0: %+v", got, alerts)
 	}
 }
+
+// TestCollectAlertsNPUMonitorDegraded covers the degraded-monitoring alert
+// that fills the silent window while the NPU-Exporter client is in retry
+// backoff: no client or a never-attempted client stays quiet, an armed
+// backoff yields exactly one Info alert anchored to the NPU node, and a
+// recorded success clears it again.
+func TestCollectAlertsNPUMonitorDegraded(t *testing.T) {
+	newNodes := func() []*model.NodeData {
+		return npuTestNodes(
+			&model.NodeData{Name: "192.168.2.188", NPUCapacity: 8},
+			&model.NodeData{Name: "cpu-node"},
+		)
+	}
+
+	t.Run("no client attached", func(t *testing.T) {
+		agg := &AggregatedDataSource{}
+		alerts := agg.collectAlerts(newNodes(), nil, nil, nil, nil)
+		if got := len(npuAlertsOfType(alerts, model.AlertTypeNPUMonitorDegraded)); got != 0 {
+			t.Errorf("got %d degraded alerts without a client, want 0", got)
+		}
+	})
+
+	t.Run("never attempted is not degraded", func(t *testing.T) {
+		agg := &AggregatedDataSource{}
+		agg.SetNPUExporterClient(&NPUExporterClient{})
+		alerts := agg.collectAlerts(newNodes(), nil, nil, nil, nil)
+		if got := len(npuAlertsOfType(alerts, model.AlertTypeNPUMonitorDegraded)); got != 0 {
+			t.Errorf("got %d degraded alerts before the first attempt, want 0", got)
+		}
+	})
+
+	t.Run("backoff arms one Info alert on the NPU node", func(t *testing.T) {
+		client := &NPUExporterClient{}
+		agg := &AggregatedDataSource{}
+		agg.SetNPUExporterClient(client)
+		client.recordFailure()
+
+		alerts := agg.collectAlerts(newNodes(), nil, nil, nil, nil)
+		matched := npuAlertsOfType(alerts, model.AlertTypeNPUMonitorDegraded)
+		if len(matched) != 1 {
+			t.Fatalf("got %d degraded alerts during backoff, want 1: %+v", len(matched), alerts)
+		}
+		alert := matched[0]
+		if alert.Severity != model.AlertSeverityInfo {
+			t.Errorf("severity = %v, want Info", alert.Severity)
+		}
+		if alert.ResourceName != "192.168.2.188" {
+			t.Errorf("ResourceName = %q, want the NPU node", alert.ResourceName)
+		}
+		if alert.Category != "NPU" || alert.ResourceType != "Node" {
+			t.Errorf("Category/ResourceType = %q/%q, want NPU/Node", alert.Category, alert.ResourceType)
+		}
+		if alert.RecommendedAction == "" {
+			t.Error("RecommendedAction is empty, want a hint for the exporter path")
+		}
+	})
+
+	t.Run("success clears the alert", func(t *testing.T) {
+		client := &NPUExporterClient{}
+		agg := &AggregatedDataSource{}
+		agg.SetNPUExporterClient(client)
+		client.recordFailure()
+		client.recordSuccess()
+
+		alerts := agg.collectAlerts(newNodes(), nil, nil, nil, nil)
+		if got := len(npuAlertsOfType(alerts, model.AlertTypeNPUMonitorDegraded)); got != 0 {
+			t.Errorf("got %d degraded alerts after recovery, want 0", got)
+		}
+	})
+}

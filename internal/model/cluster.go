@@ -201,6 +201,10 @@ const (
 	AlertTypeNPUEccSingle AlertType = "npu_ecc_single_bit"
 	AlertTypeNPULinkDown  AlertType = "npu_link_down"
 	AlertTypeNPUErrorCode AlertType = "npu_error_code"
+
+	// AlertTypeNPUMonitorDegraded fires while NPU-Exporter is in retry backoff,
+	// so the alerts view is not silently empty of NPU coverage during it
+	AlertTypeNPUMonitorDegraded AlertType = "npu_monitor_degraded"
 )
 
 // Alert represents a resource alert

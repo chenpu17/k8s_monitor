@@ -1096,6 +1096,30 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 		alerts = append(alerts, npuThresholdAlerts(node, now)...)
 	}
 
+	// NPU monitoring degradation: a recent exporter failure suspends chip
+	// metrics and the whole threshold family for the retry-backoff window.
+	// Surface that suspension itself as an Info alert so the alerts view has
+	// no silent window; it clears itself on the next successful refresh.
+	// Multi-NPU-node clusters never poll the exporter (its response cannot be
+	// attributed per node), so they correctly never report degradation here.
+	if a.npuExporterClient != nil && a.npuExporterClient.Degraded() {
+		for _, node := range nodes {
+			if node.NPUCapacity > 0 {
+				alerts = append(alerts, model.Alert{
+					Severity:          model.AlertSeverityInfo,
+					Category:          "NPU",
+					AlertType:         model.AlertTypeNPUMonitorDegraded,
+					ResourceType:      "Node",
+					ResourceName:      node.Name,
+					Message:           "NPU monitoring degraded: NPU-Exporter unreachable, chip metrics and threshold alerts suspended until it responds",
+					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPUMonitorDegraded, "", node.Name),
+					Timestamp:         now,
+				})
+				break
+			}
+		}
+	}
+
 	// Pod alerts
 	for _, pod := range pods {
 		// OOMKilled

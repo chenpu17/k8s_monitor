@@ -198,6 +198,15 @@ func (c *NPUExporterClient) IsAvailable() bool {
 	return c.isAvailable()
 }
 
+// Degraded reports whether NPU monitoring is currently suspended: a request
+// to the exporter failed recently enough that enrichment is being skipped for
+// the retry backoff. It is false before the first attempt, so a cold start
+// reads as "unknown" rather than "degraded", and it clears on the first
+// successful request.
+func (c *NPUExporterClient) Degraded() bool {
+	return c.inBackoff()
+}
+
 // fetchMetricsViaProxy fetches metrics using Kubernetes API server proxy
 func (c *NPUExporterClient) fetchMetricsViaProxy(ctx context.Context) (io.ReadCloser, error) {
 	// Use Kubernetes API server proxy to access the service

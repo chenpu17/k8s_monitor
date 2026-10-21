@@ -106,6 +106,8 @@ func GetRecommendedAction(alertType model.AlertType, namespace, resourceName str
 		return "npu-smi info -t link -i 0 # Check the NPU interconnect link and cabling on " + resourceName
 	case model.AlertTypeNPUErrorCode:
 		return "npu-smi info -t errorcode -i 0 # Look up the reported error code for " + resourceName + " and open a hardware support case if it persists"
+	case model.AlertTypeNPUMonitorDegraded:
+		return "kubectl get pods -n kube-system -l app=npu-exporter # NPU-Exporter is unreachable via the API-server proxy; chip metrics and threshold alerts resume automatically once it responds"
 
 	default:
 		return ""
@@ -214,6 +216,8 @@ func GetRecommendedActionChinese(alertType model.AlertType, namespace, resourceN
 		return "npu-smi info -t link -i 0 # 检查节点 " + resourceName + " 的 NPU 互联链路与线缆"
 	case model.AlertTypeNPUErrorCode:
 		return "npu-smi info -t errorcode -i 0 # 查询节点 " + resourceName + " 上报的错误码含义，持续出现时提硬件工单"
+	case model.AlertTypeNPUMonitorDegraded:
+		return "kubectl get pods -n kube-system -l app=npu-exporter # NPU-Exporter 经 API Server 代理不可达，恢复后芯片指标与阈值告警自动继续"
 
 	default:
 		return ""
