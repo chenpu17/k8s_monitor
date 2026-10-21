@@ -39,11 +39,18 @@ func (m *Model) renderQueues() string {
 	queues := m.clusterData.Queues
 	totalItems := len(queues)
 
-	// Calculate max visible items based on screen height
-	maxVisible := m.height - 10
-	if maxVisible < 5 {
-		maxVisible = 5
+	// Rows that fit under the header, the summary line and the table header,
+	// leaving room for the scroll indicator the list appends below them.
+	// header + blank + summary + blank + table header + separator
+	fixed := 6
+	if volcanoSummary == nil {
+		fixed -= 2
 	}
+	maxVisible := max(1, m.contentBudget()-fixed-scrollIndicatorLines)
+
+	// The renderer reports the rows it printed so the selection-follow logic in
+	// Update scrolls by the same amount the user sees.
+	m.listRows = maxVisible
 
 	// Clamp scroll offset to valid range
 	maxScroll := totalItems - maxVisible

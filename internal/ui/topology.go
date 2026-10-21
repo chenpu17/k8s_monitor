@@ -57,11 +57,20 @@ func (m *Model) renderTopology() string {
 	lines = append(lines, StyleTextMuted.Render(headerRow))
 	lines = append(lines, StyleTextMuted.Render(strings.Repeat("─", colID+colNodes+colNPUPerNode+colTotalNPU+colIPs+8)))
 
-	// Calculate visible range
-	maxVisible := m.height - 12
-	if maxVisible < 1 {
-		maxVisible = 1
+	// Calculate visible range. The table is followed by the help line and, when
+	// the SuperPods do not all fit, by the scroll indicator; both come out of
+	// the content budget so the frame stays inside the terminal.
+	// header + blank + summary + blank + table header + separator + blank + help
+	const fixed = 8
+	reserve := 0
+	if len(superPods) > m.contentBudget()-fixed {
+		reserve = scrollIndicatorLines
 	}
+	maxVisible := max(1, m.contentBudget()-fixed-reserve)
+
+	// The renderer reports the rows it printed so the selection-follow logic in
+	// Update scrolls by the same amount the user sees.
+	m.listRows = maxVisible
 
 	// Calculate scroll bounds (read-only, don't modify state in View)
 	maxScroll := len(superPods) - maxVisible

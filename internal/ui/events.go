@@ -22,11 +22,15 @@ func (m *Model) renderEvents() string {
 	// Header
 	header := m.renderEventsHeader(m.cachedSortedEvents)
 
-	// Event list
-	eventList := m.renderEventsList(m.cachedSortedEvents)
+	// Rows that fit under the header/table header/stats line.
+	rows := m.eventsRowBudget(header)
+
+	// Event list. It clamps the scroll offset, so it runs before the stats line,
+	// which reports the window it ended up showing.
+	eventList := m.renderEventsList(m.cachedSortedEvents, rows)
 
 	// Footer with stats
-	footer := m.renderEventsFooter(m.cachedSortedEvents)
+	footer := m.renderEventsFooter(m.cachedSortedEvents, rows)
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -71,8 +75,18 @@ func (m *Model) renderEventsHeader(events []*model.EventData) string {
 	)
 }
 
-// renderEventsList renders the list of events
-func (m *Model) renderEventsList(events []*model.EventData) string {
+// eventsRowBudget returns how many event rows fit on screen under the view
+// header, the table header and the stats line. The active search panel is held
+// back the same way, or its lines would be appended below the budget and
+// silently trimmed.
+func (m *Model) eventsRowBudget(header string) int {
+	// header + blank + table header + separator + rows + blank + stats line
+	const fixed = 5
+	return max(1, m.contentBudget()-lineCount(header)-fixed-m.panelLines())
+}
+
+// renderEventsList renders the list of events, showing at most maxVisible rows.
+func (m *Model) renderEventsList(events []*model.EventData, maxVisible int) string {
 	var rows []string
 
 	// Table header - define fixed column widths
@@ -94,11 +108,9 @@ func (m *Model) renderEventsList(events []*model.EventData) string {
 	rows = append(rows, StyleHeader.Render(headerRow))
 	rows = append(rows, strings.Repeat("─", colType+colReason+colObject+colMessage+colCount+8))
 
-	// Calculate visible range based on scroll
-	maxVisible := m.height - 10
-	if maxVisible < 1 {
-		maxVisible = 1
-	}
+	// The renderer reports the rows it printed so the selection-follow logic in
+	// Update scrolls by the same amount the user sees.
+	m.listRows = maxVisible
 
 	totalEvents := len(events)
 
@@ -173,7 +185,9 @@ func (m *Model) renderEventRow(event *model.EventData, colType, colReason, colOb
 }
 
 // renderEventsFooter renders the events view footer
-func (m *Model) renderEventsFooter(events []*model.EventData) string {
+// renderEventsFooter renders the events view footer, including the position of
+// the maxVisible-row window the list is showing.
+func (m *Model) renderEventsFooter(events []*model.EventData, maxVisible int) string {
 	// Count event types
 	warning, normal := 0, 0
 	for _, event := range events {
@@ -196,10 +210,6 @@ func (m *Model) renderEventsFooter(events []*model.EventData) string {
 	)
 
 	// Add scroll position indicator if there are more items than visible
-	maxVisible := m.height - 10
-	if maxVisible < 1 {
-		maxVisible = 1
-	}
 	if totalEvents > maxVisible {
 		scrollInfo := fmt.Sprintf("  [%d-%d %s %d]",
 			m.scrollOffset+1,

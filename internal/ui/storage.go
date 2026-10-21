@@ -48,12 +48,31 @@ func (m *Model) renderStorage() string {
 	totalPVCs := len(m.clusterData.PVCs)
 	totalItems := totalPVs + totalPVCs
 
-	// Calculate max visible items based on screen height
-	// Use same value as global scroll logic (m.height - 10) for consistency
-	maxVisible := m.height - 10 // Reserve space for header, footer, tabs
-	if maxVisible < 5 {
-		maxVisible = 5
+	// How many rows fit: the content budget minus the lines this view spends on
+	// its own header, stats block, both table headers and the scroll indicator.
+	// header + blank + 3 stats + blank
+	fixed := 6
+	if m.clusterData.Summary == nil {
+		fixed = 2
 	}
+	// PV section: sub-header + separator + table header + separator + blank
+	if totalPVs > 0 {
+		fixed += 5
+	}
+	// PVC section: sub-header + separator + table header + separator
+	if totalPVCs > 0 {
+		fixed += 4
+	}
+	// The scroll indicator only appears when the items do not all fit.
+	reserve := 0
+	if totalItems > m.contentBudget()-fixed {
+		reserve = scrollIndicatorLines
+	}
+	maxVisible := max(1, m.contentBudget()-fixed-reserve)
+
+	// The renderer reports the rows it printed so the selection-follow logic in
+	// Update scrolls by the same amount the user sees.
+	m.listRows = maxVisible
 
 	// Clamp scroll offset to valid range
 	maxScroll := totalItems - maxVisible

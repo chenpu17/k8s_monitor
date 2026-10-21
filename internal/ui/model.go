@@ -132,6 +132,7 @@ type Model struct {
 	quitting            bool
 	scrollOffset        int                    // Scroll offset for lists
 	selectedIndex       int                    // Selected item index in lists
+	listRows            int                    // Rows the current list view printed (reported by the renderer, read by Update)
 	detailMode          bool                   // True when viewing node/pod/event/job detail
 	detailScrollOffset  int                    // Scroll offset for detail view content
 	selectedNode        *model.NodeData        // Currently selected node for detail view
@@ -194,8 +195,7 @@ type Model struct {
 	logsSearchText string // Current search text for logs filtering
 
 	// Logs cache for performance (avoid re-splitting on every render)
-	cachedLogLines       []string // Cached split log lines
-	cachedLogLinesSource string   // Source string that was cached (for invalidation)
+	cachedLogLines []string // Cached split log lines
 
 	// Action menu state
 	actionMenuMode          bool // True when action menu is visible

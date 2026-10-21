@@ -15,7 +15,38 @@ func (m *Model) renderNetwork() string {
 		return m.T("msg.no_data")
 	}
 
-	// Collect all content lines first
+	allLines := m.networkContentLines()
+	budget := m.contentBudget()
+	startIdx, endIdx := scrollWindow(len(allLines), m.scrollOffset, budget, scrollIndicatorLines)
+
+	visibleLines := allLines[startIdx:endIdx]
+
+	// Add scroll indicator if needed
+	if len(allLines) > budget {
+		scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n[%s] (↑/↓ %s, PgUp/PgDn %s)",
+			m.TF("scroll.showing", map[string]interface{}{
+				"Start": startIdx + 1,
+				"End":   endIdx,
+				"Total": len(allLines),
+			}),
+			m.T("keys.scroll"),
+			m.T("keys.page"),
+		))
+		visibleLines = append(visibleLines, scrollInfo)
+	}
+
+	return strings.Join(visibleLines, "\n")
+}
+
+// networkContentLines returns every line of the network view, in order, before
+// it is sliced down to what fits on screen. Scrolling and the frame height both
+// work off this list, so the window and the "showing X-Y of Z" indicator can
+// never disagree with the content.
+func (m *Model) networkContentLines() []string {
+	if m.clusterData == nil {
+		return nil
+	}
+
 	var allLines []string
 
 	// Header
@@ -33,49 +64,42 @@ func (m *Model) renderNetwork() string {
 	podNetworkLines := strings.Split(m.renderPodNetwork(), "\n")
 	allLines = append(allLines, podNetworkLines...)
 
-	// Apply scroll offset with proper bounds checking
-	maxVisible := m.height - 8
-	if maxVisible < 1 {
-		maxVisible = 1
-	}
+	return allLines
+}
 
-	totalLines := len(allLines)
+// networkMaxScroll returns the largest scroll offset the network content can be
+// scrolled to.
+func (m *Model) networkMaxScroll() int {
+	return maxScrollOffset(len(m.networkContentLines()), m.contentBudget(), scrollIndicatorLines)
+}
 
-	// Clamp scroll offset to valid range [0, max(0, totalLines-maxVisible)]
-	maxScroll := totalLines - maxVisible
-	if maxScroll < 0 {
-		maxScroll = 0
-	}
-	if m.scrollOffset > maxScroll {
-		m.scrollOffset = maxScroll
-	}
-	if m.scrollOffset < 0 {
-		m.scrollOffset = 0
-	}
+// networkScrollBy moves the network view by delta lines without ever stepping
+// past the end of the content. Scrolling up starts from the offset that is
+// actually on screen, so a single ↑ always moves the view one line - also after
+// a refresh shortened the content under a dangling offset.
+func (m *Model) networkScrollBy(delta int) {
+	limit := m.networkMaxScroll()
+	// Start from the offset that is on screen: a dangling offset (the content
+	// shrank under it on a refresh) must not swallow the next ↑ presses.
+	offset := min(m.scrollOffset, limit) + delta
+	m.scrollOffset = max(0, min(offset, limit))
+}
 
-	startIdx := m.scrollOffset
-	endIdx := startIdx + maxVisible
-	if endIdx > totalLines {
-		endIdx = totalLines
+// scrollLineViewBy scrolls the views that move by content lines rather than by
+// selected item (overview and network), and reports whether it handled the key.
+// Both views render far more lines than fit on screen, so their offset has to be
+// clamped against the content: an unclamped offset runs away past the end and
+// then needs several ↑ presses before the view moves again.
+func (m *Model) scrollLineViewBy(delta int) bool {
+	switch m.currentView {
+	case ViewOverview:
+		m.overviewScrollBy(delta)
+		return true
+	case ViewNetwork:
+		m.networkScrollBy(delta)
+		return true
 	}
-
-	visibleLines := allLines[startIdx:endIdx]
-
-	// Add scroll indicator if needed
-	if totalLines > maxVisible {
-		scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n[%s] (↑/↓ %s, PgUp/PgDn %s)",
-			m.TF("scroll.showing", map[string]interface{}{
-				"Start": startIdx + 1,
-				"End":   endIdx,
-				"Total": totalLines,
-			}),
-			m.T("keys.scroll"),
-			m.T("keys.page"),
-		))
-		visibleLines = append(visibleLines, scrollInfo)
-	}
-
-	return strings.Join(visibleLines, "\n")
+	return false
 }
 
 // renderNetworkHeader renders the network view header

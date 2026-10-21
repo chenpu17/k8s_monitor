@@ -628,8 +628,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if !m.detailMode && !m.filterMode && !m.searchMode {
-				m.searchMode = true
-				m.searchText = ""
+				// Only list views whose filters actually consume the search text
+				// (pods/nodes/events draw the search panel); elsewhere '/' would
+				// open a panel that neither renders nor filters anything.
+				switch m.currentView {
+				case ViewPods, ViewNodes, ViewEvents:
+					m.searchMode = true
+					m.searchText = ""
+				}
 			}
 			return m, nil
 
@@ -823,10 +829,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			// Overview and Network views use line-based scrolling
-			if m.currentView == ViewOverview || m.currentView == ViewNetwork {
-				if m.scrollOffset > 0 {
-					m.scrollOffset--
-				}
+			if m.scrollLineViewBy(-1) {
 				return m, nil
 			}
 			// Other list views use item-based selection
@@ -837,6 +840,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.scrollOffset--
 					}
 				}
+			}
+			if m.currentView == ViewAlerts {
+				// An alert row is several lines tall, so the window that keeps
+				// the selection visible comes from the renderer.
+				m.alertsScrollToSelection()
 			}
 			return m, nil
 
@@ -926,8 +934,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			// Overview and Network views use line-based scrolling
-			if m.currentView == ViewOverview || m.currentView == ViewNetwork {
-				m.scrollOffset++
+			if m.scrollLineViewBy(1) {
 				return m, nil
 			}
 			// Other list views use item-based selection
@@ -935,11 +942,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				maxIndex := m.getMaxIndex()
 				if m.selectedIndex < maxIndex-1 {
 					m.selectedIndex++
-					maxVisible := m.height - 10
+					maxVisible := m.listRowsFor()
 					if m.selectedIndex >= m.scrollOffset+maxVisible {
 						m.scrollOffset++
 					}
 				}
+			}
+			if m.currentView == ViewAlerts {
+				// An alert row is several lines tall, so the window that keeps
+				// the selection visible comes from the renderer.
+				m.alertsScrollToSelection()
 			}
 			return m, nil
 
@@ -969,24 +981,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			// Overview and Network views use line-based scrolling
-			if m.currentView == ViewOverview || m.currentView == ViewNetwork {
-				pageSize := m.height - 10
-				if pageSize < 1 {
-					pageSize = 1
-				}
-				if m.scrollOffset >= pageSize {
-					m.scrollOffset -= pageSize
-				} else {
-					m.scrollOffset = 0
-				}
+			if m.scrollLineViewBy(-max(1, m.height-10)) {
 				return m, nil
 			}
-			// Other list views use item-based selection
+			// The alerts list pages by the alerts that fit on screen: an alert
+			// row is several lines tall, so a page is not the terminal height.
+			if m.currentView == ViewAlerts {
+				m.alertsPageBy(-1)
+				return m, nil
+			}
+			// Other list views use item-based selection. A page is what the
+			// view actually shows: the renderers report it, because the rows a
+			// view fits is not the terminal height minus a constant.
 			if !m.detailMode {
-				pageSize := m.height - 10
-				if pageSize < 1 {
-					pageSize = 1
-				}
+				pageSize := m.listRowsFor()
 				if m.selectedIndex >= pageSize {
 					m.selectedIndex -= pageSize
 					m.scrollOffset -= pageSize
@@ -1042,28 +1050,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			// Overview and Network views use line-based scrolling
-			if m.currentView == ViewOverview || m.currentView == ViewNetwork {
-				pageSize := m.height - 10
-				if pageSize < 1 {
-					pageSize = 1
-				}
-				m.scrollOffset += pageSize
+			if m.scrollLineViewBy(max(1, m.height-10)) {
 				return m, nil
 			}
-			// Other list views use item-based selection
+			// The alerts list pages by the alerts that fit on screen.
+			if m.currentView == ViewAlerts {
+				m.alertsPageBy(1)
+				return m, nil
+			}
+			// Other list views use item-based selection. A page is what the
+			// view actually shows: the renderers report it, because the rows a
+			// view fits is not the terminal height minus a constant.
 			if !m.detailMode {
-				pageSize := m.height - 10
-				if pageSize < 1 {
-					pageSize = 1
-				}
+				pageSize := m.listRowsFor()
 				maxIndex := m.getMaxIndex()
 				if m.selectedIndex+pageSize < maxIndex {
 					m.selectedIndex += pageSize
 					m.scrollOffset += pageSize
 				} else {
 					m.selectedIndex = maxIndex - 1
-					maxVisible := m.height - 10
-					m.scrollOffset = maxIndex - maxVisible
+					m.scrollOffset = maxIndex - m.listRowsFor()
 					if m.scrollOffset < 0 {
 						m.scrollOffset = 0
 					}
@@ -1179,7 +1185,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.containerLogs = ""
 			m.logsFetched = false
 			m.cachedLogLines = nil
-			m.cachedLogLinesSource = ""
 		} else {
 			m.logsError = ""
 			m.logsFetched = true
@@ -1200,7 +1205,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Cache the split log lines for fast rendering
 			m.cachedLogLines = logLines
-			m.cachedLogLinesSource = m.containerLogs
 
 			m.logsLastUpdate = time.Now() // Update refresh timestamp
 

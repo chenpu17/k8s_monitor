@@ -137,11 +137,9 @@ func (m *Model) renderWorkloads() string {
 		return header + "\n\n" + m.T("msg.no_workloads")
 	}
 
-	// Apply scroll with bounds checking
-	maxVisible := m.height - 10
-	if maxVisible < 1 {
-		maxVisible = 1
-	}
+	// Apply scroll with bounds checking. The list appends the scroll indicator
+	// below its content, so those lines come out of the window budget.
+	maxVisible := max(1, m.contentBudget()-scrollIndicatorLines)
 
 	totalLines := len(allLines)
 

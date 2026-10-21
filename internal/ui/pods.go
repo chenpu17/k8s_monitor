@@ -22,11 +22,16 @@ func (m *Model) renderPods() string {
 	// Header
 	header := m.renderPodsHeader(m.cachedSortedPods)
 
-	// Pod list
-	podList := m.renderPodsList(m.cachedSortedPods)
+	// Rows that fit under the header/table header/stats line. Both the list and
+	// its stats line need it, so it is computed once per frame.
+	rows := m.podsRowBudget(header)
+
+	// Pod list. It clamps the scroll offset, so it runs before the stats line,
+	// which reports the window it ended up showing.
+	podList := m.renderPodsList(m.cachedSortedPods, rows)
 
 	// Footer with stats
-	footer := m.renderPodsFooter(m.cachedSortedPods)
+	footer := m.renderPodsFooter(m.cachedSortedPods, rows)
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -60,6 +65,17 @@ func (m *Model) renderPods() string {
 	}
 
 	return content
+}
+
+// podsRowBudget returns how many pod rows fit on screen under the view header,
+// the table header and the stats line. It is derived from the rendered header so
+// it follows it when it grows (an active namespace filter adds to it), and from
+// the content budget so the frame - header, tabs and help footer included - fits
+// the terminal.
+func (m *Model) podsRowBudget(header string) int {
+	// header + blank + table header + separator + rows + blank + stats line
+	const fixed = 5
+	return max(1, m.contentBudget()-lineCount(header)-fixed-m.panelLines())
 }
 
 // renderPodsHeader renders the pods view header
@@ -98,8 +114,8 @@ func (m *Model) renderPodsHeader(pods []*model.PodData) string {
 	)
 }
 
-// renderPodsList renders the list of pods
-func (m *Model) renderPodsList(pods []*model.PodData) string {
+// renderPodsList renders the list of pods, showing at most maxVisible rows.
+func (m *Model) renderPodsList(pods []*model.PodData, maxVisible int) string {
 	var rows []string
 
 	// Table header - define fixed column widths
@@ -127,11 +143,9 @@ func (m *Model) renderPodsList(pods []*model.PodData) string {
 	rows = append(rows, StyleHeader.Render(headerRow))
 	rows = append(rows, strings.Repeat("─", colName+colNamespace+colStatus+colCPU+colMemory+colRx+colTx+colRestarts+14))
 
-	// Calculate visible range based on scroll
-	maxVisible := m.height - 10
-	if maxVisible < 1 {
-		maxVisible = 1
-	}
+	// The renderer reports the rows it printed so the selection-follow logic in
+	// Update scrolls by the same amount the user sees.
+	m.listRows = maxVisible
 
 	totalPods := len(pods)
 
@@ -233,8 +247,9 @@ func (m *Model) renderPodRow(pod *model.PodData, colName, colNamespace, colStatu
 	)
 }
 
-// renderPodsFooter renders the pods view footer
-func (m *Model) renderPodsFooter(pods []*model.PodData) string {
+// renderPodsFooter renders the pods view footer, including the position of the
+// maxVisible-row window the list is showing.
+func (m *Model) renderPodsFooter(pods []*model.PodData, maxVisible int) string {
 	// Count pod statuses from filtered list
 	running, pending, failed := 0, 0, 0
 	for _, pod := range pods {
@@ -261,10 +276,6 @@ func (m *Model) renderPodsFooter(pods []*model.PodData) string {
 	)
 
 	// Add scroll position indicator if there are more items than visible
-	maxVisible := m.height - 10
-	if maxVisible < 1 {
-		maxVisible = 1
-	}
 	if totalPods > maxVisible {
 		scrollInfo := fmt.Sprintf("  [%d-%d %s %d]",
 			m.scrollOffset+1,

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -23,22 +24,111 @@ func (m *Model) renderAlerts() string {
 	// Header
 	header := m.renderAlertsHeader(alerts)
 
-	// Alert list
-	alertList := m.renderAlertsList(alerts)
+	// Alert list, windowed to the lines that fit between the header and the
+	// stats line
+	flatAlerts := alertsBySeverity(alerts)
+	listLines, first, end := m.alertWindowLines(flatAlerts, m.scrollOffset, m.alertListBudget())
 
 	// Footer with stats
-	footer := m.renderAlertsFooter(alerts)
+	footer := m.renderAlertsFooter(alerts, first, end, len(flatAlerts))
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
 		"",
-		alertList,
+		strings.Join(listLines, "\n"),
 		"",
 		footer,
 	)
 
 	return content
+}
+
+// alertListBudget returns how many lines the alert list itself may occupy: the
+// content budget minus the view header, the stats line and the blank lines
+// between them. The alert rows are several lines tall, so the number of alerts
+// that fit is derived from the lines they actually render, not from a row count.
+func (m *Model) alertListBudget() int {
+	// header + blank + list + blank + stats line
+	const fixed = 4
+	return max(1, m.contentBudget()-fixed)
+}
+
+// alertsBySeverity returns the alerts in display order: critical, warning, info.
+func alertsBySeverity(alerts []model.Alert) []model.Alert {
+	var critical, warning, info []model.Alert
+	for _, alert := range alerts {
+		switch alert.Severity {
+		case model.AlertSeverityCritical:
+			critical = append(critical, alert)
+		case model.AlertSeverityWarning:
+			warning = append(warning, alert)
+		case model.AlertSeverityInfo:
+			info = append(info, alert)
+		}
+	}
+
+	flatAlerts := make([]model.Alert, 0, len(alerts))
+	flatAlerts = append(flatAlerts, critical...)
+	flatAlerts = append(flatAlerts, warning...)
+	flatAlerts = append(flatAlerts, info...)
+	return flatAlerts
+}
+
+// alertWindowLines renders the window of alerts that starts at index start and
+// fits in budget lines, and returns the lines along with the exclusive index of
+// the last alert shown. The first alert of a severity always carries its section
+// header, so a window that opens in the middle of a group still says which group
+// it is; a single alert taller than the budget is still shown (never an empty
+// window).
+func (m *Model) alertWindowLines(flatAlerts []model.Alert, start, budget int) (lines []string, first, end int) {
+	if len(flatAlerts) == 0 {
+		return nil, 0, 0
+	}
+	start = max(0, min(start, len(flatAlerts)-1))
+	first = start
+	end = start
+	for i := start; i < len(flatAlerts); i++ {
+		// Section header: two lines for the group the window opens with, three
+		// (a separating blank line on top) for every later group.
+		extra := 0
+		if i == start {
+			extra = 2
+		} else if flatAlerts[i].Severity != flatAlerts[i-1].Severity {
+			extra = 3
+		}
+
+		row := m.renderAlertRow(flatAlerts[i])
+		if i == m.selectedIndex {
+			row = StyleSelected.Render(row)
+		}
+		rowLines := strings.Split(row, "\n")
+
+		if len(lines) > 0 && len(lines)+extra+len(rowLines) > budget {
+			break
+		}
+		if extra == 3 {
+			lines = append(lines, "")
+		}
+		if extra > 0 {
+			lines = append(lines, m.alertSectionHeader(flatAlerts[i].Severity), "")
+		}
+		lines = append(lines, rowLines...)
+		end = i + 1
+	}
+	return lines, first, end
+}
+
+// alertSectionHeader renders the severity heading for a group of alerts.
+func (m *Model) alertSectionHeader(severity model.AlertSeverity) string {
+	switch severity {
+	case model.AlertSeverityCritical:
+		return StyleDanger.Bold(true).Render(m.T("stats.critical"))
+	case model.AlertSeverityWarning:
+		return StyleWarning.Bold(true).Render(m.T("stats.warning"))
+	default:
+		return StyleTextSecondary.Bold(true).Render(m.T("stats.info"))
+	}
 }
 
 // renderNoAlerts renders a message when there are no alerts
@@ -124,104 +214,89 @@ func (m *Model) renderAlertsHeader(alerts []model.Alert) string {
 	)
 }
 
-// renderAlertsList renders the list of alerts
-func (m *Model) renderAlertsList(alerts []model.Alert) string {
-	var rows []string
+// alertViewport returns the window of alerts shown for the given first-visible
+// index: the exclusive index one past the last alert in the window, and the
+// lines the window renders. Update uses it to keep the selected alert on screen
+// (the rows are several lines tall, so the number of alerts that fit is not the
+// terminal height minus a constant).
+func (m *Model) alertViewport(start int) (first, end int) {
+	if m.clusterData == nil || m.clusterData.Summary == nil {
+		return 0, 0
+	}
+	_, first, end = m.alertWindowLines(alertsBySeverity(m.clusterData.Summary.Alerts), start, m.alertListBudget())
+	return first, end
+}
 
-	// Group alerts by severity FIRST (before slicing)
-	var critical, warning, info []model.Alert
-	for _, alert := range alerts {
-		switch alert.Severity {
-		case model.AlertSeverityCritical:
-			critical = append(critical, alert)
-		case model.AlertSeverityWarning:
-			warning = append(warning, alert)
-		case model.AlertSeverityInfo:
-			info = append(info, alert)
+// alertMaxScroll returns the first-visible index of the bottom page: the
+// smallest offset whose window reaches the last alert. Anything larger would
+// show less of the last alerts without reaching anything new.
+func (m *Model) alertMaxScroll() int {
+	if m.clusterData == nil || m.clusterData.Summary == nil {
+		return 0
+	}
+	flatAlerts := alertsBySeverity(m.clusterData.Summary.Alerts)
+	budget := m.alertListBudget()
+	for start := 0; start < len(flatAlerts); start++ {
+		if _, _, end := m.alertWindowLines(flatAlerts, start, budget); end >= len(flatAlerts) {
+			return start
 		}
 	}
+	return 0
+}
 
-	// Flatten into display order: Critical → Warning → Info
-	flatAlerts := make([]model.Alert, 0, len(alerts))
-	flatAlerts = append(flatAlerts, critical...)
-	flatAlerts = append(flatAlerts, warning...)
-	flatAlerts = append(flatAlerts, info...)
-
-	// Calculate visible range based on scroll
-	maxVisible := m.height - 12
-	if maxVisible < 1 {
-		maxVisible = 1
+// alertsScrollToSelection moves the window so the selected alert is inside it.
+// The offset is first clamped to the bottom page, so a stale offset from before
+// a refresh cannot hide the selection.
+func (m *Model) alertsScrollToSelection() {
+	if m.clusterData == nil || m.clusterData.Summary == nil {
+		m.scrollOffset = 0
+		return
+	}
+	total := len(m.clusterData.Summary.Alerts)
+	if total == 0 {
+		m.scrollOffset = 0
+		return
+	}
+	if m.selectedIndex >= total {
+		m.selectedIndex = total - 1
+	}
+	if m.selectedIndex < 0 {
+		m.selectedIndex = 0
 	}
 
-	totalAlerts := len(flatAlerts)
-
-	// Calculate scroll bounds (read-only, don't modify state in View)
-	maxScroll := totalAlerts - maxVisible
-	if maxScroll < 0 {
-		maxScroll = 0
+	m.scrollOffset = min(m.scrollOffset, m.alertMaxScroll())
+	if m.scrollOffset < 0 {
+		m.scrollOffset = 0
 	}
-
-	// Use clamped scroll offset for display only
-	scrollOffset := m.scrollOffset
-	if scrollOffset > maxScroll {
-		scrollOffset = maxScroll
+	if m.scrollOffset > m.selectedIndex {
+		m.scrollOffset = m.selectedIndex
+		return
 	}
-	if scrollOffset < 0 {
-		scrollOffset = 0
-	}
-
-	startIdx := scrollOffset
-	endIdx := startIdx + maxVisible
-	if endIdx > totalAlerts {
-		endIdx = totalAlerts
-	}
-
-	visibleAlerts := flatAlerts[startIdx:endIdx]
-
-	// Render grouped sections (Critical → Warning → Info)
-	criticalCount := 0
-	warningCount := 0
-	infoCount := 0
-
-	for i, alert := range visibleAlerts {
-		absoluteIdx := startIdx + i
-
-		// Section header when entering a new severity group
-		if absoluteIdx < len(critical) && criticalCount == 0 {
-			rows = append(rows, StyleDanger.Bold(true).Render(m.T("stats.critical")))
-			rows = append(rows, "")
-		} else if absoluteIdx >= len(critical) && absoluteIdx < len(critical)+len(warning) && warningCount == 0 {
-			if criticalCount > 0 {
-				rows = append(rows, "")
-			}
-			rows = append(rows, StyleWarning.Bold(true).Render(m.T("stats.warning")))
-			rows = append(rows, "")
-		} else if absoluteIdx >= len(critical)+len(warning) && infoCount == 0 {
-			if criticalCount > 0 || warningCount > 0 {
-				rows = append(rows, "")
-			}
-			rows = append(rows, StyleTextSecondary.Bold(true).Render(m.T("stats.info")))
-			rows = append(rows, "")
+	for _, end := m.alertViewport(m.scrollOffset); end <= m.selectedIndex; {
+		m.scrollOffset++
+		if m.scrollOffset >= total {
+			break
 		}
-
-		// Render alert row
-		row := m.renderAlertRow(alert)
-		if absoluteIdx == m.selectedIndex {
-			row = StyleSelected.Render(row)
-		}
-		rows = append(rows, row)
-
-		// Count alerts in each section
-		if absoluteIdx < len(critical) {
-			criticalCount++
-		} else if absoluteIdx < len(critical)+len(warning) {
-			warningCount++
-		} else {
-			infoCount++
-		}
+		_, end = m.alertViewport(m.scrollOffset)
 	}
+}
 
-	return strings.Join(rows, "\n")
+// alertsPageBy moves the alert selection by one page - the alerts that fit on
+// screen - and keeps the selection visible.
+func (m *Model) alertsPageBy(direction int) {
+	if m.clusterData == nil || m.clusterData.Summary == nil {
+		return
+	}
+	total := len(m.clusterData.Summary.Alerts)
+	if total == 0 {
+		return
+	}
+	first, end := m.alertViewport(m.scrollOffset)
+	page := max(1, end-first)
+
+	m.selectedIndex = max(0, min(m.selectedIndex+direction*page, total-1))
+	m.scrollOffset = max(0, min(m.scrollOffset+direction*page, total-1))
+	m.alertsScrollToSelection()
 }
 
 // renderAlertRow renders a single alert row
@@ -271,19 +346,24 @@ func (m *Model) renderAlertRow(alert model.Alert) string {
 	return strings.Join(parts, "\n")
 }
 
-// renderAlertsFooter renders the alerts view footer
-func (m *Model) renderAlertsFooter(alerts []model.Alert) string {
-	totalAlerts := len(alerts)
-
-	// Count by category
+// renderAlertsFooter renders the alerts view footer, including the position of
+// the alert window that is on screen (alerts first..end-1 of totalAlerts).
+func (m *Model) renderAlertsFooter(alerts []model.Alert, first, end, totalAlerts int) string {
+	// Count by category, in a stable order: walking the map directly would
+	// reshuffle the line on every refresh.
 	categories := make(map[string]int)
 	for _, alert := range alerts {
 		categories[alert.Category]++
 	}
+	categoryNames := make([]string, 0, len(categories))
+	for category := range categories {
+		categoryNames = append(categoryNames, category)
+	}
+	sort.Strings(categoryNames)
 
 	var categoryStats []string
-	for category, count := range categories {
-		categoryStats = append(categoryStats, fmt.Sprintf("%s: %d", category, count))
+	for _, category := range categoryNames {
+		categoryStats = append(categoryStats, fmt.Sprintf("%s: %d", category, categories[category]))
 	}
 
 	stats := m.TF("stats.total_alerts", map[string]interface{}{
@@ -293,19 +373,16 @@ func (m *Model) renderAlertsFooter(alerts []model.Alert) string {
 		stats += " • " + strings.Join(categoryStats, " • ")
 	}
 
-	// Add scroll position indicator if there are more items than visible
-	maxVisible := m.height - 12
-	if maxVisible < 1 {
-		maxVisible = 1
-	}
-	if totalAlerts > maxVisible {
-		scrollInfo := fmt.Sprintf("  [%d-%d %s %d]",
-			m.scrollOffset+1,
-			min(m.scrollOffset+maxVisible, totalAlerts),
-			m.T("common.of"),
-			totalAlerts,
-		)
-		stats += StyleTextMuted.Render(scrollInfo)
+	// Scroll position indicator: the window the list actually shows, which the
+	// row heights (an alert is several lines tall) make impossible to derive
+	// from the terminal height alone.
+	if first > 0 || end < totalAlerts {
+		scrollInfo := m.TF("scroll.showing", map[string]interface{}{
+			"Start": first + 1,
+			"End":   end,
+			"Total": totalAlerts,
+		})
+		stats += " " + StyleTextMuted.Render("["+scrollInfo+"]")
 	}
 
 	return StyleTextSecondary.Render(stats)

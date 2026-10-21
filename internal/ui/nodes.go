@@ -22,11 +22,15 @@ func (m *Model) renderNodes() string {
 	// Header
 	header := m.renderNodesHeader(m.cachedSortedNodes)
 
-	// Node list
-	nodeList := m.renderNodesList(m.cachedSortedNodes)
+	// Rows that fit under the header/table header/stats line.
+	rows := m.nodesRowBudget(header)
+
+	// Node list. It clamps the scroll offset, so it runs before the stats line,
+	// which reports the window it ended up showing.
+	nodeList := m.renderNodesList(m.cachedSortedNodes, rows)
 
 	// Footer with stats
-	footer := m.renderNodesFooter()
+	footer := m.renderNodesFooter(rows)
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -49,6 +53,17 @@ func (m *Model) renderNodes() string {
 	}
 
 	return content
+}
+
+// nodesRowBudget returns how many node rows fit on screen under the view header,
+// the table header and the stats line. The header is measured as rendered: it
+// grows a second line when the cluster has NPU nodes. The active search panel
+// is held back the same way, or its lines would be appended below the budget
+// and silently trimmed.
+func (m *Model) nodesRowBudget(header string) int {
+	// header + blank + table header + separator + rows + blank + stats line
+	const fixed = 5
+	return max(1, m.contentBudget()-lineCount(header)-fixed-m.panelLines())
 }
 
 // renderNodesHeader renders the nodes view header
@@ -138,8 +153,8 @@ func (m *Model) renderNPUClusterSummary(summary *model.ClusterSummary) string {
 	return StyleTextMuted.Render("  🧮 NPU: ") + strings.Join(parts, " • ")
 }
 
-// renderNodesList renders the list of nodes
-func (m *Model) renderNodesList(nodes []*model.NodeData) string {
+// renderNodesList renders the list of nodes, showing at most maxVisible rows.
+func (m *Model) renderNodesList(nodes []*model.NodeData, maxVisible int) string {
 	var rows []string
 
 	// Check if cluster has NPU nodes
@@ -189,11 +204,9 @@ func (m *Model) renderNodesList(nodes []*model.NodeData) string {
 	rows = append(rows, StyleHeader.Render(headerRow))
 	rows = append(rows, strings.Repeat("─", separatorWidth))
 
-	// Calculate visible range based on scroll
-	maxVisible := m.height - 10
-	if maxVisible < 1 {
-		maxVisible = 1
-	}
+	// The renderer reports the rows it printed so the selection-follow logic in
+	// Update scrolls by the same amount the user sees.
+	m.listRows = maxVisible
 
 	totalNodes := len(nodes)
 
@@ -335,8 +348,9 @@ func (m *Model) renderNodeRow(node *model.NodeData, colName, colStatus, colRoles
 	)
 }
 
-// renderNodesFooter renders the nodes view footer
-func (m *Model) renderNodesFooter() string {
+// renderNodesFooter renders the nodes view footer, including the position of the
+// maxVisible-row window the list is showing.
+func (m *Model) renderNodesFooter(maxVisible int) string {
 	summary := m.clusterData.Summary
 	if summary == nil {
 		return ""
@@ -353,10 +367,6 @@ func (m *Model) renderNodesFooter() string {
 	)
 
 	// Add scroll position indicator if there are more items than visible
-	maxVisible := m.height - 10
-	if maxVisible < 1 {
-		maxVisible = 1
-	}
 	if totalNodes > maxVisible {
 		scrollInfo := fmt.Sprintf("  [%d-%d %s %d]",
 			m.scrollOffset+1,

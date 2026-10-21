@@ -206,6 +206,56 @@ func (m *Model) renderOverview() string {
 		return "No cluster summary available"
 	}
 
+	allLines := m.overviewContentLines(summary)
+	budget := m.contentBudget()
+	startIdx, endIdx := scrollWindow(len(allLines), m.scrollOffset, budget, scrollIndicatorLines)
+
+	visibleLines := allLines[startIdx:endIdx]
+
+	// Add scroll indicator if content exceeds screen
+	if len(allLines) > budget {
+		scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n[%s] (↑/↓ %s, PgUp/PgDn %s)",
+			m.TF("scroll.showing", map[string]interface{}{
+				"Start": startIdx + 1,
+				"End":   endIdx,
+				"Total": len(allLines),
+			}),
+			m.T("keys.scroll"),
+			m.T("keys.page"),
+		))
+		visibleLines = append(visibleLines, scrollInfo)
+	}
+
+	return strings.Join(visibleLines, "\n")
+}
+
+// overviewMaxScroll returns the largest scroll offset the overview content can
+// be scrolled to.
+func (m *Model) overviewMaxScroll() int {
+	if m.clusterData == nil || m.clusterData.Summary == nil {
+		return 0
+	}
+	total := len(m.overviewContentLines(m.clusterData.Summary))
+	return maxScrollOffset(total, m.contentBudget(), scrollIndicatorLines)
+}
+
+// overviewScrollBy moves the overview by delta lines without ever stepping past
+// the end of the content. Scrolling up starts from the offset that is actually
+// on screen, so a single ↑ always moves the view one line - also after a refresh
+// shortened the content under a dangling offset.
+func (m *Model) overviewScrollBy(delta int) {
+	limit := m.overviewMaxScroll()
+	// Start from the offset that is on screen: a dangling offset (the content
+	// shrank under it on a refresh) must not swallow the next ↑ presses.
+	offset := min(m.scrollOffset, limit) + delta
+	m.scrollOffset = max(0, min(offset, limit))
+}
+
+// overviewContentLines builds every line of the overview, in order, before it is
+// sliced down to what fits on screen. The layout is adaptive: the panels below
+// the cluster load are only added when there is room for them, and the budget
+// they are measured against is the same one the window uses.
+func (m *Model) overviewContentLines(summary *model.ClusterSummary) []string {
 	// Collect all content lines with priority levels
 	var allLines []string
 
@@ -215,11 +265,9 @@ func (m *Model) renderOverview() string {
 	allLines = append(allLines, "")
 
 	// Calculate available space for remaining content
-	// Reserve: header(3) + footer(3) + scroll indicator(2) = 8 lines
-	availableHeight := m.height - 8
-	if availableHeight < 10 {
-		availableHeight = 10
-	}
+	// The scroll indicator needs two lines of the budget when the content
+	// overflows; the priority checks below only decide what is worth building.
+	availableHeight := max(10, m.contentBudget()-scrollIndicatorLines)
 
 	// Check if we have enough space for all content
 	estimatedTotalLines := len(allLines) + 15 // Estimate remaining content height
@@ -276,39 +324,7 @@ func (m *Model) renderOverview() string {
 		}
 	}
 
-	// Apply scroll offset for vertical scrolling
-	maxVisible := availableHeight
-	totalLines := len(allLines)
-
-	// Clamp scroll offset to valid range
-	maxScroll := totalLines - maxVisible
-	if maxScroll < 0 {
-		maxScroll = 0
-	}
-	if m.scrollOffset > maxScroll {
-		m.scrollOffset = maxScroll
-	}
-	if m.scrollOffset < 0 {
-		m.scrollOffset = 0
-	}
-
-	// Calculate visible range
-	startIdx := m.scrollOffset
-	endIdx := startIdx + maxVisible
-	if endIdx > totalLines {
-		endIdx = totalLines
-	}
-
-	visibleLines := allLines[startIdx:endIdx]
-
-	// Add scroll indicator if content exceeds screen
-	if totalLines > maxVisible {
-		scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n[Lines %d-%d of %d] (↑/↓ to scroll, PgUp/PgDn for page)",
-			startIdx+1, endIdx, totalLines))
-		visibleLines = append(visibleLines, scrollInfo)
-	}
-
-	return strings.Join(visibleLines, "\n")
+	return allLines
 }
 
 // hasAlerts checks if there are any alerts to display

@@ -22,15 +22,19 @@ func (m *Model) View() string {
 	if m.commandOutputMode {
 		content := m.renderCommandOutput()
 		footer := m.renderFooter()
-		return fmt.Sprintf("%s\n\n%s\n\n%s", header, content, footer)
+		return m.fitFrame(header, content, "", footer)
 	}
 
 	// Render logs view if in logs mode
 	if m.logsMode {
 		content := m.renderLogs()
 		footer := m.renderFooter()
-		return fmt.Sprintf("%s\n\n%s\n\n%s", header, content, footer)
+		return m.fitFrame(header, content, "", footer)
 	}
+
+	// The list renderers report how many rows they printed; clear it so a view
+	// that does not report rows never reads the previous view's number.
+	m.listRows = 0
 
 	// Render current view
 	var content string
@@ -92,12 +96,7 @@ func (m *Model) View() string {
 	tabs := m.renderViewTabs()
 
 	// Build base view
-	var result string
-	if tabs != "" {
-		result = fmt.Sprintf("%s\n\n%s\n\n%s\n%s", header, content, tabs, footer)
-	} else {
-		result = fmt.Sprintf("%s\n\n%s\n\n%s", header, content, footer)
-	}
+	result := m.fitFrame(header, content, tabs, footer)
 
 	// Add export message if present
 	if m.exportMessage != "" {
