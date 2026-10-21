@@ -4,75 +4,15 @@
 # ============================================================================
 # 应用信息
 # ============================================================================
-[app.name]
-other = "Kubernetes 监控器"
-
 [app.title]
 other = "🔍 Kubernetes 监控器"
 
 [app.author]
 other = "陈普"
 
-[app.description]
-other = "Kubernetes 集群 CLI 监控控制台"
-
-[app.long_description]
-other = "k8s-monitor 是一个轻量级、只读的 Kubernetes 集群 CLI 监控控制台。它提供实时集群健康概览、节点状态、工作负载监控和快速诊断。"
-
-[app.footer]
-other = "基于 Bubble Tea 和 client-go 构建 ❤️"
-
-# ============================================================================
-# 命令
-# ============================================================================
-[commands.console.name]
-other = "console"
-
-[commands.console.short]
-other = "启动交互式监控控制台"
-
-[commands.console.long]
-other = "启动交互式 TUI 控制台来监控您的 Kubernetes 集群"
-
-# ============================================================================
-# 命令行标志
-# ============================================================================
-[flags.config]
-other = "配置文件路径（默认：./config/config.yaml）"
-
-[flags.kubeconfig]
-other = "kubeconfig 文件路径（默认：$HOME/.kube/config）"
-
-[flags.context]
-other = "要使用的 kubernetes 上下文"
-
-[flags.namespace]
-other = "要监控的命名空间（默认：所有命名空间）"
-
-[flags.verbose]
-other = "启用详细日志"
-
-[flags.refresh]
-other = "刷新间隔（秒）"
-
-[flags.no_color]
-other = "禁用彩色输出"
-
-[flags.insecure_kubelet]
-other = "跳过 kubelet 指标的 TLS 验证（仅在测试环境中使用）"
-
-[flags.max_concurrent]
-other = "最大并发 kubelet 查询数（默认：10）"
-
-[flags.locale]
-other = "界面语言 (en, zh)（默认 \"en\"）"
-
 # ============================================================================
 # 视图标题
 # ============================================================================
-[views.overview.title]
-other = "概览"
-
 [views.nodes.title]
 other = "节点"
 
@@ -85,89 +25,11 @@ other = "工作负载"
 [views.network.title]
 other = "网络"
 
-[views.storage.title]
-other = "存储"
-
 [views.events.title]
 other = "事件"
 
 [views.alerts.title]
 other = "告警"
-
-# ============================================================================
-# 概览面板标题
-# ============================================================================
-[overview.cluster_load.title]
-other = "⚡ 集群负载 - 所有节点汇总"
-
-[overview.cluster_load.cpu]
-other = "💻 CPU"
-
-[overview.cluster_load.memory]
-other = "🧠 内存"
-
-[overview.cluster_load.pods]
-other = "📦 Pod"
-
-[overview.cluster_load.nodes]
-other = "🖥️  节点"
-
-[overview.cluster_load.services]
-other = "🔌 服务"
-
-[overview.cluster_load.storage]
-other = "💾 存储"
-
-[overview.cluster_load.workloads]
-other = "📋 工作负载"
-
-[overview.cluster_load.network]
-other = "🌐 网络"
-
-[overview.cluster_load.events]
-other = "⚠️  事件"
-
-[overview.cluster_load.alerts]
-other = "⚠️  告警"
-
-# ============================================================================
-# 集群负载标签
-# ============================================================================
-[load.cpu_used]
-other = "CPU 使用"
-
-[load.cpu_req]
-other = "CPU 请求"
-
-[load.mem_used]
-other = "内存使用"
-
-[load.mem_req]
-other = "内存请求"
-
-[load.net]
-other = "网络"
-
-[load.capacity]
-other = "容量"
-
-[load.allocatable]
-other = "可分配"
-
-[load.rx]
-other = "接收 ↓"
-
-[load.tx]
-other = "发送 ↑"
-
-[load.no_usage_metrics]
-other = "[无使用指标]"
-
-[load.collecting_bandwidth]
-other = "正在收集带宽数据..."
-
-[load.metrics_unavailable]
-other = "指标不可用"
 
 # ============================================================================
 # 列标题
@@ -304,9 +166,6 @@ other = "就绪"
 [status.not_ready]
 other = "未就绪"
 
-[status.unknown]
-other = "未知"
-
 [status.running]
 other = "运行中"
 
@@ -319,59 +178,11 @@ other = "失败"
 [status.succeeded]
 other = "成功"
 
-[status.terminating]
-other = "终止中"
-
-[status.container_creating]
-other = "容器创建中"
-
-[status.crash_loop_back_off]
-other = "崩溃循环"
-
-[status.image_pull_back_off]
-other = "镜像拉取失败"
-
-[status.error]
-other = "错误"
-
-[status.bound]
-other = "已绑定"
-
-[status.available]
-other = "可用"
-
-[status.released]
-other = "已释放"
-
-[status.complete]
-other = "完成"
-
-[status.active]
-other = "活跃"
-
-[status.suspended]
-other = "已暂停"
-
 # ============================================================================
 # 通用消息
 # ============================================================================
-[msg.loading]
-other = "加载中..."
-
-[msg.goodbye]
-other = "再见！"
-
-[msg.last_updated]
-other = "最后更新：{{.Time}}"
-
-[msg.auto_refresh]
-other = "自动刷新：{{.Interval}}"
-
 [msg.no_data]
 other = "无集群数据"
-
-[msg.no_summary]
-other = "无集群摘要信息"
 
 [msg.no_pods]
 other = "未找到 Pod"
@@ -385,18 +196,6 @@ other = "未找到事件"
 [msg.no_workloads]
 other = "未找到工作负载"
 
-[msg.no_services]
-other = "未找到服务"
-
-[msg.no_pvs]
-other = "无持久卷"
-
-[msg.no_pvcs]
-other = "无持久卷声明"
-
-[msg.no_alerts]
-other = "无告警"
-
 [msg.all_healthy]
 other = "所有系统正常"
 
@@ -406,165 +205,12 @@ other = "集群中未检测到告警"
 # ============================================================================
 # 滚动指示器
 # ============================================================================
-[scroll.indicator]
-other = "[第 {{.Start}}-{{.End}} 行，共 {{.Total}} 行]（↑/↓ 滚动，PgUp/PgDn 翻页）"
-
 [scroll.showing]
 other = "（显示 {{.Start}}-{{.End}}，共 {{.Total}}）"
 
-# ============================================================================
-# 按键绑定
-# ============================================================================
-[help.quit]
-other = "退出"
-
-[help.refresh]
-other = "刷新"
-
-[help.help]
-other = "帮助"
-
-[help.up]
-other = "上"
-
-[help.down]
-other = "下"
-
-[help.page_up]
-other = "上一页"
-
-[help.page_down]
-other = "下一页"
-
-[help.switch_view]
-other = "切换视图"
-
-[help.detail]
-other = "详情"
-
-[help.back]
-other = "返回"
-
-[help.filter]
-other = "过滤"
-
-[help.clear_filter]
-other = "清除过滤"
-
-[help.sort]
-other = "排序"
-
-[help.search]
-other = "搜索"
-
-[help.logs]
-other = "日志"
-
-[help.views]
-other = "视图"
-
-[help.next]
-other = "下一个"
-
-[help.scroll]
-other = "滚动"
-
-[help.cancel]
-other = "取消"
-
-[help.apply]
-other = "应用"
-
-[help.type_to_search]
-other = "输入以搜索"
-
-[help.delete]
-other = "删除"
-
-[help.select]
-other = "选择"
-
-[help.page]
-other = "翻页"
-
-# ============================================================================
-# 告警
-# ============================================================================
-[alerts.panel_title]
-other = "⚠️  告警"
-
-[alerts.panel_title_compact]
-other = "⚠️  告警"
-
-[alerts.no_alerts]
-other = "✓ 无告警"
-
-[alerts.node_not_ready]
-other = "❌ {{.Count}} 个未就绪"
-
-[alerts.memory_pressure]
-other = "💾 {{.Count}} 个内存压力"
-
-[alerts.disk_pressure]
-other = "💿 {{.Count}} 个磁盘压力"
-
-[alerts.pid_pressure]
-other = "🔢 {{.Count}} 个 PID 压力"
-
-[alerts.crash_loop]
-other = "🔄 {{.Count}} 个崩溃循环"
-
-[alerts.image_pull]
-other = "📦 {{.Count}} 个镜像拉取"
-
-[alerts.oom_killed]
-other = "💥 {{.Count}} 个 OOM 终止"
-
-[alerts.no_endpoints]
-other = "🔌 {{.Count}} 个服务无端点"
-
-[alerts.more]
-other = "还有 {{.Count}} 个"
-
-[alerts.high_restart_pods]
-other = "高重启 Pod："
-
 # 告警视图的完整消息
-[alerts.full.node_not_ready]
-other = "❌ {{.Count}} 个节点未就绪"
-
-[alerts.full.memory_pressure]
-other = "💾 {{.Count}} 个节点存在内存压力"
-
-[alerts.full.disk_pressure]
-other = "💿 {{.Count}} 个节点存在磁盘压力"
-
-[alerts.full.pid_pressure]
-other = "🔢 {{.Count}} 个节点存在 PID 压力"
-
-[alerts.full.crash_loop]
-other = "🔄 {{.Count}} 个 Pod 处于崩溃循环"
-
-[alerts.full.image_pull]
-other = "📦 {{.Count}} 个 Pod 镜像拉取失败"
-
-[alerts.full.oom_killed]
-other = "💥 {{.Count}} 个 Pod 被 OOM 终止"
-
 [alerts.threshold]
 other = "阈值"
-
-# ============================================================================
-# Kubelet 提示
-# ============================================================================
-[kubelet.hint.rbac]
-other = "检查 RBAC：kubectl auth can-i get nodes/proxy"
-
-[kubelet.hint.tls]
-other = "使用 --insecure-kubelet 解决 TLS 问题（仅限测试集群）"
-
-[kubelet.hint.try_insecure]
-other = "尝试 --insecure-kubelet"
 
 # ============================================================================
 # 存储视图
@@ -590,14 +236,8 @@ other = "存储大小：{{.Used}} / {{.Total}}（已使用 {{.Percent}}%）"
 # ============================================================================
 # 网络视图
 # ============================================================================
-[network.title]
-other = "🌐 网络"
-
 [network.services_endpoints]
 other = "服务 → 端点"
-
-[network.pod_network]
-other = "Pod 网络信息与流量"
 
 [network.stats]
 other = "服务：{{.Services}} • 端点：{{.Endpoints}}"
@@ -605,38 +245,11 @@ other = "服务：{{.Services}} • 端点：{{.Endpoints}}"
 [network.stats_detailed]
 other = "有端点：{{.WithEP}} • 无端点：{{.Without}} • 总端点数：{{.Total}}"
 
-[network.top_pods]
-other = "按当前流量速率显示前 {{.Shown}} 个 Pod（总计：{{.Total}} 个 Pod）"
-
-[network.no_pods]
-other = "无 Pod 网络信息"
-
-[network.no_endpoints_short]
-other = "无端点"
-
 # ============================================================================
 # 工作负载视图
 # ============================================================================
-[workloads.title]
-other = "⚙️  工作负载"
-
-[workloads.services]
-other = "服务"
-
 [workloads.no_jobs]
 other = "未找到任务"
-
-[workloads.active_jobs]
-other = "▸ 活跃任务"
-
-[workloads.failed_jobs]
-other = "▸ 失败任务"
-
-[workloads.completed_jobs]
-other = "▸ 已完成任务（最近 5 个）"
-
-[workloads.and_more]
-other = "... 还有 {{.Count}} 个已完成任务"
 
 # ============================================================================
 # 事件视图
@@ -662,9 +275,6 @@ other = "[所有命名空间]"
 [filter.no_namespaces]
 other = "无可用命名空间"
 
-[filter.filtered_by]
-other = "（过滤条件：{{.Filter}}）"
-
 # ============================================================================
 # 搜索面板
 # ============================================================================
@@ -672,10 +282,7 @@ other = "（过滤条件：{{.Filter}}）"
 other = "🔍 搜索"
 
 [search.help]
-other = "输入以按名称搜索（不区分大小写）"
-
-[search.press_esc]
-other = "按 ESC 键取消"
+other = "Esc 取消 • Backspace 删除"
 
 # ============================================================================
 # 日志查看器
@@ -698,21 +305,9 @@ other = "加载日志中..."
 [logs.empty]
 other = "该容器暂无日志"
 
-[logs.no_containers]
-other = "无可用容器"
-
 # ============================================================================
 # 详情视图标签
 # ============================================================================
-[detail.basic_info]
-other = "📋 基本信息"
-
-[detail.resource_info]
-other = "📊 资源信息"
-
-[detail.name]
-other = "名称"
-
 [detail.namespace]
 other = "命名空间"
 
@@ -725,67 +320,9 @@ other = "创建时间"
 [detail.age]
 other = "年龄"
 
-[detail.labels]
-other = "标签"
-
-
-# ============================================================================
-# 排序信息
-# ============================================================================
-[sort.info]
-other = "排序：{{.Field}} {{.Order}}"
-
-# ============================================================================
-# 错误消息
-# ============================================================================
-[errors.failed_to_load]
-other = "加载配置失败：{{.Error}}"
-
-[errors.failed_to_create_app]
-other = "创建应用程序失败：{{.Error}}"
-
-[errors.shutdown_error]
-other = "关闭时出错：{{.Error}}"
-
-[errors.received_signal]
-other = "收到信号，正在关闭..."
-
-[errors.application_error]
-other = "应用程序错误：{{.Error}}"
-
 # ============================================================================
 # 统计标签
 # ============================================================================
-[stats.total]
-other = "总计"
-
-[stats.total_alt]
-other = "总计："
-
-[stats.ready]
-other = "就绪："
-
-[stats.running]
-other = "运行中："
-
-[stats.pending]
-other = "等待中："
-
-[stats.failed]
-other = "失败："
-
-[stats.not_ready]
-other = "未就绪："
-
-[stats.bound]
-other = "已绑定："
-
-[stats.available]
-other = "可用："
-
-[stats.released]
-other = "已释放："
-
 [stats.cluster_summary]
 other = "集群摘要："
 
@@ -858,10 +395,6 @@ other = "节点"
 [common.pods]
 other = "Pod"
 
-[common.services]
-other = "服务"
-
-
 [overview.capacity]
 other = "容量："
 
@@ -882,7 +415,6 @@ other = "等待："
 
 [overview.failed]
 other = "失败："
-
 
 # ============================================================================
 # 通用 UI 术语
@@ -992,7 +524,6 @@ other = "事件"
 [views.alerts.name]
 other = "告警"
 
-
 # ============================================================================
 # 详情视图
 # ============================================================================
@@ -1046,9 +577,6 @@ other = "镜像"
 [detail.pod.state]
 other = "状态"
 
-[detail.pod.restart_count]
-other = "重启次数"
-
 # 节点详情视图
 [detail.node.no_selected]
 other = "未选择节点"
@@ -1092,12 +620,6 @@ other = "NPU:    "
 [detail.node.snapshots]
 other = "（基于 {{.Count}} 个快照）"
 
-[detail.node.pods_on_node]
-other = "📦 节点上的 Pods（共 {{.Total}} 个）"
-
-[detail.node.no_pods]
-other = "该节点上没有运行的 Pod"
-
 # 详情视图通用
 [detail.scroll_indicator]
 other = "[第 {{.Start}}-{{.End}} 行，共 {{.Total}} 行]（↑/↓ 滚动，PgUp/PgDn 翻页）"
@@ -1123,12 +645,6 @@ other = "主机 IP"
 [detail.field.restarts]
 other = "重启次数"
 
-[detail.field.architecture]
-other = "架构"
-
-[detail.field.os_image]
-other = "操作系统"
-
 [detail.field.internal_ip]
 other = "内部 IP"
 
@@ -1143,7 +659,6 @@ other = "内存"
 
 [detail.field.pods]
 other = "Pods"
-
 
 # ============================================================================
 # 网络视图 - Pod 网络部分
@@ -1250,7 +765,6 @@ other = "Volcano平均"
 [workloads.volcano.running]
 other = "Volcano运行中"
 
-
 # ============================================================================
 # Job 详情视图
 # ============================================================================
@@ -1259,9 +773,6 @@ other = "未选择作业"
 
 [detail.job.title]
 other = "作业"
-
-[detail.job.basic_info]
-other = "📋 基本信息"
 
 [detail.job.status_completed]
 other = "✓ 已完成（{{.Succeeded}}/{{.Completions}}）"
@@ -1356,7 +867,6 @@ other = "每分钟"
 [detail.job.eta]
 other = "预计完成"
 
-
 # ============================================================================
 # 日志查看器附加键
 # ============================================================================
@@ -1385,7 +895,7 @@ other = "Esc 返回"
 # 搜索面板附加键
 # ============================================================================
 [search.placeholder]
-other = "输入名称搜索（不区分大小写）"
+other = "输入名称即时筛选（不区分大小写）"
 
 # ============================================================================
 # PV 详情视图
@@ -1426,23 +936,11 @@ other = "绑定到"
 [detail.pv.not_bound]
 other = "<未绑定>"
 
-[detail.pv.source_info]
-other = "💾 来源信息"
-
 [detail.pv.type]
 other = "类型"
 
-[detail.pv.path]
-other = "路径"
-
-[detail.pv.server]
-other = "服务器"
-
 [detail.pv.lifecycle]
 other = "📅 生命周期"
-
-[detail.pv.age]
-other = "年龄"
 
 # ============================================================================
 # PVC 详情视图
@@ -1492,50 +990,14 @@ other = "📝 规格"
 [detail.pvc.requested]
 other = "请求"
 
-[detail.pvc.selector]
-other = "选择器"
-
-[detail.pvc.volume_name]
-other = "卷名称"
-
 [detail.pvc.lifecycle]
 other = "📅 生命周期"
-
-[detail.pvc.age]
-other = "年龄"
-
-[detail.pvc.conditions]
-other = "📊 条件"
-
-[detail.pvc.no_conditions]
-other = "无条件记录"
-
-[detail.pvc.condition.type]
-other = "类型"
-
-[detail.pvc.condition.status]
-other = "状态"
-
-[detail.pvc.condition.reason]
-other = "原因"
-
-[detail.pvc.condition.message]
-other = "消息"
-
-[detail.pvc.condition.since]
-other = "起始时间"
 
 # ============================================================================
 # NPU（昇腾 AI 加速器）相关
 # ============================================================================
 [columns.npu]
 other = "NPU"
-
-[npu.title]
-other = "NPU（昇腾）"
-
-[npu.total]
-other = "总量"
 
 [npu.allocated]
 other = "已分配"
@@ -1546,29 +1008,8 @@ other = "使用率"
 [npu.chip_type]
 other = "芯片类型"
 
-[npu.device_type]
-other = "设备类型"
-
-[npu.driver_version]
-other = "驱动版本"
-
 [npu.resource_name]
 other = "资源名称"
-
-[npu.topology]
-other = "拓扑信息"
-
-[npu.superpod_id]
-other = "超节点 ID"
-
-[npu.hypernode_id]
-other = "HyperNode ID"
-
-[npu.cabinet]
-other = "机柜"
-
-[npu.no_npu_nodes]
-other = "无 NPU 节点"
 
 [npu.details]
 other = "NPU 详情"
@@ -1654,9 +1095,6 @@ other = "此超节点中没有节点"
 
 [topology.col_npu_allocated]
 other = "已分配"
-
-[topology.col_npu_capacity]
-other = "容量"
 
 [topology.section_volcano_jobs]
 other = "🔥 此超节点上的 Volcano 任务"
@@ -1830,9 +1268,6 @@ other = "副本"
 
 [detail.volcanojob.npu_efficiency]
 other = "NPU 效率"
-
-[detail.volcanojob.npu_per_replica]
-other = "每副本"
 
 # ============================================================================
 # Volcano 队列视图

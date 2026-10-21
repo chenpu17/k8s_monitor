@@ -4,75 +4,15 @@
 # ============================================================================
 # Application Info
 # ============================================================================
-[app.name]
-other = "Kubernetes Monitor"
-
 [app.title]
 other = "🔍 Kubernetes Monitor"
 
 [app.author]
 other = "chenpu"
 
-[app.description]
-other = "A CLI monitoring console for Kubernetes clusters"
-
-[app.long_description]
-other = "k8s-monitor is a lightweight, read-only CLI monitoring console for Kubernetes clusters. It provides real-time cluster health overview, node status, workload monitoring, and quick diagnostics."
-
-[app.footer]
-other = "Built with ❤️  using Bubble Tea and client-go."
-
-# ============================================================================
-# Commands
-# ============================================================================
-[commands.console.name]
-other = "console"
-
-[commands.console.short]
-other = "Start the interactive monitoring console"
-
-[commands.console.long]
-other = "Launch the interactive TUI console to monitor your Kubernetes cluster"
-
-# ============================================================================
-# Flags
-# ============================================================================
-[flags.config]
-other = "config file path (default: ./config/config.yaml)"
-
-[flags.kubeconfig]
-other = "path to kubeconfig file (default: $HOME/.kube/config)"
-
-[flags.context]
-other = "kubernetes context to use"
-
-[flags.namespace]
-other = "namespace to monitor (default: all namespaces)"
-
-[flags.verbose]
-other = "enable verbose logging"
-
-[flags.refresh]
-other = "refresh interval in seconds"
-
-[flags.no_color]
-other = "disable color output"
-
-[flags.insecure_kubelet]
-other = "skip TLS verification for kubelet metrics (use in test environments)"
-
-[flags.max_concurrent]
-other = "maximum concurrent kubelet queries (default: 10)"
-
-[flags.locale]
-other = "interface language (en, zh) (default \"en\")"
-
 # ============================================================================
 # View Titles
 # ============================================================================
-[views.overview.title]
-other = "Overview"
-
 [views.nodes.title]
 other = "Nodes"
 
@@ -85,89 +25,11 @@ other = "Workloads"
 [views.network.title]
 other = "Network"
 
-[views.storage.title]
-other = "Storage"
-
 [views.events.title]
 other = "Events"
 
 [views.alerts.title]
 other = "Alerts"
-
-# ============================================================================
-# Overview Panel Headers
-# ============================================================================
-[overview.cluster_load.title]
-other = "⚡ Cluster Load - Sum of All Nodes"
-
-[overview.cluster_load.cpu]
-other = "💻 CPU"
-
-[overview.cluster_load.memory]
-other = "🧠 Memory"
-
-[overview.cluster_load.pods]
-other = "📦 Pods"
-
-[overview.cluster_load.nodes]
-other = "🖥️  Nodes"
-
-[overview.cluster_load.services]
-other = "🔌 Services"
-
-[overview.cluster_load.storage]
-other = "💾 Storage"
-
-[overview.cluster_load.workloads]
-other = "📋 Workloads"
-
-[overview.cluster_load.network]
-other = "🌐 Network"
-
-[overview.cluster_load.events]
-other = "⚠️  Events"
-
-[overview.cluster_load.alerts]
-other = "⚠️  Alerts"
-
-# ============================================================================
-# Cluster Load Labels
-# ============================================================================
-[load.cpu_used]
-other = "CPU Used"
-
-[load.cpu_req]
-other = "CPU Req"
-
-[load.mem_used]
-other = "Mem Used"
-
-[load.mem_req]
-other = "Mem Req"
-
-[load.net]
-other = "Net"
-
-[load.capacity]
-other = "capacity"
-
-[load.allocatable]
-other = "allocatable"
-
-[load.rx]
-other = "RX ↓"
-
-[load.tx]
-other = "TX ↑"
-
-[load.no_usage_metrics]
-other = "[no usage metrics]"
-
-[load.collecting_bandwidth]
-other = "collecting bandwidth data..."
-
-[load.metrics_unavailable]
-other = "metrics unavailable"
 
 # ============================================================================
 # Column Headers
@@ -304,9 +166,6 @@ other = "Ready"
 [status.not_ready]
 other = "NotReady"
 
-[status.unknown]
-other = "Unknown"
-
 [status.running]
 other = "Running"
 
@@ -319,59 +178,11 @@ other = "Failed"
 [status.succeeded]
 other = "Succeeded"
 
-[status.terminating]
-other = "Terminating"
-
-[status.container_creating]
-other = "ContainerCreating"
-
-[status.crash_loop_back_off]
-other = "CrashLoopBackOff"
-
-[status.image_pull_back_off]
-other = "ImagePullBackOff"
-
-[status.error]
-other = "Error"
-
-[status.bound]
-other = "Bound"
-
-[status.available]
-other = "Available"
-
-[status.released]
-other = "Released"
-
-[status.complete]
-other = "Complete"
-
-[status.active]
-other = "Active"
-
-[status.suspended]
-other = "Suspended"
-
 # ============================================================================
 # General Messages
 # ============================================================================
-[msg.loading]
-other = "Loading..."
-
-[msg.goodbye]
-other = "Goodbye!"
-
-[msg.last_updated]
-other = "Last updated: {{.Time}}"
-
-[msg.auto_refresh]
-other = "Auto refresh: {{.Interval}}"
-
 [msg.no_data]
 other = "No cluster data available"
-
-[msg.no_summary]
-other = "No cluster summary available"
 
 [msg.no_pods]
 other = "No pods found"
@@ -385,18 +196,6 @@ other = "No events found"
 [msg.no_workloads]
 other = "No workloads found"
 
-[msg.no_services]
-other = "No services found"
-
-[msg.no_pvs]
-other = "No PVs"
-
-[msg.no_pvcs]
-other = "No PVCs"
-
-[msg.no_alerts]
-other = "No alerts"
-
 [msg.all_healthy]
 other = "All Systems Healthy"
 
@@ -406,165 +205,12 @@ other = "No alerts detected in the cluster."
 # ============================================================================
 # Scroll Indicators
 # ============================================================================
-[scroll.indicator]
-other = "[Lines {{.Start}}-{{.End}} of {{.Total}}] (↑/↓ to scroll, PgUp/PgDn for page)"
-
 [scroll.showing]
 other = "(showing {{.Start}}-{{.End}} of {{.Total}})"
 
-# ============================================================================
-# Key Bindings
-# ============================================================================
-[help.quit]
-other = "quit"
-
-[help.refresh]
-other = "refresh"
-
-[help.help]
-other = "help"
-
-[help.up]
-other = "up"
-
-[help.down]
-other = "down"
-
-[help.page_up]
-other = "page up"
-
-[help.page_down]
-other = "page down"
-
-[help.switch_view]
-other = "switch view"
-
-[help.detail]
-other = "detail"
-
-[help.back]
-other = "back"
-
-[help.filter]
-other = "filter"
-
-[help.clear_filter]
-other = "clear filter"
-
-[help.sort]
-other = "sort"
-
-[help.search]
-other = "search"
-
-[help.logs]
-other = "logs"
-
-[help.views]
-other = "views"
-
-[help.next]
-other = "next"
-
-[help.scroll]
-other = "scroll"
-
-[help.cancel]
-other = "cancel"
-
-[help.apply]
-other = "apply"
-
-[help.type_to_search]
-other = "type to search"
-
-[help.delete]
-other = "delete"
-
-[help.select]
-other = "select"
-
-[help.page]
-other = "page"
-
-# ============================================================================
-# Alerts
-# ============================================================================
-[alerts.panel_title]
-other = "⚠️  Alerts"
-
-[alerts.panel_title_compact]
-other = "⚠️  Alerts"
-
-[alerts.no_alerts]
-other = "✓ No alerts"
-
-[alerts.node_not_ready]
-other = "❌ {{.Count}} NotReady"
-
-[alerts.memory_pressure]
-other = "💾 {{.Count}} MemPress"
-
-[alerts.disk_pressure]
-other = "💿 {{.Count}} DiskPress"
-
-[alerts.pid_pressure]
-other = "🔢 {{.Count}} PID Pressure"
-
-[alerts.crash_loop]
-other = "🔄 {{.Count}} CrashLoop"
-
-[alerts.image_pull]
-other = "📦 {{.Count}} ImgPull"
-
-[alerts.oom_killed]
-other = "💥 {{.Count}} OOMKill"
-
-[alerts.no_endpoints]
-other = "🔌 {{.Count}} Service(s) with no endpoints"
-
-[alerts.more]
-other = "+{{.Count}} more"
-
-[alerts.high_restart_pods]
-other = "High Restart Pods:"
-
 # Full alert messages for alert view
-[alerts.full.node_not_ready]
-other = "❌ {{.Count}} Node(s) NotReady"
-
-[alerts.full.memory_pressure]
-other = "💾 {{.Count}} Node(s) with Memory Pressure"
-
-[alerts.full.disk_pressure]
-other = "💿 {{.Count}} Node(s) with Disk Pressure"
-
-[alerts.full.pid_pressure]
-other = "🔢 {{.Count}} Node(s) with PID Pressure"
-
-[alerts.full.crash_loop]
-other = "🔄 {{.Count}} Pod(s) in CrashLoopBackOff"
-
-[alerts.full.image_pull]
-other = "📦 {{.Count}} Pod(s) with ImagePullBackOff"
-
-[alerts.full.oom_killed]
-other = "💥 {{.Count}} Pod(s) OOMKilled"
-
 [alerts.threshold]
 other = "threshold"
-
-# ============================================================================
-# Kubelet Hints
-# ============================================================================
-[kubelet.hint.rbac]
-other = "Check RBAC: kubectl auth can-i get nodes/proxy"
-
-[kubelet.hint.tls]
-other = "Use --insecure-kubelet for TLS issues (test clusters only)"
-
-[kubelet.hint.try_insecure]
-other = "Try --insecure-kubelet"
 
 # ============================================================================
 # Storage View
@@ -590,14 +236,8 @@ other = "Storage Size: {{.Used}} / {{.Total}} ({{.Percent}}% used)"
 # ============================================================================
 # Network View
 # ============================================================================
-[network.title]
-other = "🌐 Network"
-
 [network.services_endpoints]
 other = "Services → Endpoints"
-
-[network.pod_network]
-other = "Pod Network Information & Traffic"
 
 [network.stats]
 other = "Services: {{.Services}} • Endpoints: {{.Endpoints}}"
@@ -605,38 +245,11 @@ other = "Services: {{.Services}} • Endpoints: {{.Endpoints}}"
 [network.stats_detailed]
 other = "With Endpoints: {{.WithEP}} • Without: {{.Without}} • Total Endpoints: {{.Total}}"
 
-[network.top_pods]
-other = "Showing top {{.Shown}} pods by current traffic rate (total: {{.Total}} pods)"
-
-[network.no_pods]
-other = "No pods with network information"
-
-[network.no_endpoints_short]
-other = "NoEP"
-
 # ============================================================================
 # Workloads View
 # ============================================================================
-[workloads.title]
-other = "⚙️  Workloads"
-
-[workloads.services]
-other = "Services"
-
 [workloads.no_jobs]
 other = "No jobs found"
-
-[workloads.active_jobs]
-other = "▸ Active Jobs"
-
-[workloads.failed_jobs]
-other = "▸ Failed Jobs"
-
-[workloads.completed_jobs]
-other = "▸ Completed Jobs (last 5)"
-
-[workloads.and_more]
-other = "... and {{.Count}} more completed jobs"
 
 # ============================================================================
 # Events View
@@ -662,9 +275,6 @@ other = "[All namespaces]"
 [filter.no_namespaces]
 other = "No namespaces available"
 
-[filter.filtered_by]
-other = "(filtered by: {{.Filter}})"
-
 # ============================================================================
 # Search Panel
 # ============================================================================
@@ -672,10 +282,7 @@ other = "(filtered by: {{.Filter}})"
 other = "🔍 Search"
 
 [search.help]
-other = "Type to search by name (case-insensitive)"
-
-[search.press_esc]
-other = "Press ESC to cancel"
+other = "Esc cancel • Backspace delete"
 
 # ============================================================================
 # Logs Viewer
@@ -698,21 +305,9 @@ other = "Loading logs..."
 [logs.empty]
 other = "No logs for this container"
 
-[logs.no_containers]
-other = "No containers available"
-
 # ============================================================================
 # Detail View Labels
 # ============================================================================
-[detail.basic_info]
-other = "📋 Basic Information"
-
-[detail.resource_info]
-other = "📊 Resource Information"
-
-[detail.name]
-other = "Name"
-
 [detail.namespace]
 other = "Namespace"
 
@@ -725,67 +320,9 @@ other = "Created"
 [detail.age]
 other = "Age"
 
-[detail.labels]
-other = "Labels"
-
-
-# ============================================================================
-# Sort Info
-# ============================================================================
-[sort.info]
-other = "Sort: {{.Field}} {{.Order}}"
-
-# ============================================================================
-# Error Messages
-# ============================================================================
-[errors.failed_to_load]
-other = "failed to load config: {{.Error}}"
-
-[errors.failed_to_create_app]
-other = "failed to create application: {{.Error}}"
-
-[errors.shutdown_error]
-other = "Error during shutdown: {{.Error}}"
-
-[errors.received_signal]
-other = "Received signal, shutting down..."
-
-[errors.application_error]
-other = "application error: {{.Error}}"
-
 # ============================================================================
 # Statistics Labels
 # ============================================================================
-[stats.total]
-other = "Total"
-
-[stats.total_alt]
-other = "Total:"
-
-[stats.ready]
-other = "Ready:"
-
-[stats.running]
-other = "Running:"
-
-[stats.pending]
-other = "Pending:"
-
-[stats.failed]
-other = "Failed:"
-
-[stats.not_ready]
-other = "NotReady:"
-
-[stats.bound]
-other = "Bound:"
-
-[stats.available]
-other = "Available:"
-
-[stats.released]
-other = "Released:"
-
 [stats.cluster_summary]
 other = "Cluster Summary:"
 
@@ -858,10 +395,6 @@ other = "nodes"
 [common.pods]
 other = "pods"
 
-[common.services]
-other = "services"
-
-
 [overview.capacity]
 other = "Capacity:"
 
@@ -882,7 +415,6 @@ other = "Pending:"
 
 [overview.failed]
 other = "Failed:"
-
 
 # ============================================================================
 # Common UI Terms
@@ -992,7 +524,6 @@ other = "Events"
 [views.alerts.name]
 other = "Alerts"
 
-
 # ============================================================================
 # Detail Views
 # ============================================================================
@@ -1046,9 +577,6 @@ other = "Image"
 [detail.pod.state]
 other = "State"
 
-[detail.pod.restart_count]
-other = "Restart Count"
-
 # Node Detail View
 [detail.node.no_selected]
 other = "No node selected"
@@ -1092,12 +620,6 @@ other = "NPU:    "
 [detail.node.snapshots]
 other = "(Based on {{.Count}} snapshots)"
 
-[detail.node.pods_on_node]
-other = "📦 Pods on this Node ({{.Total}} total)"
-
-[detail.node.no_pods]
-other = "No pods running on this node"
-
 # Common Detail View
 [detail.scroll_indicator]
 other = "[Lines {{.Start}}-{{.End}} of {{.Total}}] (↑/↓ to scroll, PgUp/PgDn for page)"
@@ -1123,12 +645,6 @@ other = "Host IP"
 [detail.field.restarts]
 other = "Restarts"
 
-[detail.field.architecture]
-other = "Architecture"
-
-[detail.field.os_image]
-other = "OS Image"
-
 [detail.field.internal_ip]
 other = "Internal IP"
 
@@ -1143,7 +659,6 @@ other = "Memory"
 
 [detail.field.pods]
 other = "Pods"
-
 
 # ============================================================================
 # Network View - Pod Network Section
@@ -1250,8 +765,6 @@ other = "Volcano Avg"
 [workloads.volcano.running]
 other = "Volcano Running"
 
-
-
 # ============================================================================
 # Job Detail View
 # ============================================================================
@@ -1260,9 +773,6 @@ other = "No job selected"
 
 [detail.job.title]
 other = "Job"
-
-[detail.job.basic_info]
-other = "📋 Basic Information"
 
 [detail.job.status_completed]
 other = "✓ Completed ({{.Succeeded}}/{{.Completions}})"
@@ -1357,7 +867,6 @@ other = "per minute"
 [detail.job.eta]
 other = "ETA"
 
-
 # ============================================================================
 # Additional Logs Viewer Keys
 # ============================================================================
@@ -1386,7 +895,7 @@ other = "Esc back"
 # Additional Search Panel Keys
 # ============================================================================
 [search.placeholder]
-other = "Type to search by name (case-insensitive)"
+other = "Type to filter by name instantly (case-insensitive)"
 
 # ============================================================================
 # PV Detail View
@@ -1427,23 +936,11 @@ other = "Bound to"
 [detail.pv.not_bound]
 other = "<not bound>"
 
-[detail.pv.source_info]
-other = "💾 Source Information"
-
 [detail.pv.type]
 other = "Type"
 
-[detail.pv.path]
-other = "Path"
-
-[detail.pv.server]
-other = "Server"
-
 [detail.pv.lifecycle]
 other = "📅 Lifecycle"
-
-[detail.pv.age]
-other = "Age"
 
 # ============================================================================
 # PVC Detail View
@@ -1493,50 +990,14 @@ other = "📝 Spec"
 [detail.pvc.requested]
 other = "Requested"
 
-[detail.pvc.selector]
-other = "Selector"
-
-[detail.pvc.volume_name]
-other = "Volume Name"
-
 [detail.pvc.lifecycle]
 other = "📅 Lifecycle"
-
-[detail.pvc.age]
-other = "Age"
-
-[detail.pvc.conditions]
-other = "📊 Conditions"
-
-[detail.pvc.no_conditions]
-other = "No conditions recorded"
-
-[detail.pvc.condition.type]
-other = "Type"
-
-[detail.pvc.condition.status]
-other = "Status"
-
-[detail.pvc.condition.reason]
-other = "Reason"
-
-[detail.pvc.condition.message]
-other = "Message"
-
-[detail.pvc.condition.since]
-other = "Since"
 
 # ============================================================================
 # NPU (Ascend AI Accelerator) Related
 # ============================================================================
 [columns.npu]
 other = "NPU"
-
-[npu.title]
-other = "NPU (Ascend)"
-
-[npu.total]
-other = "Total"
 
 [npu.allocated]
 other = "Allocated"
@@ -1547,29 +1008,8 @@ other = "Usage"
 [npu.chip_type]
 other = "Chip Type"
 
-[npu.device_type]
-other = "Device Type"
-
-[npu.driver_version]
-other = "Driver Version"
-
 [npu.resource_name]
 other = "Resource Name"
-
-[npu.topology]
-other = "Topology"
-
-[npu.superpod_id]
-other = "SuperPod ID"
-
-[npu.hypernode_id]
-other = "HyperNode ID"
-
-[npu.cabinet]
-other = "Cabinet"
-
-[npu.no_npu_nodes]
-other = "No NPU nodes"
 
 [npu.details]
 other = "NPU Details"
@@ -1655,9 +1095,6 @@ other = "No nodes found in this SuperPod"
 
 [topology.col_npu_allocated]
 other = "ALLOC"
-
-[topology.col_npu_capacity]
-other = "CAPACITY"
 
 [topology.section_volcano_jobs]
 other = "🔥 Volcano Jobs on this SuperPod"
@@ -1831,9 +1268,6 @@ other = "REPLICAS"
 
 [detail.volcanojob.npu_efficiency]
 other = "NPU Efficiency"
-
-[detail.volcanojob.npu_per_replica]
-other = "per replica"
 
 # ============================================================================
 # Volcano Queue View
