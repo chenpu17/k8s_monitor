@@ -620,6 +620,18 @@ other = "NPU:    "
 [detail.node.snapshots]
 other = "(Based on {{.Count}} snapshots)"
 
+[detail.node.pods_title]
+other = "📦 Pods on this Node ({{.Count}})"
+
+[detail.node.no_pod_info]
+other = "No pod information available"
+
+[detail.node.no_pods]
+other = "No pods running on this node"
+
+[detail.node.more_pods]
+other = "... and {{.Count}} more pods"
+
 # Common Detail View
 [detail.scroll_indicator]
 other = "[Lines {{.Start}}-{{.End}} of {{.Total}}] (↑/↓ to scroll, PgUp/PgDn for page)"
@@ -1557,8 +1569,11 @@ other = "(uncorrectable)"
 [npudetail.runtime_na]
 other = "NPU Runtime Metrics: Not available"
 
-[npudetail.runtime_na_hint]
-other = "NPU-Exporter not reachable or not deployed in kube-system namespace"
+[npudetail.runtime_na_hint_unreachable]
+other = "NPU-Exporter not reachable"
+
+[npudetail.runtime_na_hint_not_deployed]
+other = "or not deployed in kube-system namespace"
 
 [npudetail.runtime_na_flag]
 other = "Use --npu-exporter flag to specify a custom endpoint"

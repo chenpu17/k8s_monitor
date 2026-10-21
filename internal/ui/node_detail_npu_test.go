@@ -355,6 +355,7 @@ func TestRenderNodeDetailNPUBlocksBilingual(t *testing.T) {
 	cases := []struct {
 		locale string
 		want   []string
+		hint   []string // lines of the no-exporter hint, split over two rows
 	}{
 		{
 			locale: "en",
@@ -366,6 +367,7 @@ func TestRenderNodeDetailNPUBlocksBilingual(t *testing.T) {
 				"NPU Network Mapping",
 				"DEVICE IP", "TOR SWITCH", "TOR PORT",
 			},
+			hint: []string{"NPU-Exporter not reachable", "or not deployed in kube-system namespace"},
 		},
 		{
 			locale: "zh",
@@ -377,6 +379,7 @@ func TestRenderNodeDetailNPUBlocksBilingual(t *testing.T) {
 				"NPU 网络映射",
 				"设备IP", "TOR交换机", "TOR端口",
 			},
+			hint: []string{"NPU-Exporter 不可达", "或未部署在 kube-system 命名空间"},
 		},
 	}
 
@@ -395,6 +398,28 @@ func TestRenderNodeDetailNPUBlocksBilingual(t *testing.T) {
 			}
 			if strings.Contains(out, "npudetail.") {
 				t.Errorf("an NPU translation key was not resolved\n---\n%s", out)
+			}
+
+			// A node with NPU capacity but no chip metrics renders the
+			// no-exporter hint; it must be split over two rows (the old single
+			// line was 71 cells and overflowed narrow terminals).
+			m.selectedNode = &model.NodeData{
+				Name: "node-hint", Status: "Ready",
+				NPUCapacity: 8, NPUAllocatable: 8, NPUStatusKnown: true,
+			}
+			hintOut := stripANSI(m.renderNodeDetail())
+			for _, want := range tc.hint {
+				line := lineContaining(hintOut, want)
+				if line == "" {
+					t.Errorf("no-exporter hint is missing %q\n---\n%s", want, hintOut)
+					continue
+				}
+				if w := runewidth.StringWidth(line); w > 64 {
+					t.Errorf("no-exporter hint line is %d cells wide: %q", w, line)
+				}
+			}
+			if strings.Contains(hintOut, "npudetail.") {
+				t.Errorf("an NPU translation key was not resolved\n---\n%s", hintOut)
 			}
 		})
 	}
@@ -893,7 +918,27 @@ func TestRenderNodeDetailExtendedTableResponsive(t *testing.T) {
 			rowWidth:     72,
 		},
 		{
+			// 72 is the exact full-tier boundary: the nine-column table is
+			// itself 72 cells, so it must survive un-degraded here.
+			width:        72,
+			columns:      []string{"ID", "AICore", "Vector", "HBM", "Temp", "Power", "Volt", "Freq", "Link"},
+			wantAbsent:   []string{},
+			blockAbsent:  []string{},
+			blockPresent: []string{"1800MHz", "0.85V", "Up"},
+			rowWidth:     72,
+		},
+		{
+			// The nine-column table is exactly 72 cells, so 75 keeps every
+			// column.
 			width:        75,
+			columns:      []string{"ID", "AICore", "Vector", "HBM", "Temp", "Power", "Volt", "Freq", "Link"},
+			wantAbsent:   []string{},
+			blockAbsent:  []string{},
+			blockPresent: []string{"1800MHz", "0.85V", "Up"},
+			rowWidth:     72,
+		},
+		{
+			width:        71,
 			columns:      []string{"ID", "AICore", "Vector", "HBM", "Temp", "Power", "Volt"},
 			wantAbsent:   []string{"Freq", "Link"},
 			blockAbsent:  []string{"1800MHz", "1900MHz", "Up", "Down"},
@@ -979,5 +1024,239 @@ func TestRenderNodeDetailExtendedTableResponsive(t *testing.T) {
 	wide := renderNPUDetailAtWidth(t, extendedChipNode(), 120)
 	if line := lineContaining(wide, "1800MHz"); line == "" {
 		t.Errorf("Freq column value missing on a wide terminal\n---\n%s", wide)
+	}
+}
+
+// visualIndexOf returns the display column at which substr starts in s, or -1.
+func visualIndexOf(s, substr string) int {
+	idx := strings.Index(s, substr)
+	if idx < 0 {
+		return -1
+	}
+	return runewidth.StringWidth(s[:idx])
+}
+
+// TestRenderNodePodsInfoColumnAlignment reproduces the pods table misalignment:
+// the STATUS cell carries ANSI codes from RenderStatus, and fmt's %-Ns padded it
+// by byte count, so RESTARTS started eight cells early on the data rows. Header,
+// separator and rows must now share one cell layout, and only the node's own
+// pods may appear.
+func TestRenderNodePodsInfoColumnAlignment(t *testing.T) {
+	m := newTestModel(t)
+	m.height = 200
+	node := &model.NodeData{Name: "node-pods", Status: "Ready", PodCount: 2}
+	m.clusterData = &model.ClusterData{Pods: []*model.PodData{
+		{Name: "alpha-pod", Namespace: "default", Node: "node-pods", Phase: "Running", RestartCount: 3},
+		{Name: "beta-pod", Namespace: "kube-system", Node: "node-pods", Phase: "Running", RestartCount: 0},
+		{Name: "other-node-pod", Namespace: "default", Node: "other-node", Phase: "Running", RestartCount: 7},
+	}}
+
+	out := stripANSI(m.renderNodePodsInfo(node))
+	lines := strings.Split(out, "\n")
+	if len(lines) < 5 {
+		t.Fatalf("pods block has %d lines, want at least 5\n---\n%s", len(lines), out)
+	}
+
+	if want := "📦 Pods on this Node (2)"; !strings.Contains(lines[0], want) {
+		t.Errorf("pods title = %q, want it to contain %q", lines[0], want)
+	}
+	header, separator, rows := lines[2], lines[3], lines[4:]
+	if len(rows) != 2 {
+		t.Fatalf("rendered %d pod rows, want 2 (pods from other nodes must not appear)\n---\n%s", len(rows), out)
+	}
+	if strings.Contains(out, "other-node-pod") {
+		t.Errorf("a pod from another node leaked into the table\n---\n%s", out)
+	}
+
+	// Column starts: NAME 2, NAMESPACE 38, STATUS 59, RESTARTS 75.
+	wantStarts := []struct {
+		column string
+		start  int
+	}{
+		{"NAME", 2},
+		{"NAMESPACE", 38},
+		{"STATUS", 59},
+		{"RESTARTS", 75},
+	}
+	for _, want := range wantStarts {
+		if got := visualIndexOf(header, want.column); got != want.start {
+			t.Errorf("header column %q starts at cell %d, want %d: %q", want.column, got, want.start, header)
+		}
+	}
+
+	restartsCells := []string{"3", "0"}
+	for i, row := range rows {
+		if got := visualIndexOf(row, restartsCells[i]); got != 75 {
+			t.Errorf("row %d restarts value starts at cell %d, want 75: %q", i, got, row)
+		}
+	}
+
+	for _, line := range append([]string{header, separator}, rows...) {
+		if w := runewidth.StringWidth(line); w != 85 {
+			t.Errorf("pods table line is %d cells wide, want 85: %q", w, line)
+		}
+	}
+}
+
+// TestRenderNodePodsInfoBilingual locks the four detail.node.* pods keys in
+// both bundles: go-i18n echoes the message id for a missing key, so any of
+// these strings going unlocalised would surface as "detail.node.<key>".
+func TestRenderNodePodsInfoBilingual(t *testing.T) {
+	node := &model.NodeData{Name: "node-pods", Status: "Ready", PodCount: 3}
+	manyPods := &model.ClusterData{Pods: []*model.PodData{
+		{Name: "pod-a", Namespace: "default", Node: "node-pods", Phase: "Running"},
+		{Name: "pod-b", Namespace: "default", Node: "node-pods", Phase: "Running"},
+		{Name: "pod-c", Namespace: "default", Node: "node-pods", Phase: "Running"},
+	}}
+
+	cases := []struct {
+		locale string
+		title  string
+		noInfo string
+		noPods string
+		more   string
+	}{
+		{
+			locale: "en",
+			title:  "📦 Pods on this Node (3)",
+			noInfo: "No pod information available",
+			noPods: "No pods running on this node",
+			more:   "... and 2 more pods",
+		},
+		{
+			locale: "zh",
+			title:  "📦 本节点上的 Pod (3)",
+			noInfo: "暂无 Pod 信息",
+			noPods: "本节点上没有运行中的 Pod",
+			more:   "... 还有 2 个 Pod",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.locale, func(t *testing.T) {
+			m := newTestModel(t)
+			m.localizer = i18n.NewLocalizer(tc.locale)
+			m.height = 20 // maxVisible clamps to 1, so the overflow line renders
+
+			m.clusterData = nil
+			if got := stripANSI(m.renderNodePodsInfo(node)); !strings.Contains(got, tc.noInfo) {
+				t.Errorf("no-info state = %q, want it to contain %q", got, tc.noInfo)
+			}
+
+			m.clusterData = &model.ClusterData{Pods: []*model.PodData{
+				{Name: "elsewhere", Namespace: "default", Node: "other-node", Phase: "Running"},
+			}}
+			if got := stripANSI(m.renderNodePodsInfo(node)); !strings.Contains(got, tc.noPods) {
+				t.Errorf("no-pods state = %q, want it to contain %q", got, tc.noPods)
+			}
+
+			m.clusterData = manyPods
+			got := stripANSI(m.renderNodePodsInfo(node))
+			if !strings.Contains(got, tc.title) {
+				t.Errorf("title = %q, want it to contain %q", got, tc.title)
+			}
+			if !strings.Contains(got, tc.more) {
+				t.Errorf("overflow line missing: %q, want it to contain %q", got, tc.more)
+			}
+		})
+	}
+}
+
+// TestRenderNodeDetailBasicChipTableWidth locks the basic chip table against
+// overflowing its own header. The seed uses the real Ascend 910B1 geometry
+// (64 GiB HBM per chip): the widest value "65536/65536MB (100%)" is 20 cells
+// and once overflowed the old 15-cell column, so every data row was wider than
+// the header and separator.
+func TestRenderNodeDetailBasicChipTableWidth(t *testing.T) {
+	node := &model.NodeData{
+		Name: "node-basic", Status: "Ready",
+		NPUCapacity: 2, NPUAllocatable: 2,
+		NPUStatusKnown:  true,
+		NPUHealthStatus: "Healthy",
+		NPUChips: []model.NPUChipData{
+			{PhyID: 0, Health: "OK", AICore: 10, HBMUsed: 10240, HBMTotal: 65536, Temp: 60, Power: 150.5},
+			{PhyID: 1, Health: "OK", AICore: 20, HBMUsed: 65536, HBMTotal: 65536, Temp: 71, Power: 160.5},
+		},
+	}
+
+	out := renderNPUDetailAtWidth(t, node, 120)
+	block := blockAfter(out, "NPU Chip Details")
+	if len(block) != 5 { // title + header + separator + 2 chip rows
+		t.Fatalf("basic chip table has %d lines, want 5\n---\n%s", len(block), out)
+	}
+	if !strings.Contains(block[4], "65536/65536MB (100%)") {
+		t.Errorf("basic table row lost the widest HBM value: %q", block[4])
+	}
+	for _, line := range block[1:] {
+		if w := runewidth.StringWidth(line); w != 65 {
+			t.Errorf("basic chip table line is %d cells wide, want 65: %q", w, line)
+		}
+	}
+}
+
+// eccChipNode builds an extended-metrics node whose ECC counters are non-zero,
+// so the ECC summary row renders.
+func eccChipNode() *model.NodeData {
+	node := extendedChipNode()
+	node.NPUChips[0].HBMEccSingleErr = 2
+	node.NPUChips[1].HBMEccDoubleErr = 1
+	return node
+}
+
+// TestRenderNodeDetailECCResponsive locks the ECC summary degradation: the full
+// line is 62 cells and overflows below 64 columns, where the parenthesised
+// qualifiers are dropped but the counts stay visible.
+func TestRenderNodeDetailECCResponsive(t *testing.T) {
+	cases := []struct {
+		width   int
+		want    string
+		absent  []string
+		maxLine int
+	}{
+		{
+			width:   60,
+			want:    "Single-bit: 2  Double-bit: 1",
+			absent:  []string{"(correctable)", "(uncorrectable)"},
+			maxLine: 60,
+		},
+		{
+			// 63/64 bracket the qualifier threshold: compact strictly below
+			// 64, the full line from 64 up.
+			width:   63,
+			want:    "Single-bit: 2  Double-bit: 1",
+			absent:  []string{"(correctable)", "(uncorrectable)"},
+			maxLine: 63,
+		},
+		{
+			width:   64,
+			want:    "Single-bit: 2 (correctable)  Double-bit: 1 (uncorrectable)",
+			maxLine: 64,
+		},
+		{
+			width:   120,
+			want:    "Single-bit: 2 (correctable)  Double-bit: 1 (uncorrectable)",
+			maxLine: 120,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("width_%d", tc.width), func(t *testing.T) {
+			out := renderNPUDetailAtWidth(t, eccChipNode(), tc.width)
+			line := lineContaining(out, "Single-bit")
+			if line == "" {
+				t.Fatalf("ECC summary row not rendered\n---\n%s", out)
+			}
+			if !strings.Contains(line, tc.want) {
+				t.Errorf("ECC row = %q, want it to contain %q", line, tc.want)
+			}
+			for _, gone := range tc.absent {
+				if strings.Contains(line, gone) {
+					t.Errorf("ECC row unexpectedly contains %q at width %d: %q", gone, tc.width, line)
+				}
+			}
+			if w := runewidth.StringWidth(line); w > tc.maxLine {
+				t.Errorf("ECC row is %d cells wide, exceeds terminal width %d: %q", w, tc.maxLine, line)
+			}
+		})
 	}
 }

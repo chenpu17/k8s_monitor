@@ -620,6 +620,18 @@ other = "NPU:    "
 [detail.node.snapshots]
 other = "（基于 {{.Count}} 个快照）"
 
+[detail.node.pods_title]
+other = "📦 本节点上的 Pod ({{.Count}})"
+
+[detail.node.no_pod_info]
+other = "暂无 Pod 信息"
+
+[detail.node.no_pods]
+other = "本节点上没有运行中的 Pod"
+
+[detail.node.more_pods]
+other = "... 还有 {{.Count}} 个 Pod"
+
 # 详情视图通用
 [detail.scroll_indicator]
 other = "[第 {{.Start}}-{{.End}} 行，共 {{.Total}} 行]（↑/↓ 滚动，PgUp/PgDn 翻页）"
@@ -1557,8 +1569,11 @@ other = "(不可纠正)"
 [npudetail.runtime_na]
 other = "NPU 运行时指标: 不可用"
 
-[npudetail.runtime_na_hint]
-other = "NPU-Exporter 不可达或未部署在 kube-system 命名空间"
+[npudetail.runtime_na_hint_unreachable]
+other = "NPU-Exporter 不可达"
+
+[npudetail.runtime_na_hint_not_deployed]
+other = "或未部署在 kube-system 命名空间"
 
 [npudetail.runtime_na_flag]
 other = "使用 --npu-exporter 旗标指定自定义端点"

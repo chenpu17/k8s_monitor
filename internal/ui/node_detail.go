@@ -314,11 +314,11 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 				// edge on narrower terminals, so whole columns are dropped from
 				// the right instead. The row width below is
 				// 4 (indent) + sum(widths) + (columns-1) separators:
-				//   w >= 76      : 9 columns, row width 72 (unchanged)
-				//   62 <= w < 76 : 7 columns, row width 59 (Freq and Link dropped)
+				//   w >= 72      : 9 columns, row width 72 (unchanged)
+				//   62 <= w < 72 : 7 columns, row width 59 (Freq and Link dropped)
 				//   w < 62       : 6 columns, row width 52 (Volt dropped as well)
 				const (
-					extFullWidth = 76
+					extFullWidth = 72
 					extMidWidth  = 62
 				)
 
@@ -429,7 +429,10 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 					bColTemp   = 8
 					bColPower  = 8
 					bColHealth = 8
-					bColHBM    = 15
+					// 20 cells is the widest HBM value at the real Ascend 910B1
+					// geometry ("65536/65536MB (100%)", 64 GiB per chip), so the
+					// column fits its data instead of overflowing it.
+					bColHBM = 20
 				)
 				info = append(info, fmt.Sprintf("    %s %s %s %s %s %s",
 					padRight(m.T("npudetail.col_id"), bColID),
@@ -473,7 +476,7 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 						padRight(tempStr, bColTemp),
 						padRight(fmt.Sprintf("%.1fW", chip.Power), bColPower),
 						padRight(healthStr, bColHealth),
-						hbmStr))
+						padRight(hbmStr, bColHBM)))
 				}
 			}
 
@@ -533,20 +536,32 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 						doubleStyle = StyleStatusNotReady // Critical - double-bit errors are uncorrectable
 					}
 
-					info = append(info, fmt.Sprintf("    %s: %s %s  %s: %s %s",
-						StyleTextMuted.Render(m.T("npudetail.ecc_single")),
-						singleStyle.Render(fmt.Sprintf("%d", totalEccSingle)),
-						m.T("npudetail.ecc_correctable"),
-						StyleTextMuted.Render(m.T("npudetail.ecc_double")),
-						doubleStyle.Render(fmt.Sprintf("%d", totalEccDouble)),
-						m.T("npudetail.ecc_uncorrectable")))
+					// The full summary line is 62 cells wide; the two parenthesised
+					// qualifiers push it past narrow terminals, so they are
+					// dropped below 64 columns while the counts stay visible.
+					if m.width < 64 {
+						info = append(info, fmt.Sprintf("    %s: %s  %s: %s",
+							StyleTextMuted.Render(m.T("npudetail.ecc_single")),
+							singleStyle.Render(fmt.Sprintf("%d", totalEccSingle)),
+							StyleTextMuted.Render(m.T("npudetail.ecc_double")),
+							doubleStyle.Render(fmt.Sprintf("%d", totalEccDouble))))
+					} else {
+						info = append(info, fmt.Sprintf("    %s: %s %s  %s: %s %s",
+							StyleTextMuted.Render(m.T("npudetail.ecc_single")),
+							singleStyle.Render(fmt.Sprintf("%d", totalEccSingle)),
+							m.T("npudetail.ecc_correctable"),
+							StyleTextMuted.Render(m.T("npudetail.ecc_double")),
+							doubleStyle.Render(fmt.Sprintf("%d", totalEccDouble)),
+							m.T("npudetail.ecc_uncorrectable")))
+					}
 				}
 			}
 		} else if node.NPUCapacity > 0 {
 			// NPU exists but no metrics from NPU-Exporter - show hint
 			info = append(info, "")
 			info = append(info, StyleTextMuted.Render("  "+m.T("npudetail.runtime_na")))
-			info = append(info, StyleTextMuted.Render("    "+m.T("npudetail.runtime_na_hint")))
+			info = append(info, StyleTextMuted.Render("    "+m.T("npudetail.runtime_na_hint_unreachable")))
+			info = append(info, StyleTextMuted.Render("    "+m.T("npudetail.runtime_na_hint_not_deployed")))
 			info = append(info, StyleTextMuted.Render("    "+m.T("npudetail.runtime_na_flag")))
 		}
 
@@ -789,11 +804,13 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 func (m *Model) renderNodePodsInfo(node *model.NodeData) string {
 	var info []string
 
-	info = append(info, StyleHeader.Render(fmt.Sprintf("📦 Pods on this Node (%d)", node.PodCount)))
+	info = append(info, StyleHeader.Render(m.TF("detail.node.pods_title", map[string]interface{}{
+		"Count": node.PodCount,
+	})))
 	info = append(info, "")
 
 	if m.clusterData == nil || len(m.clusterData.Pods) == 0 {
-		info = append(info, StyleTextMuted.Render("  No pod information available"))
+		info = append(info, StyleTextMuted.Render("  "+m.T("detail.node.no_pod_info")))
 		return strings.Join(info, "\n")
 	}
 
@@ -806,15 +823,29 @@ func (m *Model) renderNodePodsInfo(node *model.NodeData) string {
 	}
 
 	if len(nodePods) == 0 {
-		info = append(info, StyleTextMuted.Render("  No pods running on this node"))
+		info = append(info, StyleTextMuted.Render("  "+m.T("detail.node.no_pods")))
 		return strings.Join(info, "\n")
 	}
 
-	// Table header
-	headerRow := fmt.Sprintf("  %-35s %-20s %-15s %-10s",
-		"NAME", "NAMESPACE", "STATUS", "RESTARTS")
+	// Table header and rows share one cell list. Every cell goes through
+	// padRight rather than fmt's %-Ns: RenderStatus emits ANSI codes, which
+	// %-Ns counts as bytes and therefore pads short, shifting every column
+	// after STATUS.
+	const (
+		colName      = 35
+		colNamespace = 20
+		colStatus    = 15
+		colRestarts  = 10
+	)
+	headerRow := "  " + strings.Join([]string{
+		padRight(m.T("columns.name"), colName),
+		padRight(m.T("columns.namespace"), colNamespace),
+		padRight(m.T("columns.status"), colStatus),
+		padRight(m.T("columns.restarts"), colRestarts),
+	}, " ")
 	info = append(info, StyleTextSecondary.Render(headerRow))
-	info = append(info, "  "+strings.Repeat("─", 85))
+	// Indent (2) + all columns (80) + three separators = 85 cells.
+	info = append(info, "  "+strings.Repeat("─", 83))
 
 	// Pod rows (limited to visible area)
 	maxVisible := m.height - 20
@@ -841,17 +872,21 @@ func (m *Model) renderNodePodsInfo(node *model.NodeData) string {
 		status := RenderStatus(pod.Phase)
 		restarts := fmt.Sprintf("%d", pod.RestartCount)
 
-		row := fmt.Sprintf("  %-35s %-20s %-23s %-10s",
-			name,
-			namespace,
-			status,
-			restarts)
+		row := "  " + strings.Join([]string{
+			padRight(name, colName),
+			padRight(namespace, colNamespace),
+			padRight(status, colStatus),
+			padRight(restarts, colRestarts),
+		}, " ")
 		info = append(info, row)
 	}
 
 	if len(nodePods) > maxVisible {
 		info = append(info, "")
-		info = append(info, StyleTextMuted.Render(fmt.Sprintf("  ... and %d more pods", len(nodePods)-maxVisible)))
+		info = append(info, StyleTextMuted.Render("  "+
+			m.TF("detail.node.more_pods", map[string]interface{}{
+				"Count": len(nodePods) - maxVisible,
+			})))
 	}
 
 	return strings.Join(info, "\n")
