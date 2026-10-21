@@ -1652,3 +1652,74 @@ other = "or not deployed in kube-system namespace"
 
 [npudetail.runtime_na_flag]
 other = "Use --npu-exporter flag to specify a custom endpoint"
+
+# ============================================================================
+# CLI (command-line help text and error messages)
+# ============================================================================
+[cli.root_short]
+other = "A CLI monitoring console for Kubernetes clusters"
+
+[cli.root_long]
+other = '''
+k8s-monitor is a lightweight, read-only CLI monitoring console
+for Kubernetes clusters. It provides real-time cluster health overview,
+node status, workload monitoring, and quick diagnostics.
+
+Run it without arguments (or with the "console" subcommand) to launch
+the interactive TUI console.
+
+Built with ❤️  using Bubble Tea and client-go.'''
+
+[cli.console_short]
+other = "Start the interactive monitoring console"
+
+[cli.console_long]
+other = "Launch the interactive TUI console to monitor your Kubernetes cluster"
+
+[cli.flag_config]
+other = "config file path (default: ./config/config.yaml)"
+
+[cli.flag_kubeconfig]
+other = "path to kubeconfig file (default: $HOME/.kube/config)"
+
+[cli.flag_context]
+other = "kubernetes context to use"
+
+[cli.flag_namespace]
+other = "namespace to monitor (default: all namespaces)"
+
+[cli.flag_verbose]
+other = "enable verbose logging"
+
+[cli.flag_locale]
+other = "interface language (en, zh)"
+
+[cli.flag_refresh]
+other = "refresh interval in seconds"
+
+[cli.flag_no_color]
+other = "disable color output"
+
+[cli.flag_insecure_kubelet]
+other = "skip TLS verification for kubelet metrics (use in test environments)"
+
+[cli.flag_max_concurrent]
+other = "maximum concurrent kubelet queries (default: 10)"
+
+[cli.flag_log_tail_lines]
+other = "number of log lines to fetch (default: 200)"
+
+[cli.flag_npu_exporter]
+other = "NPU-Exporter endpoint URL (e.g., http://npu-exporter.kube-system:8082)"
+
+[cli.err_load_config]
+other = "failed to load config"
+
+[cli.err_create_app]
+other = "failed to create application"
+
+[cli.err_shutdown]
+other = "Error during shutdown"
+
+[cli.err_application]
+other = "application error"

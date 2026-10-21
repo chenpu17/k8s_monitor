@@ -1651,3 +1651,72 @@ other = "或未部署在 kube-system 命名空间"
 
 [npudetail.runtime_na_flag]
 other = "使用 --npu-exporter 旗标指定自定义端点"
+
+# ============================================================================
+# CLI(命令行帮助文案与错误信息)
+# ============================================================================
+[cli.root_short]
+other = "Kubernetes 集群命令行监控控制台"
+
+[cli.root_long]
+other = '''
+k8s-monitor 是一个轻量级、只读的 Kubernetes 集群命令行监控控制台,
+提供实时集群健康总览、节点状态、工作负载监控与快速诊断。
+
+不带参数运行(或使用 "console" 子命令)即可启动交互式 TUI 控制台。
+
+基于 Bubble Tea 和 client-go 构建,用心打造 ❤️。'''
+
+[cli.console_short]
+other = "启动交互式监控控制台"
+
+[cli.console_long]
+other = "启动交互式 TUI 控制台,监控你的 Kubernetes 集群"
+
+[cli.flag_config]
+other = "配置文件路径"
+
+[cli.flag_kubeconfig]
+other = "kubeconfig 路径"
+
+[cli.flag_context]
+other = "Kubernetes 上下文"
+
+[cli.flag_namespace]
+other = "监控的命名空间(默认全部命名空间)"
+
+[cli.flag_verbose]
+other = "启用详细日志"
+
+[cli.flag_locale]
+other = "界面语言 (en, zh)"
+
+[cli.flag_refresh]
+other = "刷新间隔(秒)"
+
+[cli.flag_no_color]
+other = "禁用彩色输出"
+
+[cli.flag_insecure_kubelet]
+other = "跳过 kubelet 指标 TLS 校验(仅测试环境)"
+
+[cli.flag_max_concurrent]
+other = "kubelet 最大并发查询数(默认 10)"
+
+[cli.flag_log_tail_lines]
+other = "拉取日志行数(默认 200)"
+
+[cli.flag_npu_exporter]
+other = "NPU-Exporter 端点 URL(例: http://npu-exporter.kube-system:8082)"
+
+[cli.err_load_config]
+other = "配置加载失败"
+
+[cli.err_create_app]
+other = "应用创建失败"
+
+[cli.err_shutdown]
+other = "关机时出错"
+
+[cli.err_application]
+other = "应用错误"
