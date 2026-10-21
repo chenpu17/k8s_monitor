@@ -191,45 +191,45 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 
 		// NPU details
 		info = append(info, "")
-		info = append(info, StyleTextSecondary.Render("  NPU Details"))
+		info = append(info, StyleTextSecondary.Render("  "+m.T("npudetail.details")))
 		if node.NPUChipType != "" {
 			info = append(info, fmt.Sprintf("    %s: %s",
-				StyleTextMuted.Render("Chip Type"),
+				StyleTextMuted.Render(m.T("npu.chip_type")),
 				node.NPUChipType))
 		}
 		if node.NPUDeviceType != "" {
 			info = append(info, fmt.Sprintf("    %s: %s",
-				StyleTextMuted.Render("Device Type"),
+				StyleTextMuted.Render(m.T("npudetail.device_type")),
 				node.NPUDeviceType))
 		}
 		if node.NPUDriverVersion != "" {
 			info = append(info, fmt.Sprintf("    %s: %s",
-				StyleTextMuted.Render("Driver Version"),
+				StyleTextMuted.Render(m.T("npudetail.driver_version")),
 				node.NPUDriverVersion))
 		}
 		if node.NPUResourceName != "" {
 			info = append(info, fmt.Sprintf("    %s: %s",
-				StyleTextMuted.Render("Resource Name"),
+				StyleTextMuted.Render(m.T("npu.resource_name")),
 				node.NPUResourceName))
 		}
 
 		// Topology information
 		if node.HyperNodeID != "" || node.SuperPodID != "" {
 			info = append(info, "")
-			info = append(info, StyleTextSecondary.Render("  Topology"))
+			info = append(info, StyleTextSecondary.Render("  "+m.T("npudetail.topology")))
 			if node.SuperPodID != "" {
 				info = append(info, fmt.Sprintf("    %s: %s",
-					StyleTextMuted.Render("SuperPod ID"),
+					StyleTextMuted.Render(m.T("topology.superpod_id")),
 					node.SuperPodID))
 			}
 			if node.HyperNodeID != "" {
 				info = append(info, fmt.Sprintf("    %s: %s",
-					StyleTextMuted.Render("HyperNode ID"),
+					StyleTextMuted.Render(m.T("npudetail.hypernode_id")),
 					truncate(node.HyperNodeID, 36)))
 			}
 			if node.CabinetInfo != "" {
 				info = append(info, fmt.Sprintf("    %s: %s",
-					StyleTextMuted.Render("Cabinet"),
+					StyleTextMuted.Render(m.T("npudetail.cabinet")),
 					node.CabinetInfo))
 			}
 		}
@@ -237,7 +237,7 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 		// NPU Runtime Metrics (from k8s-monitor collector)
 		if len(node.NPUChips) > 0 {
 			info = append(info, "")
-			info = append(info, StyleTextSecondary.Render("  NPU Runtime Metrics"))
+			info = append(info, StyleTextSecondary.Render("  "+m.T("npudetail.runtime")))
 
 			// Overall status
 			healthStyle := StyleStatusReady
@@ -251,12 +251,12 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 			// from the device plugin: label the source so the two are not read
 			// as one signal.
 			info = append(info, fmt.Sprintf("    %s: %s",
-				StyleTextMuted.Render(fmt.Sprintf("Health Status (%s)", m.T("npudetail.health_exporter"))),
+				StyleTextMuted.Render(fmt.Sprintf("%s (%s)", m.T("npudetail.health_status"), m.T("npudetail.health_exporter"))),
 				healthStyle.Render(node.NPUHealthStatus)))
 
 			// Average utilization
 			info = append(info, fmt.Sprintf("    %s: %s",
-				StyleTextMuted.Render("AI Core Util"),
+				StyleTextMuted.Render(m.T("npudetail.ai_core_util")),
 				StyleHighlight.Render(fmt.Sprintf("%.1f%%", node.NPUUtilization))))
 
 			// HBM Memory
@@ -264,21 +264,21 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 				memUsedGB := float64(node.NPUMemoryUsed) / (1024 * 1024 * 1024)
 				memTotalGB := float64(node.NPUMemoryTotal) / (1024 * 1024 * 1024)
 				info = append(info, fmt.Sprintf("    %s: %.1f / %.1f GiB (%.1f%%)",
-					StyleTextMuted.Render("HBM Memory"),
+					StyleTextMuted.Render(m.T("npudetail.hbm_memory")),
 					memUsedGB, memTotalGB, node.NPUMemoryUtil))
 			}
 
 			// Temperature and Power
 			info = append(info, fmt.Sprintf("    %s: %d W   %s: %d °C",
-				StyleTextMuted.Render("Total Power"),
+				StyleTextMuted.Render(m.T("npudetail.total_power")),
 				node.NPUPower,
-				StyleTextMuted.Render("Avg Temp"),
+				StyleTextMuted.Render(m.T("npudetail.avg_temp")),
 				node.NPUTemperature))
 
 			// Metrics timestamp
 			if !node.NPUMetricsTime.IsZero() {
 				info = append(info, fmt.Sprintf("    %s: %s",
-					StyleTextMuted.Render("Last Updated"),
+					StyleTextMuted.Render(m.T("npudetail.last_updated")),
 					node.NPUMetricsTime.Local().Format("15:04:05")))
 			}
 
@@ -293,7 +293,7 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 
 			// Combined NPU Chip Details table
 			info = append(info, "")
-			info = append(info, StyleTextSecondary.Render("  NPU Chip Details"))
+			info = append(info, StyleTextSecondary.Render("  "+m.T("npudetail.chip_details")))
 
 			if hasExtendedMetrics {
 				// Column widths for extended metrics table
@@ -309,18 +309,68 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 					colLink   = 4
 				)
 
-				// Extended header with all metrics - HBM next to AICore
-				info = append(info, fmt.Sprintf("    %s %s %s %s %s %s %s %s %s",
-					padRight("ID", colID),
-					padRight("AICore", colAICore),
-					padRight("Vector", colVector),
-					padRight("HBM", colHBM),
-					padRight("Temp", colTemp),
-					padRight("Power", colPower),
-					padRight("Volt", colVolt),
-					padRight("Freq", colFreq),
-					padRight("Link", colLink)))
-				info = append(info, "    "+strings.Repeat("─", colID+colAICore+colVector+colHBM+colTemp+colPower+colVolt+colFreq+colLink+8))
+				// Terminal-width tiers: the nine-column table is 72 cells wide
+				// (indent + columns + separators) and gets clipped at the right
+				// edge on narrower terminals, so whole columns are dropped from
+				// the right instead. The row width below is
+				// 4 (indent) + sum(widths) + (columns-1) separators:
+				//   w >= 76      : 9 columns, row width 72 (unchanged)
+				//   62 <= w < 76 : 7 columns, row width 59 (Freq and Link dropped)
+				//   w < 62       : 6 columns, row width 52 (Volt dropped as well)
+				const (
+					extFullWidth = 76
+					extMidWidth  = 62
+				)
+
+				extCols := []struct {
+					title string
+					width int
+				}{
+					{m.T("npudetail.col_id"), colID},
+					{m.T("npudetail.col_ai_core"), colAICore},
+					{m.T("npudetail.col_vector"), colVector},
+					{m.T("npudetail.col_hbm"), colHBM},
+					{m.T("npudetail.col_temp"), colTemp},
+					{m.T("npudetail.col_power"), colPower},
+					{m.T("npudetail.col_volt"), colVolt},
+					{m.T("npudetail.col_freq"), colFreq},
+					{m.T("npudetail.col_link"), colLink},
+				}
+				switch {
+				case m.width >= extFullWidth:
+					// all nine columns
+				case m.width >= extMidWidth:
+					extCols = extCols[:7]
+				default:
+					extCols = extCols[:6]
+				}
+				// Freq and Link are the columns dropped first; compute their
+				// cells only while their column survives.
+				showFreq := len(extCols) >= 8
+				showLink := len(extCols) >= 9
+
+				extWidth := 0
+				for _, c := range extCols {
+					extWidth += c.width
+				}
+
+				// extRow renders one table row. Header and data rows go through
+				// the same cell/width list, so the column set can never drift
+				// between them.
+				extRow := func(cells []string) string {
+					parts := make([]string, len(extCols))
+					for i, c := range extCols {
+						parts[i] = padRight(cells[i], c.width)
+					}
+					return "    " + strings.Join(parts, " ")
+				}
+
+				titles := make([]string, len(extCols))
+				for i, c := range extCols {
+					titles[i] = c.title
+				}
+				info = append(info, extRow(titles))
+				info = append(info, "    "+strings.Repeat("─", extWidth+len(extCols)-1))
 
 				for _, chip := range node.NPUChips {
 					// Temperature with color coding
@@ -329,14 +379,6 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 						tempStr = StyleStatusNotReady.Render(tempStr)
 					} else if chip.Temp >= 70 {
 						tempStr = StyleWarning.Render(tempStr)
-					}
-
-					// Link status
-					linkStr := "Down"
-					if chip.LinkStatus == 1 {
-						linkStr = StyleStatusReady.Render("Up")
-					} else {
-						linkStr = StyleStatusNotReady.Render("Down")
 					}
 
 					// HBM usage with capacity (convert MB to GB for readability)
@@ -354,16 +396,30 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 						idStr = StyleWarning.Render(idStr)
 					}
 
-					info = append(info, fmt.Sprintf("    %s %s %s %s %s %s %s %s %s",
-						padRight(idStr, colID),
-						padRight(fmt.Sprintf("%d%%", chip.AICore), colAICore),
-						padRight(fmt.Sprintf("%.1f%%", chip.VectorUtil), colVector),
-						padRight(hbmStr, colHBM),
-						padRight(tempStr, colTemp),
-						padRight(fmt.Sprintf("%dW", int(chip.Power)), colPower),
-						padRight(fmt.Sprintf("%.2fV", chip.Voltage), colVolt),
-						padRight(fmt.Sprintf("%dMHz", chip.AICoreFreq), colFreq),
-						padRight(linkStr, colLink)))
+					cells := []string{
+						idStr,
+						fmt.Sprintf("%d%%", chip.AICore),
+						fmt.Sprintf("%.1f%%", chip.VectorUtil),
+						hbmStr,
+						tempStr,
+						fmt.Sprintf("%dW", int(chip.Power)),
+						fmt.Sprintf("%.2fV", chip.Voltage),
+					}
+					if showFreq {
+						cells = append(cells, fmt.Sprintf("%dMHz", chip.AICoreFreq))
+					}
+					if showLink {
+						// Link status
+						linkStr := "Down"
+						if chip.LinkStatus == 1 {
+							linkStr = StyleStatusReady.Render("Up")
+						} else {
+							linkStr = StyleStatusNotReady.Render("Down")
+						}
+						cells = append(cells, linkStr)
+					}
+
+					info = append(info, extRow(cells))
 				}
 			} else {
 				// Basic header without extended metrics
@@ -376,12 +432,12 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 					bColHBM    = 15
 				)
 				info = append(info, fmt.Sprintf("    %s %s %s %s %s %s",
-					padRight("ID", bColID),
-					padRight("AICore", bColAICore),
-					padRight("Temp", bColTemp),
-					padRight("Power", bColPower),
-					padRight("Health", bColHealth),
-					padRight("HBM", bColHBM)))
+					padRight(m.T("npudetail.col_id"), bColID),
+					padRight(m.T("npudetail.col_ai_core"), bColAICore),
+					padRight(m.T("npudetail.col_temp"), bColTemp),
+					padRight(m.T("npudetail.col_power"), bColPower),
+					padRight(m.T("npudetail.col_health"), bColHealth),
+					padRight(m.T("npudetail.col_hbm"), bColHBM)))
 				info = append(info, "    "+strings.Repeat("─", bColID+bColAICore+bColTemp+bColPower+bColHealth+bColHBM+5))
 
 				for _, chip := range node.NPUChips {
@@ -434,11 +490,11 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 
 				if totalRoCETx > 0 || totalRoCERx > 0 {
 					info = append(info, "")
-					info = append(info, StyleTextSecondary.Render("  RoCE Network Statistics"))
+					info = append(info, StyleTextSecondary.Render("  "+m.T("npudetail.roce_section")))
 					info = append(info, fmt.Sprintf("    %s: %s  %s: %s",
-						StyleTextMuted.Render("TX Packets"),
+						StyleTextMuted.Render(m.T("npudetail.tx_packets")),
 						formatPacketCount(totalRoCETx),
-						StyleTextMuted.Render("RX Packets"),
+						StyleTextMuted.Render(m.T("npudetail.rx_packets")),
 						formatPacketCount(totalRoCERx)))
 
 					// Show error packets with warning color if non-zero
@@ -451,9 +507,9 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 						rxErrStyle = StyleWarning
 					}
 					info = append(info, fmt.Sprintf("    %s: %s  %s: %s",
-						StyleTextMuted.Render("TX Errors"),
+						StyleTextMuted.Render(m.T("npudetail.tx_errors")),
 						txErrStyle.Render(formatPacketCount(totalRoCETxErr)),
-						StyleTextMuted.Render("RX Errors"),
+						StyleTextMuted.Render(m.T("npudetail.rx_errors")),
 						rxErrStyle.Render(formatPacketCount(totalRoCERxErr))))
 				}
 
@@ -466,7 +522,7 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 
 				if totalEccSingle > 0 || totalEccDouble > 0 {
 					info = append(info, "")
-					info = append(info, StyleTextSecondary.Render("  HBM ECC Error Statistics"))
+					info = append(info, StyleTextSecondary.Render("  "+m.T("npudetail.ecc_section")))
 
 					singleStyle := StyleTextMuted
 					doubleStyle := StyleTextMuted
@@ -477,19 +533,21 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 						doubleStyle = StyleStatusNotReady // Critical - double-bit errors are uncorrectable
 					}
 
-					info = append(info, fmt.Sprintf("    %s: %s (correctable)  %s: %s (uncorrectable)",
-						StyleTextMuted.Render("Single-bit"),
+					info = append(info, fmt.Sprintf("    %s: %s %s  %s: %s %s",
+						StyleTextMuted.Render(m.T("npudetail.ecc_single")),
 						singleStyle.Render(fmt.Sprintf("%d", totalEccSingle)),
-						StyleTextMuted.Render("Double-bit"),
-						doubleStyle.Render(fmt.Sprintf("%d", totalEccDouble))))
+						m.T("npudetail.ecc_correctable"),
+						StyleTextMuted.Render(m.T("npudetail.ecc_double")),
+						doubleStyle.Render(fmt.Sprintf("%d", totalEccDouble)),
+						m.T("npudetail.ecc_uncorrectable")))
 				}
 			}
 		} else if node.NPUCapacity > 0 {
 			// NPU exists but no metrics from NPU-Exporter - show hint
 			info = append(info, "")
-			info = append(info, StyleTextMuted.Render("  NPU Runtime Metrics: Not available"))
-			info = append(info, StyleTextMuted.Render("    NPU-Exporter not reachable or not deployed in kube-system namespace"))
-			info = append(info, StyleTextMuted.Render("    Use --npu-exporter flag to specify a custom endpoint"))
+			info = append(info, StyleTextMuted.Render("  "+m.T("npudetail.runtime_na")))
+			info = append(info, StyleTextMuted.Render("    "+m.T("npudetail.runtime_na_hint")))
+			info = append(info, StyleTextMuted.Render("    "+m.T("npudetail.runtime_na_flag")))
 		}
 
 		// Chip health bitmask (per-chip, reported by the NPU device plugin)

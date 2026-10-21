@@ -1451,3 +1451,114 @@ other = "HEARTBEAT"
 
 [npudetail.col_message]
 other = "MESSAGE"
+
+[npudetail.details]
+other = "NPU Details"
+
+[npudetail.topology]
+other = "Topology"
+
+[npudetail.device_type]
+other = "Device Type"
+
+[npudetail.driver_version]
+other = "Driver Version"
+
+[npudetail.hypernode_id]
+other = "HyperNode ID"
+
+[npudetail.cabinet]
+other = "Cabinet"
+
+[npudetail.runtime]
+other = "NPU Runtime Metrics"
+
+[npudetail.health_status]
+other = "Health Status"
+
+[npudetail.ai_core_util]
+other = "AI Core Util"
+
+[npudetail.hbm_memory]
+other = "HBM Memory"
+
+[npudetail.total_power]
+other = "Total Power"
+
+[npudetail.avg_temp]
+other = "Avg Temp"
+
+[npudetail.last_updated]
+other = "Last Updated"
+
+[npudetail.chip_details]
+other = "NPU Chip Details"
+
+[npudetail.col_id]
+other = "ID"
+
+[npudetail.col_ai_core]
+other = "AICore"
+
+[npudetail.col_vector]
+other = "Vector"
+
+[npudetail.col_hbm]
+other = "HBM"
+
+[npudetail.col_temp]
+other = "Temp"
+
+[npudetail.col_power]
+other = "Power"
+
+[npudetail.col_volt]
+other = "Volt"
+
+[npudetail.col_freq]
+other = "Freq"
+
+[npudetail.col_link]
+other = "Link"
+
+[npudetail.col_health]
+other = "Health"
+
+[npudetail.roce_section]
+other = "RoCE Network Statistics"
+
+[npudetail.tx_packets]
+other = "TX Packets"
+
+[npudetail.rx_packets]
+other = "RX Packets"
+
+[npudetail.tx_errors]
+other = "TX Errors"
+
+[npudetail.rx_errors]
+other = "RX Errors"
+
+[npudetail.ecc_section]
+other = "HBM ECC Error Statistics"
+
+[npudetail.ecc_single]
+other = "Single-bit"
+
+[npudetail.ecc_double]
+other = "Double-bit"
+
+[npudetail.ecc_correctable]
+other = "(correctable)"
+
+[npudetail.ecc_uncorrectable]
+other = "(uncorrectable)"
+
+[npudetail.runtime_na]
+other = "NPU Runtime Metrics: Not available"
+
+[npudetail.runtime_na_hint]
+other = "NPU-Exporter not reachable or not deployed in kube-system namespace"
+
+[npudetail.runtime_na_flag]
+other = "Use --npu-exporter flag to specify a custom endpoint"

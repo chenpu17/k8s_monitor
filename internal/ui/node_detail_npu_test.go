@@ -841,3 +841,143 @@ func TestRenderNodeDetailNPUNetworkMapping(t *testing.T) {
 		t.Errorf("network mapping section rendered on a node without NPU capacity")
 	}
 }
+
+// extendedChipNode builds a node whose NPU chips carry extended metrics, so the
+// nine-column chip table (not the basic one) is rendered.
+func extendedChipNode() *model.NodeData {
+	return &model.NodeData{
+		Name: "node-ext", Status: "Ready",
+		NPUCapacity: 2, NPUAllocatable: 2,
+		NPUStatusKnown:  true,
+		NPUHealthStatus: "Healthy",
+		NPUChips: []model.NPUChipData{
+			{PhyID: 0, Health: "OK", AICore: 10, VectorUtil: 5.5, HBMUsed: 1024, HBMTotal: 32768,
+				Temp: 60, Power: 150.5, Voltage: 0.85, AICoreFreq: 1800, LinkStatus: 1},
+			{PhyID: 1, Health: "OK", AICore: 20, VectorUtil: 6.5, HBMUsed: 2048, HBMTotal: 32768,
+				Temp: 71, Power: 160.5, Voltage: 0.86, AICoreFreq: 1900, LinkStatus: 0},
+		},
+	}
+}
+
+// TestRenderNodeDetailExtendedTableResponsive locks the narrow-terminal
+// degradation of the extended NPU chip table: the nine-column table is 72 cells
+// wide, so on narrower terminals its rightmost columns (Freq, Link) used to be
+// clipped at the terminal edge. Whole columns are now dropped from the right in
+// two tiers, and the header, the separator and the data rows must always agree
+// on the surviving column set.
+func TestRenderNodeDetailExtendedTableResponsive(t *testing.T) {
+	// Row width = indent (4) + the surviving column widths + one separator per
+	// gap between them.
+	cases := []struct {
+		width        int
+		columns      []string
+		wantAbsent   []string // column names that must leave the header
+		blockAbsent  []string // cell values of dropped columns
+		blockPresent []string // cell values of columns that survive the tier
+		rowWidth     int
+	}{
+		{
+			width:        120,
+			columns:      []string{"ID", "AICore", "Vector", "HBM", "Temp", "Power", "Volt", "Freq", "Link"},
+			wantAbsent:   []string{},
+			blockAbsent:  []string{},
+			blockPresent: []string{"1800MHz", "0.85V", "Up"},
+			rowWidth:     72,
+		},
+		{
+			width:        76,
+			columns:      []string{"ID", "AICore", "Vector", "HBM", "Temp", "Power", "Volt", "Freq", "Link"},
+			wantAbsent:   []string{},
+			blockAbsent:  []string{},
+			blockPresent: []string{"1800MHz", "0.85V", "Up"},
+			rowWidth:     72,
+		},
+		{
+			width:        75,
+			columns:      []string{"ID", "AICore", "Vector", "HBM", "Temp", "Power", "Volt"},
+			wantAbsent:   []string{"Freq", "Link"},
+			blockAbsent:  []string{"1800MHz", "1900MHz", "Up", "Down"},
+			blockPresent: []string{"0.85V", "0.86V", "60°C", "150W"},
+			rowWidth:     59,
+		},
+		{
+			width:        62,
+			columns:      []string{"ID", "AICore", "Vector", "HBM", "Temp", "Power", "Volt"},
+			wantAbsent:   []string{"Freq", "Link"},
+			blockAbsent:  []string{"1800MHz", "1900MHz", "Up", "Down"},
+			blockPresent: []string{"0.85V", "0.86V", "60°C", "150W"},
+			rowWidth:     59,
+		},
+		{
+			width:        61,
+			columns:      []string{"ID", "AICore", "Vector", "HBM", "Temp", "Power"},
+			wantAbsent:   []string{"Volt", "Freq", "Link"},
+			blockAbsent:  []string{"1800MHz", "1900MHz", "0.85V", "0.86V", "Up", "Down"},
+			blockPresent: []string{"60°C", "71°C", "150W", "160W"},
+			rowWidth:     52,
+		},
+		{
+			width:        60,
+			columns:      []string{"ID", "AICore", "Vector", "HBM", "Temp", "Power"},
+			wantAbsent:   []string{"Volt", "Freq", "Link"},
+			blockAbsent:  []string{"1800MHz", "1900MHz", "0.85V", "0.86V", "Up", "Down"},
+			blockPresent: []string{"60°C", "71°C", "150W", "160W"},
+			rowWidth:     52,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("width_%d", tc.width), func(t *testing.T) {
+			out := renderNPUDetailAtWidth(t, extendedChipNode(), tc.width)
+
+			block := blockAfter(out, "NPU Chip Details")
+			if len(block) != 5 { // section title + header + separator + 2 chip rows
+				t.Fatalf("extended chip table has %d lines, want 5\n---\n%s", len(block), out)
+			}
+
+			header := block[1]
+			for _, col := range tc.columns {
+				if !strings.Contains(header, col) {
+					t.Errorf("header is missing column %q at width %d: %q", col, tc.width, header)
+				}
+			}
+			for _, col := range tc.wantAbsent {
+				if strings.Contains(header, col) {
+					t.Errorf("header kept dropped column %q at width %d: %q", col, tc.width, header)
+				}
+			}
+
+			// Every rendered line - header, separator and data rows alike - must
+			// use the same column set and must fit the terminal.
+			for _, line := range block[1:] {
+				if w := runewidth.StringWidth(line); w != tc.rowWidth {
+					t.Errorf("table line is %d cells wide, want %d at terminal width %d: %q",
+						w, tc.rowWidth, tc.width, line)
+				}
+			}
+
+			// Dropped columns must take their cell values with them, and the
+			// surviving cells must keep their own values. Checking the whole
+			// block (not just the header, and at every tier) is what catches a
+			// mutation that writes a dropped column's value into a surviving
+			// cell.
+			blockText := strings.Join(block, "\n")
+			for _, gone := range tc.blockAbsent {
+				if strings.Contains(blockText, gone) {
+					t.Errorf("dropped-column value %q still rendered at width %d:\n%s", gone, tc.width, blockText)
+				}
+			}
+			for _, want := range tc.blockPresent {
+				if !strings.Contains(blockText, want) {
+					t.Errorf("surviving-column value %q missing at width %d:\n%s", want, tc.width, blockText)
+				}
+			}
+		})
+	}
+
+	// The widest tier is the pre-existing layout: nine columns, unchanged width.
+	wide := renderNPUDetailAtWidth(t, extendedChipNode(), 120)
+	if line := lineContaining(wide, "1800MHz"); line == "" {
+		t.Errorf("Freq column value missing on a wide terminal\n---\n%s", wide)
+	}
+}
