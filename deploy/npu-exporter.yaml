@@ -1,0 +1,170 @@
+# NPU-Exporter DaemonSet for Huawei Ascend NPUs
+#
+# Exposes Prometheus metrics on /metrics:8082 so that k8s-monitor's default
+# NPU-Exporter data path becomes live. The client is hard-coded to reach the
+# exporter through the API server proxy at:
+#   /api/v1/namespaces/kube-system/services/npu-exporter:8082/proxy/metrics
+# (see internal/datasource/npu_exporter.go: serviceName "npu-exporter",
+#  serviceNS "kube-system", servicePort "8082", sub path "metrics").
+#
+# Therefore the Service below MUST be named npu-exporter in namespace
+# kube-system and expose port 8082. Renaming it silently disables NPU metrics;
+# use `--npu-exporter <url>` only for an exporter deployed elsewhere.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: npu-exporter
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: npu-exporter
+rules:
+  # Read-only access used to attribute chips to pods/nodes in the metrics.
+  - apiGroups: [""]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: npu-exporter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: npu-exporter
+subjects:
+  - kind: ServiceAccount
+    name: npu-exporter
+    namespace: kube-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: npu-exporter
+  namespace: kube-system
+  labels:
+    app: npu-exporter
+spec:
+  # ClusterIP only: the metrics are consumed through the API server proxy.
+  type: ClusterIP
+  selector:
+    app: npu-exporter
+  ports:
+    - name: metrics
+      port: 8082
+      targetPort: 8082
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: npu-exporter
+  namespace: kube-system
+  labels:
+    app: npu-exporter
+spec:
+  selector:
+    matchLabels:
+      app: npu-exporter
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: npu-exporter
+    spec:
+      serviceAccountName: npu-exporter
+      # The exporter reads the device through the host's dcmi/npu-smi, so it
+      # shares the host network namespace like the NPU device plugin does.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        # Ascend nodes only. Replace with the label your cluster uses if it is
+        # not the Huawei standard "accelerator/huawei-npu".
+        accelerator/huawei-npu: ascend-1980
+      tolerations:
+        # NPU nodes are usually tainted; the device plugin uses the same rule.
+        - operator: Exists
+      containers:
+        - name: npu-exporter
+          # NOTE: verify this image reference before applying.
+          # - This is the reference already documented in this repository
+          #   (README.md, "NPU-Exporter Image"), i.e. the Huawei Cloud CCE
+          #   npu-exporter published in the same registry family as the device
+          #   plugin (swr.*.myhuaweicloud.com/hwofficial/...).
+          # - The MindX DL npu-exporter from Ascend Hub is an equivalent
+          #   alternative, but its image is licence-gated and must be pulled
+          #   from your own Ascend Hub subscription:
+          #     【需按 ascendhub 许可获取/替换】
+          #     ascendhub.huawei.com/public-ascendhub/npu-exporter:<version>
+          #   Replace the image below with the exact tag you are entitled to.
+          image: swr.cn-north-12.myhuaweicloud.com/hwofficial/npu-exporter:2.3.2
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            # Required to talk to the driver/dcmi device nodes.
+            privileged: true
+          ports:
+            - name: metrics
+              containerPort: 8082
+              protocol: TCP
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            # Driver/dcmi libraries live on the host; the mounts below expose
+            # them at the same paths the device plugin uses.
+            - name: LD_LIBRARY_PATH
+              value: /usr/local/dcmi:/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver:/usr/local/sbin
+          # If the image needs explicit flags (for example a non-default listen
+          # address), add them here after checking `--help` of your tag. The
+          # defaults serve /metrics on 0.0.0.0:8082, which is what the Service
+          # and the API server proxy expect.
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 8082
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            failureThreshold: 3
+          volumeMounts:
+            - name: ascend-driver
+              mountPath: /usr/local/Ascend
+            - name: dcmi
+              mountPath: /usr/local/dcmi
+            - name: npu-smi
+              mountPath: /usr/local/sbin/npu-smi
+            - name: dev
+              mountPath: /dev
+            - name: localtime
+              mountPath: /etc/localtime
+              readOnly: true
+      volumes:
+        - name: ascend-driver
+          hostPath:
+            path: /usr/local/Ascend
+            type: DirectoryOrCreate
+        - name: dcmi
+          hostPath:
+            path: /usr/local/dcmi
+            type: DirectoryOrCreate
+        - name: npu-smi
+          # npu-smi is a file, not a directory; some images expect it under
+          # /usr/local/bin instead. Adjust the mount path to match the image.
+          hostPath:
+            path: /usr/local/sbin/npu-smi
+            type: File
+        - name: dev
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: localtime
+          hostPath:
+            path: /etc/localtime
+            type: File

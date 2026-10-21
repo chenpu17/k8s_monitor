@@ -76,3 +76,10 @@ kubectl delete -f k8s-monitor-npu-collector.yaml
 - Uses `hostNetwork: true` for Kubernetes API access
 - Uses Python's built-in `urllib` for API calls (no curl dependency)
 - Image: `docker.1ms.run/library/python:3.11-slim` (glibc-based, ARM64 compatible)
+
+## Related
+
+- `npu-exporter.yaml` deploys the Huawei npu-exporter DaemonSet + Service that
+  k8s-monitor's built-in NPU metrics path expects (`kube-system/npu-exporter:8082`).
+  Chinese deployment notes, image sourcing and verification commands: [npu-exporter.md](npu-exporter.md).
+
