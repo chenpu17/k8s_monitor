@@ -267,6 +267,9 @@ func ConvertNode(node *corev1.Node) *model.NodeData {
 	// management-plane fault document.
 	applyNPUHealth(nodeData, node.Annotations, node.Labels)
 
+	// NPU interconnect topology and per-device network placement.
+	applyNPUTopology(nodeData, node.Annotations)
+
 	// Set default health status if NPU exists but no health annotation
 	if nodeData.NPUCapacity > 0 && nodeData.NPUHealthStatus == "" {
 		nodeData.NPUHealthStatus = "Healthy"

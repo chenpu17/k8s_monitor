@@ -844,3 +844,587 @@ func TestCollectAlertsNPUCombined(t *testing.T) {
 		t.Errorf("got %d NPU alerts, want 4: %+v", got, alerts)
 	}
 }
+
+// npuThresholdAlertTypes is the per-chip threshold family added on top of the
+// annotation-driven NPU alerts.
+var npuThresholdAlertTypes = []model.AlertType{
+	model.AlertTypeNPUTempHigh,
+	model.AlertTypeNPUEccDouble,
+	model.AlertTypeNPUEccSingle,
+	model.AlertTypeNPULinkDown,
+	model.AlertTypeNPUErrorCode,
+}
+
+// realClusterChips is the per-chip snapshot read from the live NPU-Exporter on
+// the 910B1 node: eight idle chips (temps 46-49°C, links up, no ECC or error
+// code reported).
+func realClusterChips() []model.NPUChipData {
+	temps := []int{47, 49, 47, 47, 47, 46, 48, 48}
+	chips := make([]model.NPUChipData, len(temps))
+	for i, temp := range temps {
+		chips[i] = model.NPUChipData{
+			NPUID:           i / chipsPerNPU,
+			Chip:            i % chipsPerNPU,
+			PhyID:           i,
+			Temp:            temp,
+			LinkStatus:      1,
+			LinkStatusKnown: true,
+		}
+	}
+	return chips
+}
+
+// npuChipsFromTemps builds chips 0..n-1 with the given temperatures and an
+// otherwise healthy profile.
+func npuChipsFromTemps(temps ...int) []model.NPUChipData {
+	chips := make([]model.NPUChipData, len(temps))
+	for i, temp := range temps {
+		chips[i] = model.NPUChipData{PhyID: i, Temp: temp, LinkStatus: 1, LinkStatusKnown: true}
+	}
+	return chips
+}
+
+// npuAssertSingleAlert returns the only alert of the given type, failing the
+// test when the node produced none or several.
+func npuAssertSingleAlert(t *testing.T, alerts []model.Alert, alertType model.AlertType) model.Alert {
+	t.Helper()
+	matched := npuAlertsOfType(alerts, alertType)
+	if len(matched) != 1 {
+		t.Fatalf("got %d %s alerts, want exactly 1: %+v", len(matched), alertType, alerts)
+	}
+	return matched[0]
+}
+
+// npuAssertThresholdAlertShape checks the fields every per-chip threshold alert
+// must carry regardless of type.
+func npuAssertThresholdAlertShape(t *testing.T, alert model.Alert, nodeName string) {
+	t.Helper()
+	if alert.Category != "NPU" {
+		t.Errorf("category = %q, want NPU", alert.Category)
+	}
+	if alert.ResourceType != "Node" || alert.ResourceName != nodeName {
+		t.Errorf("resource = %s/%s, want Node/%s", alert.ResourceType, alert.ResourceName, nodeName)
+	}
+	if alert.Message == "" {
+		t.Error("message is empty")
+	}
+	if alert.RecommendedAction == "" {
+		t.Error("recommended action is empty")
+	}
+	if alert.Timestamp.IsZero() {
+		t.Error("timestamp is zero")
+	}
+}
+
+func TestCollectAlertsNPUTempHigh(t *testing.T) {
+	agg := &AggregatedDataSource{}
+
+	tests := []struct {
+		name         string
+		temps        []int
+		wantAlerts   int
+		wantSeverity model.AlertSeverity
+		wantValue    string
+		wantMessage  []string
+	}{
+		{
+			name:       "real idle cluster temperatures are silent",
+			temps:      []int{47, 49, 47, 47, 47, 46, 48, 48},
+			wantAlerts: 0,
+		},
+		{
+			name:       "79°C is below the warning threshold",
+			temps:      []int{47, 79},
+			wantAlerts: 0,
+		},
+		{
+			name:         "80°C warns",
+			temps:        []int{47, 80},
+			wantAlerts:   1,
+			wantSeverity: model.AlertSeverityWarning,
+			wantValue:    "chips 1",
+			wantMessage:  []string{"chip(s) 1", "80°C"},
+		},
+		{
+			name:         "89°C is still a warning",
+			temps:        []int{89},
+			wantAlerts:   1,
+			wantSeverity: model.AlertSeverityWarning,
+			wantValue:    "chips 0",
+			wantMessage:  []string{"89°C"},
+		},
+		{
+			name:         "90°C is critical",
+			temps:        []int{90},
+			wantAlerts:   1,
+			wantSeverity: model.AlertSeverityCritical,
+			wantValue:    "chips 0",
+			wantMessage:  []string{"90°C"},
+		},
+		{
+			name:         "the hottest chip decides the severity and every hot chip is listed",
+			temps:        []int{85, 95},
+			wantAlerts:   1,
+			wantSeverity: model.AlertSeverityCritical,
+			wantValue:    "chips 0, 1",
+			wantMessage:  []string{"chip(s) 0, 1", "95°C"},
+		},
+		{
+			name:         "eight hot chips still raise a single alert",
+			temps:        []int{81, 82, 83, 84, 85, 86, 87, 88},
+			wantAlerts:   1,
+			wantSeverity: model.AlertSeverityWarning,
+			wantValue:    "chips 0, 1, 2, 3, 4, 5, 6, 7",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			nodes := npuTestNodes(&model.NodeData{Name: "npu-node", NPUChips: npuChipsFromTemps(tc.temps...)})
+			alerts := npuAlertsOfType(agg.collectAlerts(nodes, nil, nil, nil, nil), model.AlertTypeNPUTempHigh)
+
+			if len(alerts) != tc.wantAlerts {
+				t.Fatalf("got %d temperature alerts, want %d: %+v", len(alerts), tc.wantAlerts, alerts)
+			}
+			if tc.wantAlerts == 0 {
+				return
+			}
+
+			alert := alerts[0]
+			npuAssertThresholdAlertShape(t, alert, "npu-node")
+			if alert.Severity != tc.wantSeverity {
+				t.Errorf("severity = %s, want %s", alert.Severity, tc.wantSeverity)
+			}
+			if alert.Value != tc.wantValue {
+				t.Errorf("value = %q, want %q", alert.Value, tc.wantValue)
+			}
+			// Threshold reports the line matching the severity: the warning
+			// line while every offending chip is below the critical line, the
+			// critical line once severity escalates.
+			wantThreshold := "80°C"
+			if tc.wantSeverity == model.AlertSeverityCritical {
+				wantThreshold = "90°C"
+			}
+			if alert.Threshold != wantThreshold {
+				t.Errorf("threshold = %q, want %q", alert.Threshold, wantThreshold)
+			}
+			for _, fragment := range tc.wantMessage {
+				if !strings.Contains(alert.Message, fragment) {
+					t.Errorf("message %q does not contain %q", alert.Message, fragment)
+				}
+			}
+		})
+	}
+}
+
+func TestCollectAlertsNPUEccErrors(t *testing.T) {
+	agg := &AggregatedDataSource{}
+
+	tests := []struct {
+		name          string
+		single        []int64
+		double        []int64
+		wantDouble    int
+		wantSingle    int
+		wantValue     string
+		wantSeverity  model.AlertSeverity
+		wantInMessage []string
+	}{
+		{
+			name:       "clean chips are silent",
+			single:     []int64{0, 0},
+			double:     []int64{0, 0},
+			wantDouble: 0,
+			wantSingle: 0,
+		},
+		{
+			name:          "a single-bit error warns",
+			single:        []int64{0, 0, 3},
+			double:        []int64{0, 0, 0},
+			wantDouble:    0,
+			wantSingle:    1,
+			wantValue:     "chips 2",
+			wantSeverity:  model.AlertSeverityWarning,
+			wantInMessage: []string{"single-bit", "correctable"},
+		},
+		{
+			name:          "a double-bit error is critical",
+			single:        []int64{0},
+			double:        []int64{1},
+			wantDouble:    1,
+			wantSingle:    0,
+			wantValue:     "chips 0",
+			wantSeverity:  model.AlertSeverityCritical,
+			wantInMessage: []string{"double-bit", "uncorrectable"},
+		},
+		{
+			name:          "a double-bit error suppresses the single-bit alert on the same chip",
+			single:        []int64{5},
+			double:        []int64{2},
+			wantDouble:    1,
+			wantSingle:    0,
+			wantValue:     "chips 0",
+			wantSeverity:  model.AlertSeverityCritical,
+			wantInMessage: []string{"chip(s) 0"},
+		},
+		{
+			name:          "different chips raise both alerts",
+			single:        []int64{0, 0, 0, 4},
+			double:        []int64{1, 0, 0, 0},
+			wantDouble:    1,
+			wantSingle:    1,
+			wantValue:     "chips 0",
+			wantSeverity:  model.AlertSeverityCritical,
+			wantInMessage: []string{"chip(s) 0"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			chips := make([]model.NPUChipData, len(tc.single))
+			for i := range tc.single {
+				chips[i] = model.NPUChipData{
+					PhyID:           i,
+					Temp:            47,
+					LinkStatus:      1,
+					LinkStatusKnown: true,
+					HBMEccSingleErr: tc.single[i],
+					HBMEccDoubleErr: tc.double[i],
+				}
+			}
+			nodes := npuTestNodes(&model.NodeData{Name: "npu-node", NPUChips: chips})
+			alerts := agg.collectAlerts(nodes, nil, nil, nil, nil)
+
+			doubleAlerts := npuAlertsOfType(alerts, model.AlertTypeNPUEccDouble)
+			singleAlerts := npuAlertsOfType(alerts, model.AlertTypeNPUEccSingle)
+			if len(doubleAlerts) != tc.wantDouble {
+				t.Fatalf("got %d double-bit alerts, want %d: %+v", len(doubleAlerts), tc.wantDouble, doubleAlerts)
+			}
+			if len(singleAlerts) != tc.wantSingle {
+				t.Fatalf("got %d single-bit alerts, want %d: %+v", len(singleAlerts), tc.wantSingle, singleAlerts)
+			}
+
+			// Whatever fired must carry the shape and the expected severity; the
+			// expected value and message are asserted on the double-bit alert when
+			// present, otherwise on the single-bit one.
+			alert := model.Alert{}
+			switch {
+			case len(doubleAlerts) == 1:
+				alert = doubleAlerts[0]
+			case len(singleAlerts) == 1:
+				alert = singleAlerts[0]
+			default:
+				if got := countNPUAlerts(alerts); got != 0 {
+					t.Fatalf("got %d NPU alerts on clean chips, want 0: %+v", got, alerts)
+				}
+				return
+			}
+
+			npuAssertThresholdAlertShape(t, alert, "npu-node")
+			if alert.Severity != tc.wantSeverity {
+				t.Errorf("severity = %s, want %s", alert.Severity, tc.wantSeverity)
+			}
+			if alert.Value != tc.wantValue {
+				t.Errorf("value = %q, want %q", alert.Value, tc.wantValue)
+			}
+			for _, fragment := range tc.wantInMessage {
+				if !strings.Contains(alert.Message, fragment) {
+					t.Errorf("message %q does not contain %q", alert.Message, fragment)
+				}
+			}
+
+			// The single-bit alert on the "different chips" case must point at its
+			// own chip rather than repeating the double-bit one.
+			if tc.wantSingle == 1 && len(singleAlerts) == 1 && tc.wantDouble == 1 {
+				if singleAlerts[0].Value != "chips 3" {
+					t.Errorf("single-bit value = %q, want %q", singleAlerts[0].Value, "chips 3")
+				}
+			}
+		})
+	}
+}
+
+// TestCollectAlertsNPUEccCounterChoice pins the ECC counter choice behind the
+// threshold alerts: alerts read the per-window npu_chip_info_hbm_ecc_*_cnt
+// family, never the cumulative npu_chip_info_hbm_ecc_total_*_bit_error_cnt
+// family. Shape taken from the reference node (verified live 2026-10-21):
+// chip 2 reports a six-digit cumulative single-bit total with a quiet
+// per-window counter, and must stay silent.
+func TestCollectAlertsNPUEccCounterChoice(t *testing.T) {
+	agg := &AggregatedDataSource{}
+
+	chips := []model.NPUChipData{
+		{PhyID: 0, Temp: 47, LinkStatus: 1, LinkStatusKnown: true, HBMEccSingleErrTotal: 0},
+		{PhyID: 2, Temp: 47, LinkStatus: 1, LinkStatusKnown: true, HBMEccSingleErrTotal: 99992},
+	}
+	nodes := npuTestNodes(&model.NodeData{Name: "npu-node", NPUChips: chips})
+	alerts := agg.collectAlerts(nodes, nil, nil, nil, nil)
+
+	if got := npuAlertsOfType(alerts, model.AlertTypeNPUEccSingle); len(got) != 0 {
+		t.Fatalf("cumulative single-bit total raised an alert: %+v", got)
+	}
+	if got := npuAlertsOfType(alerts, model.AlertTypeNPUEccDouble); len(got) != 0 {
+		t.Fatalf("cumulative total raised a double-bit alert: %+v", got)
+	}
+
+	// The same chip reporting through the per-window counter does alert.
+	chips[1].HBMEccSingleErr = 2
+	nodes = npuTestNodes(&model.NodeData{Name: "npu-node", NPUChips: chips})
+	alerts = agg.collectAlerts(nodes, nil, nil, nil, nil)
+	got := npuAlertsOfType(alerts, model.AlertTypeNPUEccSingle)
+	if len(got) != 1 || got[0].Value != "chips 2" {
+		t.Fatalf("per-window counter did not warn on chips 2: %+v", got)
+	}
+}
+
+func TestCollectAlertsNPULinkDown(t *testing.T) {
+	agg := &AggregatedDataSource{}
+
+	tests := []struct {
+		name       string
+		chips      []model.NPUChipData
+		wantAlerts int
+		wantValue  string
+	}{
+		{
+			name:       "all links up are silent",
+			chips:      realClusterChips(),
+			wantAlerts: 0,
+		},
+		{
+			name: "an unreported link status is not a link down",
+			chips: []model.NPUChipData{
+				{PhyID: 0, Temp: 47},
+				{PhyID: 1, Temp: 47},
+			},
+			wantAlerts: 0,
+		},
+		{
+			name: "a single link down is critical",
+			chips: []model.NPUChipData{
+				{PhyID: 0, Temp: 47, LinkStatus: 1, LinkStatusKnown: true},
+				{PhyID: 1, Temp: 47, LinkStatus: 0, LinkStatusKnown: true},
+			},
+			wantAlerts: 1,
+			wantValue:  "chips 1",
+		},
+		{
+			name: "several links down aggregate into one alert",
+			chips: []model.NPUChipData{
+				{PhyID: 0, Temp: 47, LinkStatus: 0, LinkStatusKnown: true},
+				{PhyID: 1, Temp: 47, LinkStatus: 1, LinkStatusKnown: true},
+				{PhyID: 2, Temp: 47, LinkStatus: 0, LinkStatusKnown: true},
+			},
+			wantAlerts: 1,
+			wantValue:  "chips 0, 2",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			nodes := npuTestNodes(&model.NodeData{Name: "npu-node", NPUChips: tc.chips})
+			alerts := npuAlertsOfType(agg.collectAlerts(nodes, nil, nil, nil, nil), model.AlertTypeNPULinkDown)
+
+			if len(alerts) != tc.wantAlerts {
+				t.Fatalf("got %d link alerts, want %d: %+v", len(alerts), tc.wantAlerts, alerts)
+			}
+			if tc.wantAlerts == 0 {
+				return
+			}
+
+			alert := alerts[0]
+			npuAssertThresholdAlertShape(t, alert, "npu-node")
+			if alert.Severity != model.AlertSeverityCritical {
+				t.Errorf("severity = %s, want Critical", alert.Severity)
+			}
+			if alert.Value != tc.wantValue {
+				t.Errorf("value = %q, want %q", alert.Value, tc.wantValue)
+			}
+		})
+	}
+}
+
+func TestCollectAlertsNPUErrorCode(t *testing.T) {
+	agg := &AggregatedDataSource{}
+
+	tests := []struct {
+		name          string
+		codes         []int
+		wantAlerts    int
+		wantValue     string
+		wantInMessage []string
+	}{
+		{
+			name:       "zero error code is silent",
+			codes:      []int{0, 0, 0},
+			wantAlerts: 0,
+		},
+		{
+			name:          "a non-zero error code warns and keeps the raw code",
+			codes:         []int{0, 0, 0, 0, 0, 7},
+			wantAlerts:    1,
+			wantValue:     "chips 5",
+			wantInMessage: []string{"chip(s) 5 (code 7)"},
+		},
+		{
+			name:          "several error codes aggregate into one alert",
+			codes:         []int{3, 0, 1},
+			wantAlerts:    1,
+			wantValue:     "chips 0, 2",
+			wantInMessage: []string{"0 (code 3)", "2 (code 1)"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			chips := make([]model.NPUChipData, len(tc.codes))
+			for i, code := range tc.codes {
+				chips[i] = model.NPUChipData{PhyID: i, Temp: 47, LinkStatus: 1, LinkStatusKnown: true, ErrorCode: code}
+			}
+			nodes := npuTestNodes(&model.NodeData{Name: "npu-node", NPUChips: chips})
+			alerts := npuAlertsOfType(agg.collectAlerts(nodes, nil, nil, nil, nil), model.AlertTypeNPUErrorCode)
+
+			if len(alerts) != tc.wantAlerts {
+				t.Fatalf("got %d error code alerts, want %d: %+v", len(alerts), tc.wantAlerts, alerts)
+			}
+			if tc.wantAlerts == 0 {
+				return
+			}
+
+			alert := alerts[0]
+			npuAssertThresholdAlertShape(t, alert, "npu-node")
+			if alert.Severity != model.AlertSeverityWarning {
+				t.Errorf("severity = %s, want Warning", alert.Severity)
+			}
+			if alert.Value != tc.wantValue {
+				t.Errorf("value = %q, want %q", alert.Value, tc.wantValue)
+			}
+			for _, fragment := range tc.wantInMessage {
+				if !strings.Contains(alert.Message, fragment) {
+					t.Errorf("message %q does not contain %q", alert.Message, fragment)
+				}
+			}
+		})
+	}
+}
+
+// TestCollectAlertsNPUThresholdsRequireChips pins that the whole threshold
+// family is gated on per-chip metrics: with the NPU-Exporter unavailable the
+// node still carries the annotation-driven signals but must not produce chip
+// threshold alerts out of zero values.
+func TestCollectAlertsNPUThresholdsRequireChips(t *testing.T) {
+	agg := &AggregatedDataSource{}
+
+	chips := []model.NPUChipData{
+		{PhyID: 0, Temp: 95, LinkStatus: 0, LinkStatusKnown: true, HBMEccDoubleErr: 1, ErrorCode: 5},
+		{PhyID: 1, Temp: 95, LinkStatus: 0, LinkStatusKnown: true, HBMEccSingleErr: 2, ErrorCode: 5},
+	}
+
+	withChips := npuTestNodes(&model.NodeData{Name: "npu-node", NPUChips: chips})
+	withoutChips := npuTestNodes(&model.NodeData{Name: "npu-node"})
+
+	for _, alertType := range npuThresholdAlertTypes {
+		if got := len(npuAlertsOfType(agg.collectAlerts(withoutChips, nil, nil, nil, nil), alertType)); got != 0 {
+			t.Errorf("%s: got %d alerts without chip metrics, want 0", alertType, got)
+		}
+		if got := len(npuAlertsOfType(agg.collectAlerts(withChips, nil, nil, nil, nil), alertType)); got != 1 {
+			t.Errorf("%s: got %d alerts with chip metrics, want 1", alertType, got)
+		}
+	}
+}
+
+// TestCollectAlertsNPUThresholdsOnePerNode pins that every threshold type is
+// emitted at most once per node even when all eight chips are in violation, so
+// a fully degraded node produces five alerts rather than forty.
+func TestCollectAlertsNPUThresholdsOnePerNode(t *testing.T) {
+	agg := &AggregatedDataSource{}
+
+	chips := make([]model.NPUChipData, 8)
+	for i := range chips {
+		chips[i] = model.NPUChipData{
+			PhyID:           i,
+			Temp:            95,
+			LinkStatus:      0,
+			LinkStatusKnown: true,
+			ErrorCode:       9,
+		}
+		if i < 4 {
+			chips[i].HBMEccDoubleErr = 1
+		} else {
+			// Single-bit only: a double-bit error on the same chip would
+			// suppress the single-bit alert by design.
+			chips[i].HBMEccSingleErr = 1
+		}
+	}
+	nodes := npuTestNodes(&model.NodeData{Name: "npu-node", NPUChips: chips})
+
+	alerts := agg.collectAlerts(nodes, nil, nil, nil, nil)
+
+	for _, alertType := range npuThresholdAlertTypes {
+		if got := len(npuAlertsOfType(alerts, alertType)); got != 1 {
+			t.Errorf("%s: got %d alerts, want exactly 1", alertType, got)
+		}
+	}
+	if got := countNPUAlerts(alerts); got != len(npuThresholdAlertTypes) {
+		t.Errorf("got %d NPU alerts, want %d: %+v", got, len(npuThresholdAlertTypes), alerts)
+	}
+}
+
+// TestCollectAlertsNPUThresholdsDoNotShadowAnnotationAlerts pins that the two
+// NPU alert families are independent: a node that trips both produces all nine
+// alert types.
+func TestCollectAlertsNPUThresholdsDoNotShadowAnnotationAlerts(t *testing.T) {
+	agg := &AggregatedDataSource{}
+
+	chips := []model.NPUChipData{
+		{PhyID: 0, Temp: 95, LinkStatus: 0, LinkStatusKnown: true, HBMEccDoubleErr: 1, ErrorCode: 9},
+		{PhyID: 1, Temp: 95, LinkStatus: 0, LinkStatusKnown: true, HBMEccSingleErr: 1, ErrorCode: 9},
+	}
+
+	nodes := npuTestNodes(&model.NodeData{
+		Name:           "npu-node",
+		NPUStatusMask:  0xffffffffffffff01,
+		NPUStatusKnown: true,
+		NPUFault: &model.NPUFaultInfo{
+			DeviceFaultLevel: "UrgentNPU",
+			SwitchFaultLevel: "Warning",
+		},
+		Conditions: []corev1.NodeCondition{
+			{Type: "NT_NPU_NET", Status: corev1.ConditionTrue, Message: "link down"},
+		},
+		NPUChips: chips,
+	})
+
+	alerts := agg.collectAlerts(nodes, nil, nil, nil, nil)
+
+	for _, alertType := range append([]model.AlertType{
+		model.AlertTypeNPUChipFault,
+		model.AlertTypeNPUFaultLevel,
+		model.AlertTypeNPUSwitchFault,
+		model.AlertTypeNPUCheckFailed,
+	}, npuThresholdAlertTypes...) {
+		if got := len(npuAlertsOfType(alerts, alertType)); got != 1 {
+			t.Errorf("%s: got %d alerts, want 1", alertType, got)
+		}
+	}
+	if got := countNPUAlerts(alerts); got != 9 {
+		t.Errorf("got %d NPU alerts, want 9: %+v", got, alerts)
+	}
+}
+
+// TestCollectAlertsNPUThresholdsRealClusterHealthy is the live-data harness
+// check: the real per-chip snapshot of the healthy 910B1 node must produce no
+// threshold alerts.
+func TestCollectAlertsNPUThresholdsRealClusterHealthy(t *testing.T) {
+	agg := &AggregatedDataSource{}
+
+	nodes := npuTestNodes(&model.NodeData{
+		Name:     "192.168.2.188",
+		NPUChips: realClusterChips(),
+	})
+
+	alerts := agg.collectAlerts(nodes, nil, nil, nil, nil)
+	if got := countNPUAlerts(alerts); got != 0 {
+		t.Fatalf("got %d NPU alerts on a healthy node, want 0: %+v", got, alerts)
+	}
+}

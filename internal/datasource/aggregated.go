@@ -1071,7 +1071,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 		// media SNR, residual process, high frequency fault) uses the NT_NPU_
 		// prefix.
 		for _, condition := range node.Conditions {
-			if !strings.HasPrefix(string(condition.Type), npuCheckConditionPrefix) || condition.Status != corev1.ConditionTrue {
+			if !strings.HasPrefix(string(condition.Type), model.NPUCheckConditionPrefix) || condition.Status != corev1.ConditionTrue {
 				continue
 			}
 			message := fmt.Sprintf("NPU inspection check %s failed", condition.Type)
@@ -1090,6 +1090,10 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				Timestamp:         now,
 			})
 		}
+
+		// NPU per-chip thresholds (temperature, ECC, link, error code) from the
+		// NPU-Exporter metrics. One alert per type per node at most.
+		alerts = append(alerts, npuThresholdAlerts(node, now)...)
 	}
 
 	// Pod alerts

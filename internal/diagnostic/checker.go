@@ -96,6 +96,16 @@ func GetRecommendedAction(alertType model.AlertType, namespace, resourceName str
 		return "kubectl describe node " + resourceName + " # Check the switch fault in os.modelarts.node/fault-info and verify NPU network links"
 	case model.AlertTypeNPUCheckFailed:
 		return "kubectl describe node " + resourceName + " # Inspect the failing NT_* inspection condition message"
+	case model.AlertTypeNPUTempHigh:
+		return "npu-smi info -t temp -i 0 # Check chip temperature and airflow on " + resourceName + ", then reduce load if it stays high"
+	case model.AlertTypeNPUEccDouble:
+		return "npu-smi info -t ecc -i 0 # Double-bit ECC errors are uncorrectable: drain " + resourceName + " and open a hardware support case"
+	case model.AlertTypeNPUEccSingle:
+		return "npu-smi info -t ecc -i 0 # Single-bit ECC errors are correctable: watch the trend on " + resourceName + " and replace the HBM module if it keeps growing"
+	case model.AlertTypeNPULinkDown:
+		return "npu-smi info -t link -i 0 # Check the NPU interconnect link and cabling on " + resourceName
+	case model.AlertTypeNPUErrorCode:
+		return "npu-smi info -t errorcode -i 0 # Look up the reported error code for " + resourceName + " and open a hardware support case if it persists"
 
 	default:
 		return ""
@@ -194,6 +204,16 @@ func GetRecommendedActionChinese(alertType model.AlertType, namespace, resourceN
 		return "kubectl describe node " + resourceName + " # 查看 os.modelarts.node/fault-info 中的交换机故障并检查 NPU 网络链路"
 	case model.AlertTypeNPUCheckFailed:
 		return "kubectl describe node " + resourceName + " # 查看失败的 NT_* 巡检条件详情"
+	case model.AlertTypeNPUTempHigh:
+		return "npu-smi info -t temp -i 0 # 检查节点 " + resourceName + " 的芯片温度与散热，持续高温时降低负载"
+	case model.AlertTypeNPUEccDouble:
+		return "npu-smi info -t ecc -i 0 # HBM 双比特 ECC 不可纠正：先驱逐节点 " + resourceName + " 上的负载，再提硬件工单"
+	case model.AlertTypeNPUEccSingle:
+		return "npu-smi info -t ecc -i 0 # HBM 单比特 ECC 可纠正：关注节点 " + resourceName + " 的错误增长趋势，持续增长则更换 HBM"
+	case model.AlertTypeNPULinkDown:
+		return "npu-smi info -t link -i 0 # 检查节点 " + resourceName + " 的 NPU 互联链路与线缆"
+	case model.AlertTypeNPUErrorCode:
+		return "npu-smi info -t errorcode -i 0 # 查询节点 " + resourceName + " 上报的错误码含义，持续出现时提硬件工单"
 
 	default:
 		return ""

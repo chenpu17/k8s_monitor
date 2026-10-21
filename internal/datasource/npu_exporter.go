@@ -73,16 +73,21 @@ type NPUChipMetrics struct {
 	BandwidthTx        float64 // MB/s
 	Voltage            float64 // V
 	LinkStatus         int     // 1 = up, 0 = down
+	LinkStatusKnown    bool    // False when the exporter did not report link status
 	LinkSpeed          int     // link speed
 	LinkUpNum          int     // number of links up
 	NetworkStatus      int
 	ErrorCode          int
 	HBMEccSingleBitErr int64
 	HBMEccDoubleBitErr int64
-	RoCETxAllPktNum    int64
-	RoCERxAllPktNum    int64
-	RoCETxErrPktNum    int64
-	RoCERxErrPktNum    int64
+	// Cumulative totals (npu_chip_info_hbm_ecc_total_*_bit_error_cnt). Carried
+	// for display only; threshold alerts deliberately read the per-window _cnt.
+	HBMEccSingleBitErrTotal int64
+	HBMEccDoubleBitErrTotal int64
+	RoCETxAllPktNum         int64
+	RoCERxAllPktNum         int64
+	RoCETxErrPktNum         int64
+	RoCERxErrPktNum         int64
 }
 
 // NodeNPUMetrics represents aggregated NPU metrics for a node
@@ -366,6 +371,7 @@ func (c *NPUExporterClient) parseMetrics(body io.Reader) (map[int]*NPUChipMetric
 			chip.Voltage = value
 		case "npu_chip_info_link_status":
 			chip.LinkStatus = int(value)
+			chip.LinkStatusKnown = true
 		case "npu_chip_link_speed":
 			chip.LinkSpeed = int(value)
 		case "npu_chip_link_up_num":
@@ -378,6 +384,10 @@ func (c *NPUExporterClient) parseMetrics(body io.Reader) (map[int]*NPUChipMetric
 			chip.HBMEccSingleBitErr = int64(value)
 		case "npu_chip_info_hbm_ecc_double_bit_error_cnt":
 			chip.HBMEccDoubleBitErr = int64(value)
+		case "npu_chip_info_hbm_ecc_total_single_bit_error_cnt":
+			chip.HBMEccSingleBitErrTotal = int64(value)
+		case "npu_chip_info_hbm_ecc_total_double_bit_error_cnt":
+			chip.HBMEccDoubleBitErrTotal = int64(value)
 		case "npu_chip_roce_tx_all_pkt_num":
 			chip.RoCETxAllPktNum = int64(value)
 		case "npu_chip_roce_rx_all_pkt_num":
@@ -540,22 +550,25 @@ func (c *NPUExporterClient) convertChipMetrics(chip *NPUChipMetrics) model.NPUCh
 		HBMTotal: chip.HBMTotalMemory,
 
 		// Extended metrics from NPU-Exporter
-		VectorUtil:      chip.VectorUtilization,
-		Voltage:         chip.Voltage,
-		AICoreFreq:      chip.AICoreCurrentFreq,
-		LinkStatus:      chip.LinkStatus,
-		LinkSpeed:       chip.LinkSpeed,
-		LinkUpNum:       chip.LinkUpNum,
-		NetworkStatus:   chip.NetworkStatus,
-		ErrorCode:       chip.ErrorCode,
-		HBMEccSingleErr: chip.HBMEccSingleBitErr,
-		HBMEccDoubleErr: chip.HBMEccDoubleBitErr,
-		RoCETxPkts:      chip.RoCETxAllPktNum,
-		RoCERxPkts:      chip.RoCERxAllPktNum,
-		RoCETxErrPkts:   chip.RoCETxErrPktNum,
-		RoCERxErrPkts:   chip.RoCERxErrPktNum,
-		BandwidthRx:     chip.BandwidthRx,
-		BandwidthTx:     chip.BandwidthTx,
+		VectorUtil:           chip.VectorUtilization,
+		Voltage:              chip.Voltage,
+		AICoreFreq:           chip.AICoreCurrentFreq,
+		LinkStatus:           chip.LinkStatus,
+		LinkStatusKnown:      chip.LinkStatusKnown,
+		LinkSpeed:            chip.LinkSpeed,
+		LinkUpNum:            chip.LinkUpNum,
+		NetworkStatus:        chip.NetworkStatus,
+		ErrorCode:            chip.ErrorCode,
+		HBMEccSingleErr:      chip.HBMEccSingleBitErr,
+		HBMEccDoubleErr:      chip.HBMEccDoubleBitErr,
+		HBMEccSingleErrTotal: chip.HBMEccSingleBitErrTotal,
+		HBMEccDoubleErrTotal: chip.HBMEccDoubleBitErrTotal,
+		RoCETxPkts:           chip.RoCETxAllPktNum,
+		RoCERxPkts:           chip.RoCERxAllPktNum,
+		RoCETxErrPkts:        chip.RoCETxErrPktNum,
+		RoCERxErrPkts:        chip.RoCERxErrPktNum,
+		BandwidthRx:          chip.BandwidthRx,
+		BandwidthTx:          chip.BandwidthTx,
 	}
 
 	if chip.HealthStatus == 1 {

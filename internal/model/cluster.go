@@ -194,6 +194,13 @@ const (
 	AlertTypeNPUFaultLevel  AlertType = "npu_fault_level"
 	AlertTypeNPUSwitchFault AlertType = "npu_switch_fault"
 	AlertTypeNPUCheckFailed AlertType = "npu_check_failed"
+
+	// NPU per-chip threshold alert types (from NPU-Exporter metrics)
+	AlertTypeNPUTempHigh  AlertType = "npu_temp_high"
+	AlertTypeNPUEccDouble AlertType = "npu_ecc_double_bit"
+	AlertTypeNPUEccSingle AlertType = "npu_ecc_single_bit"
+	AlertTypeNPULinkDown  AlertType = "npu_link_down"
+	AlertTypeNPUErrorCode AlertType = "npu_error_code"
 )
 
 // Alert represents a resource alert
@@ -255,22 +262,28 @@ type NPUChipData struct {
 	HBMTotal int64   `json:"hbm_total"` // HBM memory total in MB
 
 	// Extended metrics from NPU-Exporter
-	VectorUtil      float64 `json:"vector_util"`      // Vector utilization percentage
-	Voltage         float64 `json:"voltage"`          // Voltage in V
-	AICoreFreq      int     `json:"aicore_freq"`      // AI Core frequency in MHz
-	LinkStatus      int     `json:"link_status"`      // Link status (1=up, 0=down)
-	LinkSpeed       int     `json:"link_speed"`       // Link speed
-	LinkUpNum       int     `json:"link_up_num"`      // Number of links up
-	NetworkStatus   int     `json:"network_status"`   // Network status
-	ErrorCode       int     `json:"error_code"`       // Error code
-	HBMEccSingleErr int64   `json:"hbm_ecc_single"`   // HBM ECC single-bit errors
-	HBMEccDoubleErr int64   `json:"hbm_ecc_double"`   // HBM ECC double-bit errors
-	RoCETxPkts      int64   `json:"roce_tx_pkts"`     // RoCE TX packets
-	RoCERxPkts      int64   `json:"roce_rx_pkts"`     // RoCE RX packets
-	RoCETxErrPkts   int64   `json:"roce_tx_err_pkts"` // RoCE TX error packets
-	RoCERxErrPkts   int64   `json:"roce_rx_err_pkts"` // RoCE RX error packets
-	BandwidthRx     float64 `json:"bandwidth_rx"`     // Bandwidth RX in MB/s
-	BandwidthTx     float64 `json:"bandwidth_tx"`     // Bandwidth TX in MB/s
+	VectorUtil      float64 `json:"vector_util"`       // Vector utilization percentage
+	Voltage         float64 `json:"voltage"`           // Voltage in V
+	AICoreFreq      int     `json:"aicore_freq"`       // AI Core frequency in MHz
+	LinkStatus      int     `json:"link_status"`       // Link status (1=up, 0=down)
+	LinkStatusKnown bool    `json:"link_status_known"` // False when the exporter did not report link status
+	LinkSpeed       int     `json:"link_speed"`        // Link speed
+	LinkUpNum       int     `json:"link_up_num"`       // Number of links up
+	NetworkStatus   int     `json:"network_status"`    // Network status
+	ErrorCode       int     `json:"error_code"`        // Error code
+	HBMEccSingleErr int64   `json:"hbm_ecc_single"`    // HBM ECC single-bit errors (recent window)
+	HBMEccDoubleErr int64   `json:"hbm_ecc_double"`    // HBM ECC double-bit errors (recent window)
+	// Cumulative counters since boot. Deliberately not used for alerts (a chip
+	// with historical corrections but no new ones is not an ongoing fault);
+	// parsed so the UI can surface long-term HBM degradation.
+	HBMEccSingleErrTotal int64   `json:"hbm_ecc_single_total"`
+	HBMEccDoubleErrTotal int64   `json:"hbm_ecc_double_total"`
+	RoCETxPkts           int64   `json:"roce_tx_pkts"`     // RoCE TX packets
+	RoCERxPkts           int64   `json:"roce_rx_pkts"`     // RoCE RX packets
+	RoCETxErrPkts        int64   `json:"roce_tx_err_pkts"` // RoCE TX error packets
+	RoCERxErrPkts        int64   `json:"roce_rx_err_pkts"` // RoCE RX error packets
+	BandwidthRx          float64 `json:"bandwidth_rx"`     // Bandwidth RX in MB/s
+	BandwidthTx          float64 `json:"bandwidth_tx"`     // Bandwidth TX in MB/s
 }
 
 // NPUFaultInfo describes management-plane faults reported for a node's NPU
@@ -281,6 +294,24 @@ type NPUFaultInfo struct {
 	SwitchFaultLevel  string   // "" when not reported
 	SwitchFaultName   string
 	CustomFaultLevel  string
+}
+
+// NPUSwitchGroup is one interconnect topology entry from the
+// volcano.sh/device-topologys node annotation, e.g. the HCCS affinity groups
+// {"type":"HCCS","groups":["0,1,2,3,4,5,6,7"]}.
+type NPUSwitchGroup struct {
+	Type   string  // Interconnect type as reported, e.g. "HCCS"
+	Groups [][]int // Chip IDs per group, in the order the node reported them
+}
+
+// NPUDeviceNetEntry is the network placement of a single NPU device from the
+// cce.kubectl.kubernetes.io/ascend-rank-table node annotation: which ToR switch
+// and port the device's RoCE plane is attached to.
+type NPUDeviceNetEntry struct {
+	DeviceID int    // device_id from the rank table, the sort key
+	DeviceIP string // device_ip
+	TORIP    string // tor_ip
+	TORPort  string // tor_port, e.g. "18:1"
 }
 
 // NodeData represents a Kubernetes node with metrics
@@ -363,11 +394,24 @@ type NodeData struct {
 	HyperClusterID string // volcano.sh/hypercluster
 	SuperPodID     string // os.modelarts.node/superpod.id
 	CabinetInfo    string // cce.kubectl.kubernetes.io/cabinet
+
+	// NPU interconnect topology and network placement (from node annotations).
+	// Both are nil when the node does not publish them.
+	NPUTopology  []NPUSwitchGroup    // volcano.sh/device-topologys
+	NPUDeviceNet []NPUDeviceNetEntry // cce.kubectl.kubernetes.io/ascend-rank-table
 }
 
 // NPUStatusChipBits is the number of per-chip health bits the NPU device plugin
 // reports in the low bits of the status bitmask (bit i = davinci chip i).
 const NPUStatusChipBits = 8
+
+// NPUCheckConditionPrefix selects the node conditions that are NPU fault
+// checks. Only the NT_NPU_* family raises npu_check_failed alerts; other NT_*
+// conditions are inspection plumbing that can be True on a perfectly healthy
+// node (see the comment at the alert site in aggregated.go). Shared by the
+// datasource (alert collection) and the UI (node detail inspection table) so
+// the two cannot drift apart.
+const NPUCheckConditionPrefix = "NT_NPU_"
 
 // NPUChipFaulty reports whether chip i is flagged as faulty by the NPU device
 // plugin. It is false whenever the bitmask is unknown (missing or not yet
