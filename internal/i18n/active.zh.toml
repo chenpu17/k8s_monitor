@@ -1392,11 +1392,35 @@ other = "过滤条件"
 [npudetail.chip_health]
 other = "芯片健康"
 
+[npudetail.chip_health_src]
+other = "设备插件位图"
+
+[npudetail.health_exporter]
+other = "npu-exporter"
+
 [npudetail.chip_ok]
 other = "正常"
 
 [npudetail.chip_fault]
 other = "故障"
+
+[npudetail.chip_unreported]
+other = "({{.Count}} 未上报)"
+
+[npudetail.hccs_affinity]
+other = "HCCS 亲和"
+
+[npudetail.net_section]
+other = "NPU 网络映射"
+
+[npudetail.col_dev_ip]
+other = "设备IP"
+
+[npudetail.col_tor]
+other = "TOR交换机"
+
+[npudetail.col_tor_port]
+other = "TOR端口"
 
 [npudetail.mask_unknown]
 other = "状态未上报"

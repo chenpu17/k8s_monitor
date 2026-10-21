@@ -1392,11 +1392,35 @@ other = "filtered by"
 [npudetail.chip_health]
 other = "Chip Health"
 
+[npudetail.chip_health_src]
+other = "device plugin bitmap"
+
+[npudetail.health_exporter]
+other = "npu-exporter"
+
 [npudetail.chip_ok]
 other = "OK"
 
 [npudetail.chip_fault]
 other = "Fault"
+
+[npudetail.chip_unreported]
+other = "({{.Count}} not reported)"
+
+[npudetail.hccs_affinity]
+other = "HCCS Affinity"
+
+[npudetail.net_section]
+other = "NPU Network Mapping"
+
+[npudetail.col_dev_ip]
+other = "DEVICE IP"
+
+[npudetail.col_tor]
+other = "TOR SWITCH"
+
+[npudetail.col_tor_port]
+other = "TOR PORT"
 
 [npudetail.mask_unknown]
 other = "Not reported"

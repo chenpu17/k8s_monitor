@@ -1,11 +1,14 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/chenpu/k8s-monitor/internal/i18n"
 	"github.com/chenpu/k8s-monitor/internal/model"
+	"github.com/mattn/go-runewidth"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -333,6 +336,70 @@ func TestRenderNodeDetailNPUSectionsHiddenWithoutCapacity(t *testing.T) {
 	}
 }
 
+// TestRenderNodeDetailNPUBlocksBilingual locks the new NPU keys in both
+// bundles: go-i18n hands back the message id unchanged when a key is missing,
+// so an unlocalised key shows up in the view as "npudetail.<key>".
+func TestRenderNodeDetailNPUBlocksBilingual(t *testing.T) {
+	node := &model.NodeData{
+		Name: "node-i18n", Status: "Ready",
+		NPUCapacity: 10, NPUAllocatable: 10,
+		NPUStatusKnown: true, NPUStatusMask: 0x01,
+		NPUHealthStatus: "Healthy",
+		NPUChips:        []model.NPUChipData{{PhyID: 0, Health: "OK", AICore: 10}},
+		NPUTopology:     []model.NPUSwitchGroup{{Type: "HCCS", Groups: [][]int{{0, 1, 2, 3, 4, 5, 6, 7}}}},
+		NPUDeviceNet: []model.NPUDeviceNetEntry{
+			{DeviceID: 0, DeviceIP: "29.11.0.10", TORIP: "29.79.161.163", TORPort: "17:1"},
+		},
+	}
+
+	cases := []struct {
+		locale string
+		want   []string
+	}{
+		{
+			locale: "en",
+			want: []string{
+				"Chip Health  (device plugin bitmap)",
+				"(npu-exporter)",
+				"(2 not reported)",
+				"HCCS Affinity: [0-7]",
+				"NPU Network Mapping",
+				"DEVICE IP", "TOR SWITCH", "TOR PORT",
+			},
+		},
+		{
+			locale: "zh",
+			want: []string{
+				"芯片健康  (设备插件位图)",
+				"(npu-exporter)",
+				"(2 未上报)",
+				"HCCS 亲和: [0-7]",
+				"NPU 网络映射",
+				"设备IP", "TOR交换机", "TOR端口",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.locale, func(t *testing.T) {
+			m := newTestModel(t)
+			m.localizer = i18n.NewLocalizer(tc.locale)
+			m.height = 200
+			m.selectedNode = node
+			out := stripANSI(m.renderNodeDetail())
+
+			for _, want := range tc.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("rendered node detail is missing %q\n---\n%s", want, out)
+				}
+			}
+			if strings.Contains(out, "npudetail.") {
+				t.Errorf("an NPU translation key was not resolved\n---\n%s", out)
+			}
+		})
+	}
+}
+
 // lineContaining returns the first rendered line containing substr.
 func lineContaining(out, substr string) string {
 	for _, line := range strings.Split(out, "\n") {
@@ -341,4 +408,436 @@ func lineContaining(out, substr string) string {
 		}
 	}
 	return ""
+}
+
+// blockAfter returns the rendered block introduced by header: the header line
+// and every following line up to the next blank line. It returns nil when the
+// header is not rendered.
+func blockAfter(out, header string) []string {
+	lines := strings.Split(out, "\n")
+	for i, line := range lines {
+		if !strings.Contains(line, header) {
+			continue
+		}
+		block := []string{line}
+		for _, next := range lines[i+1:] {
+			if strings.TrimSpace(next) == "" {
+				break
+			}
+			block = append(block, next)
+		}
+		return block
+	}
+	return nil
+}
+
+// renderNPUDetailAtWidth renders the node detail view at a given terminal width.
+func renderNPUDetailAtWidth(t *testing.T, node *model.NodeData, width int) string {
+	t.Helper()
+
+	m := newTestModel(t)
+	m.width = width
+	m.height = 200
+	m.selectedNode = node
+	return stripANSI(m.renderNodeDetail())
+}
+
+// inspectionNode builds a node whose NPU inspection table has the widest
+// realistic cells: a full-length check name and a long message.
+func inspectionNode() *model.NodeData {
+	now := metav1.NewTime(time.Now().Add(-90 * time.Minute))
+	return &model.NodeData{
+		Name: "node-inspect", Status: "Ready",
+		NPUCapacity: 8, NPUAllocatable: 8,
+		NPUStatusKnown: true,
+		Conditions: []corev1.NodeCondition{
+			{
+				Type:              "NT_NPU_CARD_LOSE",
+				Status:            corev1.ConditionTrue,
+				Message:           "npu card lost on device 3, check the cable and the device plugin registration",
+				LastHeartbeatTime: now,
+			},
+			{
+				Type:              "NT_NPU_HBM_ECC",
+				Status:            corev1.ConditionFalse,
+				Message:           "hbm ecc counters are clean on all chips",
+				LastHeartbeatTime: now,
+			},
+		},
+	}
+}
+
+// TestRenderNodeDetailInspectionTableFitsTerminal locks the narrow-terminal
+// fix: the inspection table used to keep a 20-cell MESSAGE column no matter how
+// narrow the terminal was, so it overflowed by 3 columns at width 74-76. The
+// MESSAGE column is now dropped when the table cannot fit, and no line of the
+// NPU tables may exceed the terminal width from 60 columns up.
+func TestRenderNodeDetailInspectionTableFitsTerminal(t *testing.T) {
+	// A network mapping is added so both new NPU tables are width-checked.
+	node := inspectionNode()
+	node.NPUDeviceNet = []model.NPUDeviceNetEntry{
+		{DeviceID: 0, DeviceIP: "29.11.0.10", TORIP: "29.79.161.163", TORPort: "17:1"},
+		{DeviceID: 7, DeviceIP: "29.11.0.17", TORIP: "29.79.161.169", TORPort: "18:2"},
+	}
+
+	for _, width := range []int{60, 74, 80} {
+		t.Run(fmt.Sprintf("width_%d", width), func(t *testing.T) {
+			out := renderNPUDetailAtWidth(t, node, width)
+
+			inspection := blockAfter(out, "NPU Inspection")
+			if len(inspection) == 0 {
+				t.Fatalf("inspection table not rendered at width %d\n---\n%s", width, out)
+			}
+			network := blockAfter(out, "NPU Network Mapping")
+			if len(network) == 0 {
+				t.Fatalf("network table not rendered at width %d\n---\n%s", width, out)
+			}
+
+			for _, block := range [][]string{inspection, network} {
+				for _, line := range block {
+					if w := runewidth.StringWidth(line); w > width {
+						t.Errorf("table line is %d cells wide, terminal is %d: %q\n---\n%s",
+							w, width, line, out)
+					}
+				}
+			}
+
+			// The rows themselves must still be there at every width.
+			for _, want := range []string{"NPU_CARD_LOSE", "NPU_HBM_ECC"} {
+				if !strings.Contains(out, want) {
+					t.Errorf("inspection row %q missing at width %d\n---\n%s", want, width, out)
+				}
+			}
+		})
+	}
+
+	// Wide terminals keep the full table, message included.
+	wide := renderNPUDetailAtWidth(t, node, 120)
+	if line := lineContaining(wide, "MESSAGE"); line == "" {
+		t.Errorf("MESSAGE column dropped on a wide terminal\n---\n%s", wide)
+	}
+	if line := lineContaining(wide, "NPU_CARD_LOSE"); !strings.Contains(line, "npu card lost on device 3") {
+		t.Errorf("wide-terminal inspection row lost its message: %q", line)
+	}
+
+	// The message column only comes back once the terminal can hold it.
+	if line := lineContaining(renderNPUDetailAtWidth(t, node, 76), "NPU Inspection"); line == "" {
+		t.Fatal("inspection section missing at width 76")
+	}
+	if strings.Contains(renderNPUDetailAtWidth(t, node, 76), "MESSAGE") {
+		t.Errorf("MESSAGE column kept at width 76 where the table cannot fit")
+	}
+	if !strings.Contains(renderNPUDetailAtWidth(t, node, 77), "MESSAGE") {
+		t.Errorf("MESSAGE column dropped at width 77 where the table does fit")
+	}
+}
+
+// TestRenderNodeDetailChipHealthLegendCoversReportedChipsOnly locks the legend
+// count: the bitmap covers 8 chips, so a 10-chip node must not have its 2
+// unreported chips counted as healthy (which produced "✓ OK: 9" next to 10
+// cells). Unreported chips are called out separately.
+func TestRenderNodeDetailChipHealthLegendCoversReportedChipsOnly(t *testing.T) {
+	cases := []struct {
+		name        string
+		node        *model.NodeData
+		wantLegend  string
+		wantPresent []string
+		wantAbsent  []string
+	}{
+		{
+			name: "10 chips, chip 0 faulty",
+			node: &model.NodeData{
+				Name: "node-wide", Status: "Ready",
+				NPUCapacity: 10, NPUAllocatable: 10,
+				NPUStatusKnown: true, NPUStatusMask: 0x01,
+			},
+			wantLegend:  "      ✓ OK: 7   ✗ Fault: 1   (2 not reported)",
+			wantPresent: []string{"[8]?", "[9]?"},
+			wantAbsent:  []string{"✓ OK: 8", "✓ OK: 9", "[8]✓", "[9]✓"},
+		},
+		{
+			name: "10 chips, no fault",
+			node: &model.NodeData{
+				Name: "node-wide-ok", Status: "Ready",
+				NPUCapacity: 10, NPUAllocatable: 10,
+				NPUStatusKnown: true, NPUStatusMask: 0x0,
+			},
+			wantLegend:  "      ✓ OK: 8   ✗ Fault: 0   (2 not reported)",
+			wantPresent: []string{"[8]?", "[9]?"},
+			wantAbsent:  []string{"✓ OK: 9", "✓ OK: 10", "[8]✓", "[9]✓"},
+		},
+		{
+			name: "capacity inside the bitmask, no fault",
+			node: &model.NodeData{
+				Name: "node-8", Status: "Ready",
+				NPUCapacity: 8, NPUAllocatable: 8,
+				NPUStatusKnown: true, NPUStatusMask: 0x0,
+			},
+			// Every chip is covered, so there is no legend at all.
+			wantLegend:  "",
+			wantAbsent:  []string{"✓ OK:", "Fault:", "not reported"},
+			wantPresent: []string{"[0]✓", "[7]✓"},
+		},
+		{
+			name: "capacity far beyond the bitmask is capped",
+			node: &model.NodeData{
+				Name: "node-huge", Status: "Ready",
+				NPUCapacity: 100, NPUAllocatable: 100,
+				NPUStatusKnown: true, NPUStatusMask: 0x0,
+			},
+			// 64 cells are drawn, 8 of them covered by the bitmask.
+			wantLegend: "      ✓ OK: 8   ✗ Fault: 0   (56 not reported)",
+			wantAbsent: []string{"✓ OK: 9"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := renderNPUDetailForTest(t, tc.node)
+
+			if tc.wantLegend == "" {
+				if line := lineContaining(out, "✓ OK:"); line != "" {
+					t.Errorf("unexpected chip health legend: %q\n---\n%s", line, out)
+				}
+			} else {
+				line := lineContaining(out, "✓ OK:")
+				if line != tc.wantLegend {
+					t.Errorf("chip health legend = %q, want %q\n---\n%s", line, tc.wantLegend, out)
+				}
+			}
+
+			for _, want := range tc.wantPresent {
+				if !strings.Contains(out, want) {
+					t.Errorf("rendered node detail is missing %q\n---\n%s", want, out)
+				}
+			}
+			for _, absent := range tc.wantAbsent {
+				if strings.Contains(out, absent) {
+					t.Errorf("rendered node detail unexpectedly contains %q\n---\n%s", absent, out)
+				}
+			}
+		})
+	}
+}
+
+// TestRenderNodeDetailSignalSources locks the source annotations: the Chip
+// Health bitmap and the runtime Health Status come from different producers
+// (device plugin vs npu-exporter) and must be labelled as such.
+func TestRenderNodeDetailSignalSources(t *testing.T) {
+	node := &model.NodeData{
+		Name: "node-src", Status: "Ready",
+		NPUCapacity: 8, NPUAllocatable: 8,
+		NPUStatusKnown: true, NPUStatusMask: 0x0,
+		NPUHealthStatus: "Healthy",
+		NPUChips:        []model.NPUChipData{{PhyID: 0, Health: "OK", AICore: 10}},
+	}
+
+	out := renderNPUDetailForTest(t, node)
+
+	if !strings.Contains(out, "Chip Health  (device plugin bitmap)") {
+		t.Errorf("Chip Health section is not labelled with its source\n---\n%s", out)
+	}
+	if !strings.Contains(out, "Health Status (npu-exporter)") {
+		t.Errorf("runtime Health Status row is not labelled with its source\n---\n%s", out)
+	}
+}
+
+// TestFormatSwitchGroups covers the HCCS affinity rendering: chip ids are
+// compressed into ranges, groups of another interconnect type keep their own
+// name, and empty groups are skipped.
+func TestFormatSwitchGroups(t *testing.T) {
+	cases := []struct {
+		name   string
+		groups []model.NPUSwitchGroup
+		want   string
+	}{
+		{name: "no topology", groups: nil, want: ""},
+		{
+			name:   "single hccs group",
+			groups: []model.NPUSwitchGroup{{Type: "HCCS", Groups: [][]int{{0, 1, 2, 3, 4, 5, 6, 7}}}},
+			want:   "[0-7]",
+		},
+		{
+			name:   "two hccs groups",
+			groups: []model.NPUSwitchGroup{{Type: "HCCS", Groups: [][]int{{0, 1, 2, 3}, {4, 5, 6, 7}}}},
+			want:   "[0-3] [4-7]",
+		},
+		{
+			name:   "non hccs type keeps its name",
+			groups: []model.NPUSwitchGroup{{Type: "SIO", Groups: [][]int{{0, 1, 2, 3}}}},
+			want:   "SIO [0-3]",
+		},
+		{
+			name: "mixed types",
+			groups: []model.NPUSwitchGroup{
+				{Type: "HCCS", Groups: [][]int{{0, 1, 2, 3, 4, 5, 6, 7}}},
+				{Type: "SIO", Groups: [][]int{{8, 9}}},
+			},
+			want: "[0-7]  SIO [8-9]",
+		},
+		{
+			name:   "empty group is skipped",
+			groups: []model.NPUSwitchGroup{{Type: "HCCS", Groups: [][]int{{}}}},
+			want:   "",
+		},
+		{
+			name:   "empty group next to a populated one",
+			groups: []model.NPUSwitchGroup{{Type: "HCCS", Groups: [][]int{nil, {2, 3}}}},
+			want:   "[2-3]",
+		},
+		{
+			name:   "untyped group",
+			groups: []model.NPUSwitchGroup{{Groups: [][]int{{5}}}},
+			want:   "[5]",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := formatSwitchGroups(tc.groups); got != tc.want {
+				t.Errorf("formatSwitchGroups(%+v) = %q, want %q", tc.groups, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestCompressChipRanges covers the chip id range compression itself.
+func TestCompressChipRanges(t *testing.T) {
+	cases := []struct {
+		name  string
+		chips []int
+		want  string
+	}{
+		{name: "empty", chips: nil, want: ""},
+		{name: "single", chips: []int{3}, want: "3"},
+		{name: "full run", chips: []int{0, 1, 2, 3, 4, 5, 6, 7}, want: "0-7"},
+		{name: "run plus single", chips: []int{0, 1, 5}, want: "0-1,5"},
+		{name: "unsorted input", chips: []int{5, 0, 1}, want: "0-1,5"},
+		{name: "duplicates collapse", chips: []int{2, 2, 3}, want: "2-3"},
+		{name: "separate runs", chips: []int{0, 1, 4, 5, 8}, want: "0-1,4-5,8"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := compressChipRanges(tc.chips); got != tc.want {
+				t.Errorf("compressChipRanges(%v) = %q, want %q", tc.chips, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestRenderNodeDetailHCCSAffinity covers the affinity line in the view: the
+// real node reports one HCCS group of chips 0-7.
+func TestRenderNodeDetailHCCSAffinity(t *testing.T) {
+	node := &model.NodeData{
+		Name: "node-hccs", Status: "Ready",
+		NPUCapacity: 8, NPUAllocatable: 8,
+		NPUStatusKnown: true,
+		NPUTopology:    []model.NPUSwitchGroup{{Type: "HCCS", Groups: [][]int{{0, 1, 2, 3, 4, 5, 6, 7}}}},
+	}
+
+	out := renderNPUDetailForTest(t, node)
+
+	if line := lineContaining(out, "HCCS Affinity"); line != "    HCCS Affinity: [0-7]" {
+		t.Errorf("HCCS affinity line = %q, want %q\n---\n%s", line, "    HCCS Affinity: [0-7]", out)
+	}
+
+	// No topology annotation -> no line at all.
+	plain := &model.NodeData{
+		Name: "node-plain", Status: "Ready",
+		NPUCapacity: 8, NPUAllocatable: 8,
+		NPUStatusKnown: true,
+	}
+	if strings.Contains(renderNPUDetailForTest(t, plain), "HCCS Affinity") {
+		t.Errorf("HCCS affinity line rendered without a topology annotation")
+	}
+
+	// An empty group is not an affinity group.
+	empty := &model.NodeData{
+		Name: "node-empty", Status: "Ready",
+		NPUCapacity: 8, NPUAllocatable: 8,
+		NPUStatusKnown: true,
+		NPUTopology:    []model.NPUSwitchGroup{{Type: "HCCS", Groups: [][]int{{}}}},
+	}
+	if strings.Contains(renderNPUDetailForTest(t, empty), "HCCS Affinity") {
+		t.Errorf("HCCS affinity line rendered for an empty group")
+	}
+
+	// Without NPU capacity the whole NPU section stays hidden, topology or not.
+	noNPU := &model.NodeData{
+		Name: "node-cpu", Status: "Ready",
+		NPUTopology: []model.NPUSwitchGroup{{Type: "HCCS", Groups: [][]int{{0, 1}}}},
+	}
+	if strings.Contains(renderNPUDetailForTest(t, noNPU), "HCCS Affinity") {
+		t.Errorf("HCCS affinity line rendered on a node without NPU capacity")
+	}
+}
+
+// TestRenderNodeDetailNPUNetworkMapping covers the network mapping table: one
+// row per device with its TOR switch and port, and no table at all when the
+// rank-table annotation is absent.
+func TestRenderNodeDetailNPUNetworkMapping(t *testing.T) {
+	node := &model.NodeData{
+		Name: "node-net", Status: "Ready",
+		NPUCapacity: 8, NPUAllocatable: 8,
+		NPUStatusKnown: true,
+	}
+	// The real node reports 8 devices on two TOR switches.
+	for i := 0; i < 8; i++ {
+		tor, port := "29.79.161.163", fmt.Sprintf("17:%d", i%2+1)
+		if i >= 4 {
+			tor, port = "29.79.161.169", fmt.Sprintf("18:%d", i%2+1)
+		}
+		node.NPUDeviceNet = append(node.NPUDeviceNet, model.NPUDeviceNetEntry{
+			DeviceID: i,
+			DeviceIP: fmt.Sprintf("29.11.0.%d", 10+i),
+			TORIP:    tor,
+			TORPort:  port,
+		})
+	}
+
+	out := renderNPUDetailForTest(t, node)
+
+	block := blockAfter(out, "NPU Network Mapping")
+	if len(block) == 0 {
+		t.Fatalf("network mapping section not rendered\n---\n%s", out)
+	}
+	if len(block) != 11 { // section title + header + separator + 8 device rows
+		t.Errorf("network mapping block has %d lines, want 11 (title, header, separator, 8 rows)\n---\n%s", len(block), out)
+	}
+
+	header := block[1]
+	for _, want := range []string{"ID", "DEVICE IP", "TOR SWITCH", "TOR PORT"} {
+		if !strings.Contains(header, want) {
+			t.Errorf("network mapping header is missing %q: %q", want, header)
+		}
+	}
+
+	for i := 0; i < 8; i++ {
+		line := lineContaining(out, fmt.Sprintf("29.11.0.%d", 10+i))
+		if line == "" {
+			t.Fatalf("device %d row not rendered\n---\n%s", i, out)
+		}
+		if !strings.Contains(line, fmt.Sprintf("%d", i)) {
+			t.Errorf("device %d row lost its id: %q", i, line)
+		}
+		if !strings.Contains(line, "29.79.161.16") {
+			t.Errorf("device %d row lost its TOR switch: %q", i, line)
+		}
+	}
+
+	// No annotation -> no section.
+	node.NPUDeviceNet = nil
+	if strings.Contains(renderNPUDetailForTest(t, node), "NPU Network Mapping") {
+		t.Errorf("network mapping section rendered without the rank-table annotation")
+	}
+
+	// Without NPU capacity the section stays hidden even with data.
+	noNPU := &model.NodeData{
+		Name: "node-cpu", Status: "Ready",
+		NPUDeviceNet: []model.NPUDeviceNetEntry{{DeviceID: 0, DeviceIP: "29.11.0.10", TORIP: "29.79.161.163", TORPort: "17:1"}},
+	}
+	if strings.Contains(renderNPUDetailForTest(t, noNPU), "NPU Network Mapping") {
+		t.Errorf("network mapping section rendered on a node without NPU capacity")
+	}
 }

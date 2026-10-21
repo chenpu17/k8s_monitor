@@ -246,8 +246,12 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 			} else if node.NPUHealthStatus == "Unhealthy" {
 				healthStyle = StyleStatusNotReady
 			}
+			// The runtime metrics (including this health status) come from
+			// npu-exporter, unlike the per-chip bitmap block below which comes
+			// from the device plugin: label the source so the two are not read
+			// as one signal.
 			info = append(info, fmt.Sprintf("    %s: %s",
-				StyleTextMuted.Render("Health Status"),
+				StyleTextMuted.Render(fmt.Sprintf("Health Status (%s)", m.T("npudetail.health_exporter"))),
 				healthStyle.Render(node.NPUHealthStatus)))
 
 			// Average utilization
@@ -490,18 +494,39 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 
 		// Chip health bitmask (per-chip, reported by the NPU device plugin)
 		info = append(info, "")
-		info = append(info, StyleTextSecondary.Render("  "+m.T("npudetail.chip_health")))
+		info = append(info, StyleTextSecondary.Render("  "+m.T("npudetail.chip_health"))+
+			StyleTextMuted.Render("  ("+m.T("npudetail.chip_health_src")+")"))
 		if !node.NPUStatusKnown {
 			info = append(info, StyleTextMuted.Render("    "+m.T("npudetail.mask_unknown")))
 		} else {
 			info = append(info, "    "+m.renderNPUChipHealth(node))
-			if healthy, faulty := countChipHealth(node); faulty > 0 {
-				info = append(info, fmt.Sprintf("      %s: %d   %s: %d",
+
+			// The legend only counts the chips the bitmask covers; chips the
+			// device plugin did not report are called out separately instead of
+			// being counted as healthy.
+			rendered, covered := npuChipHealthCells(node)
+			unreported := rendered - covered
+			healthy, faulty := countChipHealth(node)
+			if faulty > 0 || unreported > 0 {
+				legend := fmt.Sprintf("      %s: %d   %s: %d",
 					StyleStatusReady.Render("✓ "+m.T("npudetail.chip_ok")),
 					healthy,
 					StyleStatusNotReady.Render("✗ "+m.T("npudetail.chip_fault")),
-					faulty))
+					faulty)
+				if unreported > 0 {
+					legend += "   " + StyleTextMuted.Render(m.TF("npudetail.chip_unreported", map[string]interface{}{
+						"Count": unreported,
+					}))
+				}
+				info = append(info, legend)
 			}
+		}
+
+		// HCCS affinity groups (volcano.sh/device-topologys node annotation)
+		if groups := formatSwitchGroups(node.NPUTopology); groups != "" {
+			info = append(info, fmt.Sprintf("    %s: %s",
+				StyleTextMuted.Render(m.T("npudetail.hccs_affinity")),
+				groups))
 		}
 
 		// Management-plane faults (device / switch / custom)
@@ -545,27 +570,84 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 				colCheckName = 30
 				colCheckStat = 8
 				colCheckBeat = 12
+				// A message column narrower than this is unreadable, so on
+				// terminals too narrow to fit it the MESSAGE column is dropped
+				// entirely (leaving CHECK / STATUS / HEARTBEAT) instead of
+				// overflowing the terminal edge.
+				minMsgWidth = 20
+				maxMsgWidth = 80
+				// Width of the table without the message column: indent (4), the
+				// three columns and one separator after each of them.
+				checkTableWidth = 4 + colCheckName + 1 + colCheckStat + 1 + colCheckBeat
 			)
+
+			// 8 = indent plus column separators, kept as-is so the message
+			// column is exactly as wide as before on terminals that fit it.
 			msgWidth := m.width - colCheckName - colCheckStat - colCheckBeat - 8
-			if msgWidth < 20 {
-				msgWidth = 20
-			}
-			if msgWidth > 80 {
-				msgWidth = 80
+			if msgWidth > maxMsgWidth {
+				msgWidth = maxMsgWidth
 			}
 
-			info = append(info, StyleTextSecondary.Render(fmt.Sprintf("    %s %s %s %s",
-				padRight(m.T("npudetail.col_check"), colCheckName),
-				padRight(m.T("npudetail.col_status"), colCheckStat),
-				padRight(m.T("npudetail.col_heartbeat"), colCheckBeat),
+			showMsg := m.width >= checkTableWidth+1+minMsgWidth
+			if !showMsg {
+				msgWidth = 0
+			} else if msgWidth < minMsgWidth {
+				msgWidth = minMsgWidth
+			}
+
+			// inspectionRow renders one table row. On narrow terminals the
+			// message cell is omitted, so the row ends after the heartbeat.
+			inspectionRow := func(name, status, heartbeat, message string) string {
+				cells := []string{padRight(name, colCheckName), padRight(status, colCheckStat)}
+				if showMsg {
+					cells = append(cells, padRight(heartbeat, colCheckBeat), message)
+				} else {
+					cells = append(cells, heartbeat)
+				}
+				return "    " + strings.Join(cells, " ")
+			}
+
+			info = append(info, StyleTextSecondary.Render(inspectionRow(
+				m.T("npudetail.col_check"),
+				m.T("npudetail.col_status"),
+				m.T("npudetail.col_heartbeat"),
 				m.T("npudetail.col_message"))))
 
 			for _, check := range checks {
-				info = append(info, fmt.Sprintf("    %s %s %s %s",
-					padRight(truncate(strings.TrimPrefix(string(check.Type), "NT_"), colCheckName-1), colCheckName),
-					padRight(renderInspectionStatus(check.Status), colCheckStat),
-					padRight(inspectionHeartbeat(check), colCheckBeat),
+				info = append(info, inspectionRow(
+					truncate(strings.TrimPrefix(string(check.Type), "NT_"), colCheckName-1),
+					renderInspectionStatus(check.Status),
+					inspectionHeartbeat(check),
 					truncate(collapseWhitespace(check.Message), msgWidth)))
+			}
+		}
+
+		// NPU network mapping (cce.kubectl.kubernetes.io/ascend-rank-table node
+		// annotation): which TOR switch and port each chip is attached to.
+		if len(node.NPUDeviceNet) > 0 {
+			info = append(info, "")
+			info = append(info, StyleTextSecondary.Render("  "+m.T("npudetail.net_section")))
+
+			const (
+				colNetID    = 4
+				colNetDevIP = 16
+				colNetTOR   = 16
+				colNetPort  = 9
+			)
+
+			info = append(info, StyleTextSecondary.Render(fmt.Sprintf("    %s %s %s %s",
+				padRight("ID", colNetID),
+				padRight(m.T("npudetail.col_dev_ip"), colNetDevIP),
+				padRight(m.T("npudetail.col_tor"), colNetTOR),
+				m.T("npudetail.col_tor_port"))))
+			info = append(info, "    "+strings.Repeat("─", colNetID+colNetDevIP+colNetTOR+colNetPort+3))
+
+			for _, entry := range node.NPUDeviceNet {
+				info = append(info, fmt.Sprintf("    %s %s %s %s",
+					padRight(fmt.Sprintf("%d", entry.DeviceID), colNetID),
+					padRight(truncate(entry.DeviceIP, colNetDevIP-1), colNetDevIP),
+					padRight(truncate(entry.TORIP, colNetTOR-1), colNetTOR),
+					truncate(entry.TORPort, colNetPort)))
 			}
 		}
 	}
@@ -733,15 +815,29 @@ func formatPacketCount(count int64) string {
 // reports an implausible NPU capacity cannot produce an unbounded line.
 const maxChipHealthCells = 64
 
+// npuChipHealthCells returns how many chip cells the bitmap block draws and how
+// many of them the device-plugin bitmask actually covers. The two differ when
+// the node reports more chips than the bitmask has bits: the extra cells are
+// drawn as "?" and say nothing about the chip, so the legend must not count
+// them either way.
+func npuChipHealthCells(node *model.NodeData) (rendered, covered int) {
+	rendered = int(node.NPUCapacity)
+	if rendered > maxChipHealthCells {
+		rendered = maxChipHealthCells
+	}
+	covered = rendered
+	if covered > model.NPUStatusChipBits {
+		covered = model.NPUStatusChipBits
+	}
+	return rendered, covered
+}
+
 // renderNPUChipHealth renders the per-chip health cells of the NPU status
 // bitmask, e.g. "[0]✓ [1]✗ [2]✓". One cell per chip in NPUCapacity; chips past
 // the last bit the device plugin reports are marked "?" rather than being
 // assumed healthy.
 func (m *Model) renderNPUChipHealth(node *model.NodeData) string {
-	chips := int(node.NPUCapacity)
-	if chips > maxChipHealthCells {
-		chips = maxChipHealthCells
-	}
+	chips, _ := npuChipHealthCells(node)
 
 	cells := make([]string, 0, chips)
 	for i := 0; i < chips; i++ {
@@ -760,12 +856,9 @@ func (m *Model) renderNPUChipHealth(node *model.NodeData) string {
 // countChipHealth counts healthy and faulty chips among the chips the NPU status
 // bitmask actually covers.
 func countChipHealth(node *model.NodeData) (healthy, faulty int) {
-	chips := int(node.NPUCapacity)
-	if chips > model.NPUStatusChipBits {
-		chips = model.NPUStatusChipBits
-	}
+	_, covered := npuChipHealthCells(node)
 
-	for i := 0; i < chips; i++ {
+	for i := 0; i < covered; i++ {
 		if node.NPUChipFaulty(i) {
 			faulty++
 		} else {
@@ -775,19 +868,78 @@ func countChipHealth(node *model.NodeData) (healthy, faulty int) {
 	return healthy, faulty
 }
 
-// npuCheckConditionPrefix is the node condition family that carries NPU
-// inspection results. It matches the data source side (see
-// datasource.npuCheckConditionPrefix): a live healthy Ascend node carries many
-// more NT_* conditions (yum, ntp, sfs, data-pipeline) that are not NPU fault
-// signals, so "any NT_*" would report healthy nodes as faulted.
-const npuCheckConditionPrefix = "NT_NPU_"
+// compressChipRanges renders a set of chip ids as sorted ranges, e.g.
+// [0,1,2,3,4,5,6,7] -> "0-7" and [0,1,5] -> "0-1,5". Duplicates are dropped.
+func compressChipRanges(chips []int) string {
+	if len(chips) == 0 {
+		return ""
+	}
+
+	sorted := append([]int(nil), chips...)
+	sort.Ints(sorted)
+
+	parts := make([]string, 0, len(sorted))
+	start, prev := sorted[0], sorted[0]
+	flush := func() {
+		if start == prev {
+			parts = append(parts, fmt.Sprintf("%d", start))
+			return
+		}
+		parts = append(parts, fmt.Sprintf("%d-%d", start, prev))
+	}
+
+	for _, chip := range sorted[1:] {
+		switch {
+		case chip == prev:
+			continue // duplicate id
+		case chip == prev+1:
+			prev = chip
+		default:
+			flush()
+			start, prev = chip, chip
+		}
+	}
+	flush()
+
+	return strings.Join(parts, ",")
+}
+
+// formatSwitchGroups renders the switch topology groups of a node, e.g.
+// "HCCS [0-7]" or "[0-7] SIO [8-15]" for a mixed topology. Groups of type HCCS
+// (the default affinity fabric) are rendered bare; any other type is prefixed
+// with its own name. Groups without chips, and groups whose chips are all
+// unrenderable, are skipped; "" means there is nothing to show.
+func formatSwitchGroups(groups []model.NPUSwitchGroup) string {
+	parts := make([]string, 0, len(groups))
+	for _, group := range groups {
+		rendered := make([]string, 0, len(group.Groups))
+		for _, chips := range group.Groups {
+			if ranges := compressChipRanges(chips); ranges != "" {
+				rendered = append(rendered, "["+ranges+"]")
+			}
+		}
+		if len(rendered) == 0 {
+			continue
+		}
+
+		entry := strings.Join(rendered, " ")
+		if group.Type != "" && !strings.EqualFold(group.Type, "HCCS") {
+			entry = group.Type + " " + entry
+		}
+		parts = append(parts, entry)
+	}
+	return strings.Join(parts, "  ")
+}
 
 // npuInspectionConditions returns the NPU inspection conditions with faulted
-// checks first, the rest ordered by condition type.
+// checks first, the rest ordered by condition type. It filters on
+// model.NPUCheckConditionPrefix: a live healthy Ascend node carries many more
+// NT_* conditions (yum, ntp, sfs, data-pipeline) that are not NPU fault
+// signals, so "any NT_*" would report healthy nodes as faulted.
 func npuInspectionConditions(node *model.NodeData) []corev1.NodeCondition {
 	checks := make([]corev1.NodeCondition, 0, len(node.Conditions))
 	for _, cond := range node.Conditions {
-		if strings.HasPrefix(string(cond.Type), npuCheckConditionPrefix) {
+		if strings.HasPrefix(string(cond.Type), model.NPUCheckConditionPrefix) {
 			checks = append(checks, cond)
 		}
 	}
