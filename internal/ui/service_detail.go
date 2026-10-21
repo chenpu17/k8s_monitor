@@ -146,15 +146,15 @@ func (m *Model) renderServiceBasicInfo(svc *model.ServiceData) string {
 func (m *Model) renderServiceEndpoints(svc *model.ServiceData) string {
 	var info []string
 
-	info = append(info, StyleSubHeader.Render("Endpoints"))
+	info = append(info, StyleSubHeader.Render(m.T("service.endpoints_header")))
 	info = append(info, "")
 
 	endpointCount := svc.EndpointCount
 	if endpointCount == 0 {
-		info = append(info, StyleWarning.Render(fmt.Sprintf("  ⚠  No ready endpoints (%d)", endpointCount)))
-		info = append(info, StyleTextMuted.Render("  This service has no pods backing it or pods are not ready"))
+		info = append(info, StyleWarning.Render(m.TF("service.no_ready_endpoints", map[string]interface{}{"Count": endpointCount})))
+		info = append(info, StyleTextMuted.Render(m.T("service.no_endpoints_hint")))
 	} else {
-		info = append(info, StyleStatusReady.Render(fmt.Sprintf("  ✓ %d ready endpoint(s)", endpointCount)))
+		info = append(info, StyleStatusReady.Render(m.TF("service.ready_endpoints", map[string]interface{}{"Count": endpointCount})))
 	}
 
 	return strings.Join(info, "\n")

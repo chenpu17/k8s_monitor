@@ -1021,6 +1021,8 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 					MessageKey:        "alert.npu_chip_fault",
 					MessageArgs:       map[string]interface{}{"Chips": chips},
 					Value:             "chips " + chips,
+					ValueKey:          "alert.value_chips",
+					ValueArgs:         map[string]interface{}{"Chips": chips},
 					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPUChipFault, "", node.Name),
 					Timestamp:         now,
 				})
@@ -1154,6 +1156,8 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 					MessageKey:        "alert.pod_oom_killed",
 					MessageArgs:       map[string]interface{}{"Container": container.Name},
 					Value:             fmt.Sprintf("%d restarts", container.RestartCount),
+					ValueKey:          "alert.value_restarts",
+					ValueArgs:         map[string]interface{}{"Count": container.RestartCount},
 					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePodOOMKilled, pod.Namespace, pod.Name),
 					Timestamp:         now,
 				})
@@ -1215,6 +1219,8 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				Message:           "Pod has high restart count",
 				MessageKey:        "alert.pod_high_restarts",
 				Value:             fmt.Sprintf("%d restarts", pod.RestartCount),
+				ValueKey:          "alert.value_restarts",
+				ValueArgs:         map[string]interface{}{"Count": pod.RestartCount},
 				Threshold:         fmt.Sprintf("%d", highRestartThreshold),
 				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypePodHighRestarts, pod.Namespace, pod.Name),
 				Timestamp:         now,
@@ -1273,6 +1279,8 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				Message:           "Service has no ready endpoints",
 				MessageKey:        "alert.service_no_endpoints",
 				Value:             "0 endpoints",
+				ValueKey:          "alert.value_endpoints",
+				ValueArgs:         map[string]interface{}{"Count": 0},
 				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeServiceNoEndpoints, svc.Namespace, svc.Name),
 				Timestamp:         now,
 			})

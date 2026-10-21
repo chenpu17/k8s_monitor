@@ -222,7 +222,14 @@ type Alert struct {
 	// back to Message when it is empty (e.g. raw cluster-provided text).
 	MessageKey string `json:"message_key,omitempty"`
 	// MessageArgs holds the named template arguments for MessageKey.
-	MessageArgs       map[string]interface{} `json:"message_args,omitempty"`
+	MessageArgs map[string]interface{} `json:"message_args,omitempty"`
+	// ValueKey is the i18n key for the value column (alert.value_*). Value
+	// keeps the original English text for export/log paths; the alerts view
+	// renders ValueKey through the localizer when it is set, and falls back
+	// to Value when it is empty (data identifiers such as status names).
+	ValueKey string `json:"value_key,omitempty"`
+	// ValueArgs holds the named template arguments for ValueKey.
+	ValueArgs         map[string]interface{} `json:"value_args,omitempty"`
 	Value             string                 // e.g., "95.2%", "3 restarts"
 	Threshold         string                 // e.g., "80%"
 	RecommendedAction string                 // Suggested action to resolve the alert

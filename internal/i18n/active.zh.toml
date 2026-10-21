@@ -286,6 +286,16 @@ other = "NPU 芯片 {{.Chips}} 链路中断"
 [alert.npu_error_code]
 other = "NPU 芯片 {{.Chips}} 上报错误码"
 
+# 告警值列，由告警视图通过 alert.ValueKey 渲染。英文文案与数据层值逐字一致。
+[alert.value_chips]
+other = "芯片 {{.Chips}}"
+
+[alert.value_restarts]
+other = "重启 {{.Count}} 次"
+
+[alert.value_endpoints]
+other = "{{.Count}} 个端点"
+
 # ============================================================================
 # 存储视图
 # ============================================================================
@@ -426,6 +436,52 @@ other = "网络：指标不可用"
 
 [overview.partial_metrics]
 other = "部分指标：{{.WithMetrics}}/{{.Total}} 个节点已上报"
+
+# 概览页紧凑告警面板。[X]/[M]/[D]/[!]/[I] 标记随文案走，两种语言保持相同字符。
+[overview.compact_alerts_header]
+other = "[🔔 告警]"
+
+[overview.compact_not_ready]
+other = "[X] {{.Count}} 未就绪"
+
+[overview.compact_mem_press]
+other = "[M] {{.Count}} 内存压力"
+
+[overview.compact_disk_press]
+other = "[D] {{.Count}} 磁盘压力"
+
+[overview.compact_pid_press]
+other = "[P] {{.Count}} PID 压力"
+
+[overview.compact_crash_loop]
+other = "[!] {{.Count}} 崩溃循环"
+
+[overview.compact_img_pull]
+other = "[I] {{.Count}} 镜像拉取"
+
+[overview.compact_oom_kill]
+other = "[!] {{.Count}} OOM"
+
+[overview.compact_no_endpoints]
+other = "[S] {{.Count}} 无端点"
+
+[overview.compact_no_alerts]
+other = "[OK] 暂无告警"
+
+# ============================================================================
+# 服务详情
+# ============================================================================
+[service.endpoints_header]
+other = "端点"
+
+[service.no_ready_endpoints]
+other = "  ⚠  无就绪端点 ({{.Count}})"
+
+[service.no_endpoints_hint]
+other = "  该服务没有后端 Pod，或 Pod 尚未就绪"
+
+[service.ready_endpoints]
+other = "  ✓ {{.Count}} 个就绪端点"
 
 # ============================================================================
 # 通用指标

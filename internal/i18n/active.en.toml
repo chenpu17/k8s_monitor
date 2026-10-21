@@ -287,6 +287,17 @@ other = "NPU link down on chip(s) {{.Chips}}"
 [alert.npu_error_code]
 other = "NPU reported error code on chip(s) {{.Chips}}"
 
+# Alert value column, rendered by the alerts view via alert.ValueKey. English
+# values must stay verbatim identical to the data-layer values.
+[alert.value_chips]
+other = "chips {{.Chips}}"
+
+[alert.value_restarts]
+other = "{{.Count}} restarts"
+
+[alert.value_endpoints]
+other = "{{.Count}} endpoints"
+
 # ============================================================================
 # Storage View
 # ============================================================================
@@ -427,6 +438,53 @@ other = "Net: metrics unavailable"
 
 [overview.partial_metrics]
 other = "Partial metrics: {{.WithMetrics}}/{{.Total}} nodes reporting"
+
+# Compact alert panel on the overview. The [X]/[M]/[D]/[!]/[I] markers are part
+# of the text so both locales keep the same one-character glyphs.
+[overview.compact_alerts_header]
+other = "[🔔 Alerts]"
+
+[overview.compact_not_ready]
+other = "[X] {{.Count}} NotReady"
+
+[overview.compact_mem_press]
+other = "[M] {{.Count}} MemPress"
+
+[overview.compact_disk_press]
+other = "[D] {{.Count}} DiskPress"
+
+[overview.compact_pid_press]
+other = "[P] {{.Count}} PIDPress"
+
+[overview.compact_crash_loop]
+other = "[!] {{.Count}} CrashLoop"
+
+[overview.compact_img_pull]
+other = "[I] {{.Count}} ImgPull"
+
+[overview.compact_oom_kill]
+other = "[!] {{.Count}} OOMKill"
+
+[overview.compact_no_endpoints]
+other = "[S] {{.Count}} NoEndpt"
+
+[overview.compact_no_alerts]
+other = "[OK] No alerts"
+
+# ============================================================================
+# Service Detail
+# ============================================================================
+[service.endpoints_header]
+other = "Endpoints"
+
+[service.no_ready_endpoints]
+other = "  ⚠  No ready endpoints ({{.Count}})"
+
+[service.no_endpoints_hint]
+other = "  This service has no pods backing it or pods are not ready"
+
+[service.ready_endpoints]
+other = "  ✓ {{.Count}} ready endpoint(s)"
 
 # ============================================================================
 # Common Metrics

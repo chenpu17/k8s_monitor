@@ -317,12 +317,15 @@ func (m *Model) renderAlertRow(alert model.Alert) string {
 		message = m.TF(alert.MessageKey, alert.MessageArgs)
 	}
 
-	// Format value/threshold
-	var valueStr string
+	// Format value/threshold. Keyed values render through the localizer so the
+	// value column follows the UI locale; alerts without a ValueKey keep the
+	// stored (English) Value, which may be a data identifier.
+	valueStr := alert.Value
+	if alert.ValueKey != "" {
+		valueStr = m.TF(alert.ValueKey, alert.ValueArgs)
+	}
 	if alert.Threshold != "" {
-		valueStr = fmt.Sprintf("%s (%s: %s)", alert.Value, m.T("alerts.threshold"), alert.Threshold)
-	} else if alert.Value != "" {
-		valueStr = alert.Value
+		valueStr = fmt.Sprintf("%s (%s: %s)", valueStr, m.T("alerts.threshold"), alert.Threshold)
 	}
 
 	// Build the row

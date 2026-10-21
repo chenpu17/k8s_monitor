@@ -342,42 +342,52 @@ func (m *Model) hasAlerts(summary *model.ClusterSummary) bool {
 // renderCompactAlertPanel renders a compact alert panel for the overview
 func (m *Model) compactAlertLines(summary *model.ClusterSummary) []string {
 	var alerts []string
-	alerts = append(alerts, StyleHeader.Render("[🔔 Alerts]"))
+	alerts = append(alerts, StyleHeader.Render(m.T("overview.compact_alerts_header")))
 	alerts = append(alerts, "")
 
 	alertCount := 0
 
 	// Node alerts
 	if summary.NotReadyNodes > 0 {
-		alerts = append(alerts, StyleDanger.Render(fmt.Sprintf("[X] %d NotReady", summary.NotReadyNodes)))
+		alerts = append(alerts, StyleDanger.Render(m.TF("overview.compact_not_ready", map[string]interface{}{"Count": summary.NotReadyNodes})))
 		alertCount++
 	}
 	if summary.MemoryPressureNodes > 0 {
-		alerts = append(alerts, StyleWarning.Render(fmt.Sprintf("[M] %d MemPress", summary.MemoryPressureNodes)))
+		alerts = append(alerts, StyleWarning.Render(m.TF("overview.compact_mem_press", map[string]interface{}{"Count": summary.MemoryPressureNodes})))
 		alertCount++
 	}
 	if summary.DiskPressureNodes > 0 {
-		alerts = append(alerts, StyleWarning.Render(fmt.Sprintf("[D] %d DiskPress", summary.DiskPressureNodes)))
+		alerts = append(alerts, StyleWarning.Render(m.TF("overview.compact_disk_press", map[string]interface{}{"Count": summary.DiskPressureNodes})))
+		alertCount++
+	}
+	if summary.PIDPressureNodes > 0 {
+		alerts = append(alerts, StyleWarning.Render(m.TF("overview.compact_pid_press", map[string]interface{}{"Count": summary.PIDPressureNodes})))
 		alertCount++
 	}
 
 	// Pod anomaly alerts (most critical)
 	if summary.CrashLoopBackOffPods > 0 {
-		alerts = append(alerts, StyleDanger.Render(fmt.Sprintf("[!] %d CrashLoop", summary.CrashLoopBackOffPods)))
+		alerts = append(alerts, StyleDanger.Render(m.TF("overview.compact_crash_loop", map[string]interface{}{"Count": summary.CrashLoopBackOffPods})))
 		alertCount++
 	}
 	if summary.ImagePullBackOffPods > 0 {
-		alerts = append(alerts, StyleDanger.Render(fmt.Sprintf("[I] %d ImgPull", summary.ImagePullBackOffPods)))
+		alerts = append(alerts, StyleDanger.Render(m.TF("overview.compact_img_pull", map[string]interface{}{"Count": summary.ImagePullBackOffPods})))
 		alertCount++
 	}
 	if summary.OOMKilledPods > 0 {
-		alerts = append(alerts, StyleDanger.Render(fmt.Sprintf("[!] %d OOMKill", summary.OOMKilledPods)))
+		alerts = append(alerts, StyleDanger.Render(m.TF("overview.compact_oom_kill", map[string]interface{}{"Count": summary.OOMKilledPods})))
+		alertCount++
+	}
+
+	// Service alerts
+	if summary.NoEndpointServices > 0 {
+		alerts = append(alerts, StyleWarning.Render(m.TF("overview.compact_no_endpoints", map[string]interface{}{"Count": summary.NoEndpointServices})))
 		alertCount++
 	}
 
 	// If no alerts, show status
 	if alertCount == 0 {
-		alerts = append(alerts, StyleStatusReady.Render("[OK] No alerts"))
+		alerts = append(alerts, StyleStatusReady.Render(m.T("overview.compact_no_alerts")))
 	}
 
 	return alerts

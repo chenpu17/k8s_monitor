@@ -197,3 +197,142 @@ func TestAlertMessageArgsValues(t *testing.T) {
 		}
 	}
 }
+
+// Value-column lockdown, mirroring the message checks above: the 4 value
+// sites (NPUChipFault, PodOOMKilled, PodHighRestarts, ServiceNoEndpoints)
+// carry a ValueKey whose en render must stay byte-identical to the stored
+// Value, and every other site keeps its raw Value with no key.
+func TestAlertValuesEnIdentity(t *testing.T) {
+	agg := &AggregatedDataSource{}
+
+	pods := []*model.PodData{
+		{Name: "p-oom", Namespace: "default", ContainerStates: []model.ContainerState{{Name: "oom-worker", Reason: "OOMKilled", RestartCount: 2}}},
+		{Name: "p-restarts", Namespace: "default", RestartCount: 6},
+	}
+	services := []*model.ServiceData{
+		{Name: "svc-0", Namespace: "default", EndpointCount: 0},
+	}
+
+	alerts := agg.collectAlerts(allAlertSitesNodes(), pods, services, nil, nil)
+
+	valueKeys := map[model.AlertType]string{
+		model.AlertTypeNPUChipFault:       "alert.value_chips",
+		model.AlertTypePodOOMKilled:       "alert.value_restarts",
+		model.AlertTypePodHighRestarts:    "alert.value_restarts",
+		model.AlertTypeServiceNoEndpoints: "alert.value_endpoints",
+	}
+
+	en := i18n.NewLocalizer("en")
+	seen := make(map[model.AlertType]int)
+	for _, a := range alerts {
+		seen[a.AlertType]++
+		if key, keyed := valueKeys[a.AlertType]; keyed {
+			if a.ValueKey != key {
+				t.Errorf("%s: ValueKey = %q, want %q", a.AlertType, a.ValueKey, key)
+			}
+			got := en.TF(a.ValueKey, a.ValueArgs)
+			if got != a.Value {
+				t.Errorf("%s: en TF(%q, %v) = %q, Value = %q (not byte-identical)",
+					a.AlertType, a.ValueKey, a.ValueArgs, got, a.Value)
+			}
+		} else if a.ValueKey != "" {
+			t.Errorf("%s: ValueKey = %q, want empty — only the 4 value sites are keyed", a.AlertType, a.ValueKey)
+		}
+	}
+
+	// Each keyed value site must have actually fired exactly once.
+	for at, key := range valueKeys {
+		if seen[at] != 1 {
+			t.Errorf("value site %s (key %s) fired %d times, want 1 — probe fixture broken", at, key, seen[at])
+		}
+	}
+}
+
+// ValueArgs spot-checks on the 4 value sites: the en identity check above only
+// bites when the args feed the placeholders, so pin the actual arg values the
+// render path will pass to TF (including the int32 types the UI renders).
+func TestAlertValueArgsValues(t *testing.T) {
+	agg := &AggregatedDataSource{}
+
+	pods := []*model.PodData{
+		{Name: "p-oom", Namespace: "default", ContainerStates: []model.ContainerState{{Name: "oom-worker", Reason: "OOMKilled", RestartCount: 2}}},
+		{Name: "p-restarts", Namespace: "default", RestartCount: 6},
+	}
+	services := []*model.ServiceData{
+		{Name: "svc-0", Namespace: "default", EndpointCount: 0},
+	}
+
+	alerts := agg.collectAlerts(allAlertSitesNodes(), pods, services, nil, nil)
+
+	type want struct {
+		alertType model.AlertType
+		args      map[string]interface{}
+	}
+	wants := []want{
+		{model.AlertTypeNPUChipFault, map[string]interface{}{"Chips": "2"}},
+		{model.AlertTypePodOOMKilled, map[string]interface{}{"Count": int32(2)}},
+		{model.AlertTypePodHighRestarts, map[string]interface{}{"Count": int32(6)}},
+		{model.AlertTypeServiceNoEndpoints, map[string]interface{}{"Count": 0}},
+	}
+	for _, w := range wants {
+		matched := npuAlertsOfType(alerts, w.alertType)
+		if len(matched) != 1 {
+			t.Fatalf("%s: got %d alerts, want 1", w.alertType, len(matched))
+		}
+		for k, v := range w.args {
+			if matched[0].ValueArgs[k] != v {
+				t.Errorf("%s: ValueArgs[%q] = %v (%T), want %v (%T)", w.alertType, k, matched[0].ValueArgs[k], matched[0].ValueArgs[k], v, v)
+			}
+		}
+	}
+}
+
+// TestAlertValuesZhRenderSanity: the keyed value column must render in zh
+// without key-name leakage, unresolved placeholders, or fmt-style errors,
+// and the restart/endpoint sites must carry the expected Chinese nouns.
+func TestAlertValuesZhRenderSanity(t *testing.T) {
+	agg := &AggregatedDataSource{}
+
+	pods := []*model.PodData{
+		{Name: "p-oom", Namespace: "default", ContainerStates: []model.ContainerState{{Name: "oom-worker", Reason: "OOMKilled", RestartCount: 2}}},
+		{Name: "p-restarts", Namespace: "default", RestartCount: 6},
+	}
+	services := []*model.ServiceData{
+		{Name: "svc-0", Namespace: "default", EndpointCount: 0},
+	}
+
+	alerts := agg.collectAlerts(allAlertSitesNodes(), pods, services, nil, nil)
+
+	zh := i18n.NewLocalizer("zh")
+	for _, a := range alerts {
+		if a.ValueKey == "" {
+			continue
+		}
+		got := zh.TF(a.ValueKey, a.ValueArgs)
+		for _, bad := range []string{"alert.", "{{", "}}", "<no value>", "%!"} {
+			if strings.Contains(got, bad) {
+				t.Errorf("%s: zh render %q contains %q", a.AlertType, got, bad)
+			}
+		}
+	}
+
+	oom := npuAlertsOfType(alerts, model.AlertTypePodOOMKilled)
+	if len(oom) != 1 || !strings.Contains(zh.TF(oom[0].ValueKey, oom[0].ValueArgs), "重启") {
+		t.Errorf("zh OOMKilled value %q does not contain 重启", zhValue(oom))
+	}
+	restarts := npuAlertsOfType(alerts, model.AlertTypePodHighRestarts)
+	if len(restarts) != 1 || !strings.Contains(zh.TF(restarts[0].ValueKey, restarts[0].ValueArgs), "重启") {
+		t.Errorf("zh high-restart value %q does not contain 重启", zhValue(restarts))
+	}
+	endpoints := npuAlertsOfType(alerts, model.AlertTypeServiceNoEndpoints)
+	if len(endpoints) != 1 || !strings.Contains(zh.TF(endpoints[0].ValueKey, endpoints[0].ValueArgs), "端点") {
+		t.Errorf("zh no-endpoints value %q does not contain 端点", zhValue(endpoints))
+	}
+}
+
+func zhValue(alerts []model.Alert) string {
+	if len(alerts) != 1 {
+		return ""
+	}
+	return i18n.NewLocalizer("zh").TF(alerts[0].ValueKey, alerts[0].ValueArgs)
+}
