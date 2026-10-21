@@ -87,6 +87,16 @@ func GetRecommendedAction(alertType model.AlertType, namespace, resourceName str
 	case model.AlertTypeClusterPodCapacity:
 		return "kubectl get pods -A | wc -l # Check pod distribution across nodes"
 
+	// NPU alerts
+	case model.AlertTypeNPUChipFault:
+		return "kubectl describe node " + resourceName + " # Check huawei.com/ascend-status and the NPU device plugin logs, then drain the node before repair"
+	case model.AlertTypeNPUFaultLevel:
+		return "npu-smi info -t health -i 0 # Check the NPU fault on " + resourceName + " and open a hardware support case if it persists"
+	case model.AlertTypeNPUSwitchFault:
+		return "kubectl describe node " + resourceName + " # Check the switch fault in os.modelarts.node/fault-info and verify NPU network links"
+	case model.AlertTypeNPUCheckFailed:
+		return "kubectl describe node " + resourceName + " # Inspect the failing NT_* inspection condition message"
+
 	default:
 		return ""
 	}
@@ -174,6 +184,16 @@ func GetRecommendedActionChinese(alertType model.AlertType, namespace, resourceN
 		return "kubectl top nodes # 考虑增加节点或提高内存限制"
 	case model.AlertTypeClusterPodCapacity:
 		return "kubectl get pods -A | wc -l # 检查 Pod 在节点上的分布"
+
+	// NPU alerts
+	case model.AlertTypeNPUChipFault:
+		return "kubectl describe node " + resourceName + " # 检查 huawei.com/ascend-status 与 NPU 设备插件日志，修复前先驱逐节点上的负载"
+	case model.AlertTypeNPUFaultLevel:
+		return "npu-smi info -t health -i 0 # 检查节点 " + resourceName + " 的 NPU 故障，持续存在时提硬件工单"
+	case model.AlertTypeNPUSwitchFault:
+		return "kubectl describe node " + resourceName + " # 查看 os.modelarts.node/fault-info 中的交换机故障并检查 NPU 网络链路"
+	case model.AlertTypeNPUCheckFailed:
+		return "kubectl describe node " + resourceName + " # 查看失败的 NT_* 巡检条件详情"
 
 	default:
 		return ""

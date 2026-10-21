@@ -263,6 +263,10 @@ func ConvertNode(node *corev1.Node) *model.NodeData {
 		}
 	}
 
+	// NPU health metadata: device-plugin per-chip status bitmask and the
+	// management-plane fault document.
+	applyNPUHealth(nodeData, node.Annotations, node.Labels)
+
 	// Set default health status if NPU exists but no health annotation
 	if nodeData.NPUCapacity > 0 && nodeData.NPUHealthStatus == "" {
 		nodeData.NPUHealthStatus = "Healthy"

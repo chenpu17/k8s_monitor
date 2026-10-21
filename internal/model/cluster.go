@@ -188,6 +188,12 @@ const (
 	AlertTypeClusterCPUCritical    AlertType = "cluster_cpu_critical"
 	AlertTypeClusterMemoryCritical AlertType = "cluster_memory_critical"
 	AlertTypeClusterPodCapacity    AlertType = "cluster_pod_capacity"
+
+	// NPU alert types (Huawei Ascend)
+	AlertTypeNPUChipFault   AlertType = "npu_chip_fault"
+	AlertTypeNPUFaultLevel  AlertType = "npu_fault_level"
+	AlertTypeNPUSwitchFault AlertType = "npu_switch_fault"
+	AlertTypeNPUCheckFailed AlertType = "npu_check_failed"
 )
 
 // Alert represents a resource alert
@@ -267,10 +273,14 @@ type NPUChipData struct {
 	BandwidthTx     float64 `json:"bandwidth_tx"`     // Bandwidth TX in MB/s
 }
 
-// NPUMetricsData represents the full NPU metrics from node annotation
-type NPUMetricsData struct {
-	Timestamp time.Time     `json:"timestamp"`
-	Chips     []NPUChipData `json:"chips"`
+// NPUFaultInfo describes management-plane faults reported for a node's NPU
+// subsystem (device / switch / custom fault levels and events).
+type NPUFaultInfo struct {
+	DeviceFaultLevel  string   // e.g. "NormalNPU", "UrgentNPU"; "" when not reported
+	DeviceFaultEvents []string // Fault events, already flattened to strings
+	SwitchFaultLevel  string   // "" when not reported
+	SwitchFaultName   string
+	CustomFaultLevel  string
 }
 
 // NodeData represents a Kubernetes node with metrics
@@ -342,11 +352,32 @@ type NodeData struct {
 	NPUMetricsTime  time.Time     // Timestamp of last metrics update
 	NPUChips        []NPUChipData // Detailed per-chip metrics from collector
 
+	// NPU health/fault status (from node annotations)
+	NPUStatusMask    uint64        // Low 8 bits are per-chip, 1 = faulty
+	NPUStatusMaskRaw string        // Raw hex string as reported, "" if absent
+	NPUStatusKnown   bool          // False when the bitmask is missing or all-ones (not reported)
+	NPUFault         *NPUFaultInfo // Management-plane fault details, nil if absent
+
 	// Topology information (from node labels)
 	HyperNodeID    string // volcano.sh/hypernode
 	HyperClusterID string // volcano.sh/hypercluster
 	SuperPodID     string // os.modelarts.node/superpod.id
 	CabinetInfo    string // cce.kubectl.kubernetes.io/cabinet
+}
+
+// NPUStatusChipBits is the number of per-chip health bits the NPU device plugin
+// reports in the low bits of the status bitmask (bit i = davinci chip i).
+const NPUStatusChipBits = 8
+
+// NPUChipFaulty reports whether chip i is flagged as faulty by the NPU device
+// plugin. It is false whenever the bitmask is unknown (missing or not yet
+// reported by the plugin), so callers must not treat "false" as a health
+// guarantee without checking NPUStatusKnown first.
+func (n *NodeData) NPUChipFaulty(i int) bool {
+	if !n.NPUStatusKnown || i < 0 || i >= NPUStatusChipBits {
+		return false
+	}
+	return n.NPUStatusMask&(uint64(1)<<uint(i)) != 0
 }
 
 // PodData represents a Kubernetes pod with status

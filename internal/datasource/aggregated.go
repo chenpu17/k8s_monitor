@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/chenpu/k8s-monitor/internal/diagnostic"
 	"github.com/chenpu/k8s-monitor/internal/model"
 	"go.uber.org/zap"
+	corev1 "k8s.io/api/core/v1"
 )
 
 const kubeletAccessCheckTTL = time.Minute
@@ -983,6 +986,107 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 				Value:             fmt.Sprintf("%.1f%%", node.MemoryUsagePercent),
 				Threshold:         fmt.Sprintf("%.0f%%", nodeMemoryWarningThreshold),
 				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNodeMemoryHigh, "", node.Name),
+				Timestamp:         now,
+			})
+		}
+
+		// NPU chip health, as reported by the device plugin status bitmask.
+		// A chip flagged here is unavailable to workloads even when the node
+		// itself still reports Ready.
+		if node.NPUStatusKnown {
+			faultyChips := make([]string, 0, model.NPUStatusChipBits)
+			for chip := 0; chip < model.NPUStatusChipBits; chip++ {
+				if node.NPUChipFaulty(chip) {
+					faultyChips = append(faultyChips, strconv.Itoa(chip))
+				}
+			}
+			if len(faultyChips) > 0 {
+				chips := strings.Join(faultyChips, ", ")
+				alerts = append(alerts, model.Alert{
+					Severity:          model.AlertSeverityCritical,
+					Category:          "NPU",
+					AlertType:         model.AlertTypeNPUChipFault,
+					ResourceType:      "Node",
+					ResourceName:      node.Name,
+					Message:           fmt.Sprintf("NPU chip(s) %s reported faulty by the device plugin", chips),
+					Value:             "chips " + chips,
+					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPUChipFault, "", node.Name),
+					Timestamp:         now,
+				})
+			}
+		}
+
+		// Management-plane NPU faults (device / switch) from the fault-info annotation.
+		if fault := node.NPUFault; fault != nil {
+			if severity, report := npuDeviceFaultSeverity(fault.DeviceFaultLevel); report {
+				message := fmt.Sprintf("NPU device fault level %s", fault.DeviceFaultLevel)
+				if len(fault.DeviceFaultEvents) > 0 {
+					message += ": " + strings.Join(fault.DeviceFaultEvents, "; ")
+				}
+				alerts = append(alerts, model.Alert{
+					Severity:          severity,
+					Category:          "NPU",
+					AlertType:         model.AlertTypeNPUFaultLevel,
+					ResourceType:      "Node",
+					ResourceName:      node.Name,
+					Message:           sanitizeNPUText(message, npuAlertMessageMaxLen),
+					Value:             fault.DeviceFaultLevel,
+					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPUFaultLevel, "", node.Name),
+					Timestamp:         now,
+				})
+			}
+
+			if level := fault.SwitchFaultLevel; level != "" && !strings.EqualFold(level, "Normal") {
+				message := fmt.Sprintf("NPU switch fault level %s", level)
+				if fault.SwitchFaultName != "" {
+					message += " (" + fault.SwitchFaultName + ")"
+				}
+				alerts = append(alerts, model.Alert{
+					Severity:          model.AlertSeverityWarning,
+					Category:          "NPU",
+					AlertType:         model.AlertTypeNPUSwitchFault,
+					ResourceType:      "Node",
+					ResourceName:      node.Name,
+					Message:           sanitizeNPUText(message, npuAlertMessageMaxLen),
+					Value:             level,
+					RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPUSwitchFault, "", node.Name),
+					Timestamp:         now,
+				})
+			}
+		}
+
+		// NPU inspection checks: only NT_NPU_* conditions are fault checks, and
+		// only Status==True means the check detected a fault (False covers both
+		// "passed" and "skipped", Unknown means not applicable).
+		//
+		// The NT_NPU_ prefix is deliberate rather than "any NT_*". A live
+		// healthy Ascend node carries ~40 NT_* conditions, and the non-NPU ones
+		// are not fault signals: NT_NODE_YUM_MANAGER_LAUNCHER is permanently
+		// True on that healthy node with an informational message
+		// ("scriptOfEcs: result-YumInstall: it is not euler os,return."), while
+		// NT_CABINET_DATA / NT_ASCEND_RANK_TABLE_DATA are data-pipeline
+		// conditions (MsgDumpToLabel / MsgToAnnotation) that report where a
+		// value was published, not a failure. Every real NPU hardware check
+		// observed (driver, ECC count, card lose, net, net flicker, optical
+		// media SNR, residual process, high frequency fault) uses the NT_NPU_
+		// prefix.
+		for _, condition := range node.Conditions {
+			if !strings.HasPrefix(string(condition.Type), npuCheckConditionPrefix) || condition.Status != corev1.ConditionTrue {
+				continue
+			}
+			message := fmt.Sprintf("NPU inspection check %s failed", condition.Type)
+			if detail := sanitizeNPUText(condition.Message, npuAlertMessageMaxLen); detail != "" {
+				message += ": " + detail
+			}
+			alerts = append(alerts, model.Alert{
+				Severity:          model.AlertSeverityWarning,
+				Category:          "NPU",
+				AlertType:         model.AlertTypeNPUCheckFailed,
+				ResourceType:      "Node",
+				ResourceName:      node.Name,
+				Message:           message,
+				Value:             string(condition.Type),
+				RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPUCheckFailed, "", node.Name),
 				Timestamp:         now,
 			})
 		}
