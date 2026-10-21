@@ -1385,3 +1385,45 @@ other = "Sort"
 
 [common.filtered_by]
 other = "filtered by"
+
+# ============================================================================
+# NPU Detail (node detail view)
+# ============================================================================
+[npudetail.chip_health]
+other = "Chip Health"
+
+[npudetail.chip_ok]
+other = "OK"
+
+[npudetail.chip_fault]
+other = "Fault"
+
+[npudetail.mask_unknown]
+other = "Not reported"
+
+[npudetail.mgmt_fault]
+other = "Management Faults"
+
+[npudetail.device_fault_level]
+other = "Device Fault Level"
+
+[npudetail.switch_fault]
+other = "Switch Fault"
+
+[npudetail.custom_fault_level]
+other = "Custom Fault Level"
+
+[npudetail.inspection]
+other = "NPU Inspection"
+
+[npudetail.col_check]
+other = "CHECK"
+
+[npudetail.col_status]
+other = "STATUS"
+
+[npudetail.col_heartbeat]
+other = "HEARTBEAT"
+
+[npudetail.col_message]
+other = "MESSAGE"

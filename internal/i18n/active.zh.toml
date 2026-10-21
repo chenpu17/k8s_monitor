@@ -1385,3 +1385,45 @@ other = "排序"
 
 [common.filtered_by]
 other = "过滤条件"
+
+# ============================================================================
+# NPU 详情(节点详情视图)
+# ============================================================================
+[npudetail.chip_health]
+other = "芯片健康"
+
+[npudetail.chip_ok]
+other = "正常"
+
+[npudetail.chip_fault]
+other = "故障"
+
+[npudetail.mask_unknown]
+other = "状态未上报"
+
+[npudetail.mgmt_fault]
+other = "管理面故障"
+
+[npudetail.device_fault_level]
+other = "设备故障等级"
+
+[npudetail.switch_fault]
+other = "交换机故障"
+
+[npudetail.custom_fault_level]
+other = "自定义故障等级"
+
+[npudetail.inspection]
+other = "NPU 巡检"
+
+[npudetail.col_check]
+other = "检查项"
+
+[npudetail.col_status]
+other = "状态"
+
+[npudetail.col_heartbeat]
+other = "心跳"
+
+[npudetail.col_message]
+other = "消息"

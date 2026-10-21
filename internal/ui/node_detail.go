@@ -2,10 +2,13 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/chenpu/k8s-monitor/internal/model"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // renderNodeDetail renders the node detail view
@@ -484,6 +487,87 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 			info = append(info, StyleTextMuted.Render("    NPU-Exporter not reachable or not deployed in kube-system namespace"))
 			info = append(info, StyleTextMuted.Render("    Use --npu-exporter flag to specify a custom endpoint"))
 		}
+
+		// Chip health bitmask (per-chip, reported by the NPU device plugin)
+		info = append(info, "")
+		info = append(info, StyleTextSecondary.Render("  "+m.T("npudetail.chip_health")))
+		if !node.NPUStatusKnown {
+			info = append(info, StyleTextMuted.Render("    "+m.T("npudetail.mask_unknown")))
+		} else {
+			info = append(info, "    "+m.renderNPUChipHealth(node))
+			if healthy, faulty := countChipHealth(node); faulty > 0 {
+				info = append(info, fmt.Sprintf("      %s: %d   %s: %d",
+					StyleStatusReady.Render("✓ "+m.T("npudetail.chip_ok")),
+					healthy,
+					StyleStatusNotReady.Render("✗ "+m.T("npudetail.chip_fault")),
+					faulty))
+			}
+		}
+
+		// Management-plane faults (device / switch / custom)
+		if fault := node.NPUFault; fault != nil &&
+			fault.DeviceFaultLevel != "" && fault.DeviceFaultLevel != "NormalNPU" {
+			info = append(info, "")
+			info = append(info, StyleTextSecondary.Render("  "+m.T("npudetail.mgmt_fault")))
+			info = append(info, fmt.Sprintf("    %s: %s",
+				StyleTextMuted.Render(m.T("npudetail.device_fault_level")),
+				StyleError.Render(fault.DeviceFaultLevel)))
+
+			for _, event := range fault.DeviceFaultEvents {
+				info = append(info, "      "+StyleTextMuted.Render("•")+" "+
+					truncate(collapseWhitespace(event), 90))
+			}
+
+			if fault.SwitchFaultName != "" {
+				level := fault.SwitchFaultLevel
+				if level == "" {
+					level = "-"
+				}
+				info = append(info, fmt.Sprintf("    %s: %s (%s)",
+					StyleTextMuted.Render(m.T("npudetail.switch_fault")),
+					truncate(collapseWhitespace(fault.SwitchFaultName), 60),
+					StyleWarning.Render(level)))
+			}
+
+			if fault.CustomFaultLevel != "" {
+				info = append(info, fmt.Sprintf("    %s: %s",
+					StyleTextMuted.Render(m.T("npudetail.custom_fault_level")),
+					StyleWarning.Render(fault.CustomFaultLevel)))
+			}
+		}
+
+		// NPU inspection checks (NT_* node conditions written by the inspection job)
+		if checks := npuInspectionConditions(node); len(checks) > 0 {
+			info = append(info, "")
+			info = append(info, StyleTextSecondary.Render("  "+m.T("npudetail.inspection")))
+
+			const (
+				colCheckName = 30
+				colCheckStat = 8
+				colCheckBeat = 12
+			)
+			msgWidth := m.width - colCheckName - colCheckStat - colCheckBeat - 8
+			if msgWidth < 20 {
+				msgWidth = 20
+			}
+			if msgWidth > 80 {
+				msgWidth = 80
+			}
+
+			info = append(info, StyleTextSecondary.Render(fmt.Sprintf("    %s %s %s %s",
+				padRight(m.T("npudetail.col_check"), colCheckName),
+				padRight(m.T("npudetail.col_status"), colCheckStat),
+				padRight(m.T("npudetail.col_heartbeat"), colCheckBeat),
+				m.T("npudetail.col_message"))))
+
+			for _, check := range checks {
+				info = append(info, fmt.Sprintf("    %s %s %s %s",
+					padRight(truncate(strings.TrimPrefix(string(check.Type), "NT_"), colCheckName-1), colCheckName),
+					padRight(renderInspectionStatus(check.Status), colCheckStat),
+					padRight(inspectionHeartbeat(check), colCheckBeat),
+					truncate(collapseWhitespace(check.Message), msgWidth)))
+			}
+		}
 	}
 
 	// Network Traffic (if available)
@@ -643,4 +727,114 @@ func formatPacketCount(count int64) string {
 		return fmt.Sprintf("%.1fK", float64(count)/1_000)
 	}
 	return fmt.Sprintf("%d", count)
+}
+
+// maxChipHealthCells bounds the number of rendered chip cells, so a node that
+// reports an implausible NPU capacity cannot produce an unbounded line.
+const maxChipHealthCells = 64
+
+// renderNPUChipHealth renders the per-chip health cells of the NPU status
+// bitmask, e.g. "[0]✓ [1]✗ [2]✓". One cell per chip in NPUCapacity; chips past
+// the last bit the device plugin reports are marked "?" rather than being
+// assumed healthy.
+func (m *Model) renderNPUChipHealth(node *model.NodeData) string {
+	chips := int(node.NPUCapacity)
+	if chips > maxChipHealthCells {
+		chips = maxChipHealthCells
+	}
+
+	cells := make([]string, 0, chips)
+	for i := 0; i < chips; i++ {
+		switch {
+		case i >= model.NPUStatusChipBits:
+			cells = append(cells, StyleTextMuted.Render(fmt.Sprintf("[%d]?", i)))
+		case node.NPUChipFaulty(i):
+			cells = append(cells, StyleStatusNotReady.Render(fmt.Sprintf("[%d]✗", i)))
+		default:
+			cells = append(cells, StyleStatusReady.Render(fmt.Sprintf("[%d]✓", i)))
+		}
+	}
+	return strings.Join(cells, " ")
+}
+
+// countChipHealth counts healthy and faulty chips among the chips the NPU status
+// bitmask actually covers.
+func countChipHealth(node *model.NodeData) (healthy, faulty int) {
+	chips := int(node.NPUCapacity)
+	if chips > model.NPUStatusChipBits {
+		chips = model.NPUStatusChipBits
+	}
+
+	for i := 0; i < chips; i++ {
+		if node.NPUChipFaulty(i) {
+			faulty++
+		} else {
+			healthy++
+		}
+	}
+	return healthy, faulty
+}
+
+// npuCheckConditionPrefix is the node condition family that carries NPU
+// inspection results. It matches the data source side (see
+// datasource.npuCheckConditionPrefix): a live healthy Ascend node carries many
+// more NT_* conditions (yum, ntp, sfs, data-pipeline) that are not NPU fault
+// signals, so "any NT_*" would report healthy nodes as faulted.
+const npuCheckConditionPrefix = "NT_NPU_"
+
+// npuInspectionConditions returns the NPU inspection conditions with faulted
+// checks first, the rest ordered by condition type.
+func npuInspectionConditions(node *model.NodeData) []corev1.NodeCondition {
+	checks := make([]corev1.NodeCondition, 0, len(node.Conditions))
+	for _, cond := range node.Conditions {
+		if strings.HasPrefix(string(cond.Type), npuCheckConditionPrefix) {
+			checks = append(checks, cond)
+		}
+	}
+
+	sort.SliceStable(checks, func(i, j int) bool {
+		iFailed := checks[i].Status == corev1.ConditionTrue
+		jFailed := checks[j].Status == corev1.ConditionTrue
+		if iFailed != jFailed {
+			return iFailed
+		}
+		return checks[i].Type < checks[j].Type
+	})
+	return checks
+}
+
+// renderInspectionStatus renders an NT_ condition status: False means the check
+// passed, True means a fault was detected, Unknown means it did not apply.
+func renderInspectionStatus(status corev1.ConditionStatus) string {
+	switch status {
+	case corev1.ConditionTrue:
+		return StyleStatusNotReady.Render("✗")
+	case corev1.ConditionUnknown:
+		return StyleTextMuted.Render("–")
+	default:
+		return StyleStatusReady.Render("✓")
+	}
+}
+
+// inspectionHeartbeat renders how long ago the check last reported, falling back
+// to the transition time when no heartbeat was recorded. "-" when both are unset.
+func inspectionHeartbeat(check corev1.NodeCondition) string {
+	ts := check.LastHeartbeatTime.Time
+	if ts.IsZero() {
+		ts = check.LastTransitionTime.Time
+	}
+	if ts.IsZero() {
+		return "-"
+	}
+
+	age := time.Since(ts)
+	if age < 0 {
+		age = 0
+	}
+	return formatAge(age)
+}
+
+// collapseWhitespace flattens a multi-line message onto a single line.
+func collapseWhitespace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
