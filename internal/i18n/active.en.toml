@@ -157,6 +157,18 @@ other = "POD NAME"
 [columns.phase]
 other = "PHASE"
 
+[columns.protocol]
+other = "PROTOCOL"
+
+[columns.port]
+other = "PORT"
+
+[columns.target_port]
+other = "TARGET PORT"
+
+[columns.node_port]
+other = "NODE PORT"
+
 # ============================================================================
 # Status Values
 # ============================================================================
@@ -471,6 +483,76 @@ other = "[S] {{.Count}} NoEndpt"
 [overview.compact_no_alerts]
 other = "[OK] No alerts"
 
+# Bottom summary panels on the overview. Labels are bare (no trailing spaces):
+# the renderers pad them with padRight to the historical column width, so the
+# English output stays byte-identical to the previously hardcoded rendering
+# and both locales keep their value columns aligned.
+[overview.panel_workloads]
+other = "📋 Workloads"
+
+[overview.panel_services]
+other = "🔌 Services"
+
+[overview.panel_storage]
+other = "💾 Storage"
+
+[overview.panel_deploy]
+other = "Deploy:"
+
+[overview.panel_statset]
+other = "StatSet:"
+
+[overview.panel_daemset]
+other = "DaemSet:"
+
+[overview.panel_jobs]
+other = "Jobs:"
+
+[overview.panel_cron]
+other = "Cron:"
+
+[overview.panel_limited_detection]
+other = "Limited detection"
+
+[overview.panel_based_on_labels]
+other = "(based on labels)"
+
+[overview.panel_total]
+other = "Total:"
+
+[overview.panel_clustip]
+other = "ClustIP:"
+
+[overview.panel_nodept]
+other = "NodePt:"
+
+[overview.panel_loadbal]
+other = "LoadBal:"
+
+[overview.panel_noendpt]
+other = "NoEndpt:"
+
+[overview.panel_pvs]
+other = "PVs:"
+
+[overview.panel_bound]
+other = "Bound:"
+
+[overview.panel_used]
+other = "Used:"
+
+[overview.panel_pvcs]
+other = "PVCs:"
+
+[overview.panel_pend]
+other = "Pend:"
+
+[overview.panel_no_pvs]
+other = "No PVs"
+
+[overview.panel_no_pvcs]
+other = "No PVCs"
+
 # ============================================================================
 # Service Detail
 # ============================================================================
@@ -485,6 +567,71 @@ other = "  This service has no pods backing it or pods are not ready"
 
 [service.ready_endpoints]
 other = "  ✓ {{.Count}} ready endpoint(s)"
+
+[service.no_selected]
+other = "No service selected"
+
+[service.title]
+other = "🔌 Service: {{.Name}}"
+
+# Title Case field labels of the service detail basic-info block. These are
+# deliberately separate from the ALL-CAPS columns.* table headers.
+[service.label_namespace]
+other = "Namespace"
+
+[service.label_type]
+other = "Type"
+
+[service.label_cluster_ip]
+other = "Cluster IP"
+
+[service.label_external_ips]
+other = "External IPs"
+
+[service.label_loadbalancer_ip]
+other = "LoadBalancer IP"
+
+[service.label_ingress]
+other = "Ingress"
+
+[service.label_age]
+other = "Age"
+
+[service.ports_header]
+other = "Ports"
+
+[service.no_ports]
+other = "  No ports configured"
+
+[service.selector_header]
+other = "Selector"
+
+[service.no_selector]
+other = "  No selector configured"
+
+[service.labels_header]
+other = "Labels"
+
+[service.no_labels]
+other = "  No labels"
+
+[service.pods_header]
+other = "Backing Pods"
+
+[service.pods_header_count]
+other = "Backing Pods ({{.Count}})"
+
+[service.no_pod_info]
+other = "  No pod information available"
+
+[service.no_selector_external]
+other = "  No selector configured (ExternalName, manual Endpoints, or headless service)"
+
+[service.no_pods_match]
+other = "  No pods match this service selector"
+
+[service.more_pods]
+other = "  ... and {{.Count}} more pods"
 
 # ============================================================================
 # Common Metrics
@@ -769,6 +916,12 @@ other = "... and {{.Count}} more pods"
 [detail.scroll_indicator]
 other = "[Lines {{.Start}}-{{.End}} of {{.Total}}] (↑/↓ to scroll, PgUp/PgDn for page)"
 
+# Short variant without the page hint, as hardcoded in the service/workload
+# detail views. Separate key because the long value above is pinned by the
+# already-migrated pod/node/job/volcanojob detail views.
+[detail.scroll_indicator_short]
+other = "[Lines {{.Start}}-{{.End}} of {{.Total}}] (↑/↓ to scroll)"
+
 [detail.field.name]
 other = "Name"
 
@@ -894,6 +1047,17 @@ other = "No daemonsets found"
 
 [workloads.no_cronjobs]
 other = "No cronjobs found"
+
+[workloads.services.title]
+other = "Services"
+
+# The services table prints the bare "PORTS" header, which differs from
+# columns.ports ("PORT(S)") used elsewhere; columns.ports must not change.
+[workloads.services.col_ports]
+other = "PORTS"
+
+[workloads.no_services]
+other = "No services found"
 
 [workloads.jobs.success_rate]
 other = "Job Success"

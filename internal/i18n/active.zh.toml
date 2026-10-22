@@ -157,6 +157,18 @@ other = "POD 名称"
 [columns.phase]
 other = "阶段"
 
+[columns.protocol]
+other = "协议"
+
+[columns.port]
+other = "端口"
+
+[columns.target_port]
+other = "目标端口"
+
+[columns.node_port]
+other = "节点端口"
+
 # ============================================================================
 # 状态值
 # ============================================================================
@@ -468,6 +480,74 @@ other = "[S] {{.Count}} 无端点"
 [overview.compact_no_alerts]
 other = "[OK] 暂无告警"
 
+# 概览页底部三个摘要面板。标签为裸文案（不带尾随空格）：渲染端用 padRight
+# 按列宽补齐，两种语言都保持值列对齐；zh 标签超宽时自然外溢。
+[overview.panel_workloads]
+other = "📋 工作负载"
+
+[overview.panel_services]
+other = "🔌 服务"
+
+[overview.panel_storage]
+other = "💾 存储"
+
+[overview.panel_deploy]
+other = "部署："
+
+[overview.panel_statset]
+other = "有状态："
+
+[overview.panel_daemset]
+other = "守护："
+
+[overview.panel_jobs]
+other = "任务："
+
+[overview.panel_cron]
+other = "定时："
+
+[overview.panel_limited_detection]
+other = "检测受限"
+
+[overview.panel_based_on_labels]
+other = "（基于标签）"
+
+[overview.panel_total]
+other = "总数："
+
+[overview.panel_clustip]
+other = "集群 IP："
+
+[overview.panel_nodept]
+other = "节点端口："
+
+[overview.panel_loadbal]
+other = "负载均衡："
+
+[overview.panel_noendpt]
+other = "无端点："
+
+[overview.panel_pvs]
+other = "PV："
+
+[overview.panel_bound]
+other = "绑定："
+
+[overview.panel_used]
+other = "已用："
+
+[overview.panel_pvcs]
+other = "PVC："
+
+[overview.panel_pend]
+other = "等待："
+
+[overview.panel_no_pvs]
+other = "暂无 PV"
+
+[overview.panel_no_pvcs]
+other = "暂无 PVC"
+
 # ============================================================================
 # 服务详情
 # ============================================================================
@@ -482,6 +562,70 @@ other = "  该服务没有后端 Pod，或 Pod 尚未就绪"
 
 [service.ready_endpoints]
 other = "  ✓ {{.Count}} 个就绪端点"
+
+[service.no_selected]
+other = "未选择服务"
+
+[service.title]
+other = "🔌 服务：{{.Name}}"
+
+# 服务详情基本信息块的 Title Case 字段标签，与 ALL-CAPS 的 columns.* 表头刻意区分。
+[service.label_namespace]
+other = "命名空间"
+
+[service.label_type]
+other = "类型"
+
+[service.label_cluster_ip]
+other = "集群 IP"
+
+[service.label_external_ips]
+other = "外部 IP"
+
+[service.label_loadbalancer_ip]
+other = "负载均衡 IP"
+
+[service.label_ingress]
+other = "Ingress"
+
+[service.label_age]
+other = "年龄"
+
+[service.ports_header]
+other = "端口"
+
+[service.no_ports]
+other = "  未配置端口"
+
+[service.selector_header]
+other = "选择器"
+
+[service.no_selector]
+other = "  未配置选择器"
+
+[service.labels_header]
+other = "标签"
+
+[service.no_labels]
+other = "  无标签"
+
+[service.pods_header]
+other = "后端 Pod"
+
+[service.pods_header_count]
+other = "后端 Pod（{{.Count}}）"
+
+[service.no_pod_info]
+other = "  暂无 Pod 信息"
+
+[service.no_selector_external]
+other = "  未配置选择器（ExternalName、手动 Endpoints 或无头服务）"
+
+[service.no_pods_match]
+other = "  没有 Pod 匹配此服务的选择器"
+
+[service.more_pods]
+other = "  ... 还有 {{.Count}} 个 Pod"
 
 # ============================================================================
 # 通用指标
@@ -766,6 +910,11 @@ other = "... 还有 {{.Count}} 个 Pod"
 [detail.scroll_indicator]
 other = "[第 {{.Start}}-{{.End}} 行，共 {{.Total}} 行]（↑/↓ 滚动，PgUp/PgDn 翻页）"
 
+# 不带翻页提示的短变体，对应 service/workload 详情视图的原硬编码串。
+# 与上面的长值分开成独立键：长值已被已迁移的 pod/node/job/volcanojob 详情视图锁定。
+[detail.scroll_indicator_short]
+other = "[第 {{.Start}}-{{.End}} 行，共 {{.Total}} 行]（↑/↓ 滚动）"
+
 [detail.field.name]
 other = "名称"
 
@@ -891,6 +1040,17 @@ other = "未找到守护进程集"
 
 [workloads.no_cronjobs]
 other = "未找到定时任务"
+
+[workloads.services.title]
+other = "服务"
+
+# 服务表打印裸 "PORTS" 表头，与别处使用的 columns.ports（"端口"语义同源但
+# en 值为 PORT(S)）不同；columns.ports 的既有值不能改。
+[workloads.services.col_ports]
+other = "端口"
+
+[workloads.no_services]
+other = "未找到服务"
 
 [workloads.jobs.success_rate]
 other = "任务成功率"

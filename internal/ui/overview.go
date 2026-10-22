@@ -650,18 +650,18 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 
 func (m *Model) servicesPanelLines(summary *model.ClusterSummary) []string {
 	lines := []string{
-		StyleHeader.Render("🔌 Services"),
+		StyleHeader.Render(m.T("overview.panel_services")),
 		"",
-		fmt.Sprintf("Total:   %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalServices))),
-		fmt.Sprintf("ClustIP: %s", fmt.Sprintf("%d", summary.ClusterIPServices)),
-		fmt.Sprintf("NodePt:  %s", fmt.Sprintf("%d", summary.NodePortServices)),
-		fmt.Sprintf("LoadBal: %s", fmt.Sprintf("%d", summary.LoadBalancerSvcs)),
+		fmt.Sprintf("%s%s", padRight(m.T("overview.panel_total"), 9), StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalServices))),
+		fmt.Sprintf("%s%s", padRight(m.T("overview.panel_clustip"), 9), fmt.Sprintf("%d", summary.ClusterIPServices)),
+		fmt.Sprintf("%s%s", padRight(m.T("overview.panel_nodept"), 9), fmt.Sprintf("%d", summary.NodePortServices)),
+		fmt.Sprintf("%s%s", padRight(m.T("overview.panel_loadbal"), 9), fmt.Sprintf("%d", summary.LoadBalancerSvcs)),
 	}
 
 	if summary.NoEndpointServices > 0 {
 		lines = append(lines,
 			"",
-			StyleWarning.Render(fmt.Sprintf("NoEndpt: %d", summary.NoEndpointServices)),
+			StyleWarning.Render(fmt.Sprintf("%s%d", padRight(m.T("overview.panel_noendpt"), 9), summary.NoEndpointServices)),
 		)
 	}
 
@@ -670,40 +670,41 @@ func (m *Model) servicesPanelLines(summary *model.ClusterSummary) []string {
 
 func (m *Model) storagePanelLines(summary *model.ClusterSummary) []string {
 	lines := []string{
-		StyleHeader.Render("💾 Storage"),
+		StyleHeader.Render(m.T("overview.panel_storage")),
 		"",
 	}
 
 	if summary.TotalPVs > 0 {
 		lines = append(lines,
-			fmt.Sprintf("PVs:  %s (%s)",
+			fmt.Sprintf("%s%s (%s)",
+				padRight(m.T("overview.panel_pvs"), 6),
 				StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalPVs)),
 				formatMemory(summary.TotalStorageSize),
 			),
-			fmt.Sprintf("Bound: %s", StyleStatusReady.Render(fmt.Sprintf("%d", summary.BoundPVs))),
+			fmt.Sprintf("%s%s", padRight(m.T("overview.panel_bound"), 7), StyleStatusReady.Render(fmt.Sprintf("%d", summary.BoundPVs))),
 		)
 		if summary.StorageUsagePercent > 0 {
 			lines = append(lines,
-				fmt.Sprintf("Used: %s", StyleHighlight.Render(formatPercentage(summary.StorageUsagePercent))),
+				fmt.Sprintf("%s%s", padRight(m.T("overview.panel_used"), 6), StyleHighlight.Render(formatPercentage(summary.StorageUsagePercent))),
 			)
 		}
 	} else {
-		lines = append(lines, StyleTextMuted.Render("No PVs"))
+		lines = append(lines, StyleTextMuted.Render(m.T("overview.panel_no_pvs")))
 	}
 
 	if summary.TotalPVCs > 0 {
 		lines = append(lines,
 			"",
-			fmt.Sprintf("PVCs: %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalPVCs))),
-			fmt.Sprintf("Bound: %s", StyleStatusReady.Render(fmt.Sprintf("%d", summary.BoundPVCs))),
+			fmt.Sprintf("%s%s", padRight(m.T("overview.panel_pvcs"), 6), StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalPVCs))),
+			fmt.Sprintf("%s%s", padRight(m.T("overview.panel_bound"), 7), StyleStatusReady.Render(fmt.Sprintf("%d", summary.BoundPVCs))),
 		)
 		if summary.PendingPVCs > 0 {
 			lines = append(lines,
-				StyleWarning.Render(fmt.Sprintf("Pend: %d", summary.PendingPVCs)),
+				StyleWarning.Render(fmt.Sprintf("%s%d", padRight(m.T("overview.panel_pend"), 6), summary.PendingPVCs)),
 			)
 		}
 	} else {
-		lines = append(lines, StyleTextMuted.Render("No PVCs"))
+		lines = append(lines, StyleTextMuted.Render(m.T("overview.panel_no_pvcs")))
 	}
 
 	return lines
@@ -711,7 +712,7 @@ func (m *Model) storagePanelLines(summary *model.ClusterSummary) []string {
 
 func (m *Model) workloadsPanelLines(summary *model.ClusterSummary) []string {
 	lines := []string{
-		StyleHeader.Render("📋 Workloads"),
+		StyleHeader.Render(m.T("overview.panel_workloads")),
 		"",
 	}
 
@@ -723,16 +724,16 @@ func (m *Model) workloadsPanelLines(summary *model.ClusterSummary) []string {
 
 	if totalWorkloads > 0 {
 		lines = append(lines,
-			fmt.Sprintf("Deploy:  %d", summary.TotalDeployments),
-			fmt.Sprintf("StatSet: %d", summary.TotalStatefulSets),
-			fmt.Sprintf("DaemSet: %d", summary.TotalDaemonSets),
-			fmt.Sprintf("Jobs:    %d", summary.TotalJobs),
-			fmt.Sprintf("Cron:    %d", summary.TotalCronJobs),
+			fmt.Sprintf("%s%d", padRight(m.T("overview.panel_deploy"), 9), summary.TotalDeployments),
+			fmt.Sprintf("%s%d", padRight(m.T("overview.panel_statset"), 9), summary.TotalStatefulSets),
+			fmt.Sprintf("%s%d", padRight(m.T("overview.panel_daemset"), 9), summary.TotalDaemonSets),
+			fmt.Sprintf("%s%d", padRight(m.T("overview.panel_jobs"), 9), summary.TotalJobs),
+			fmt.Sprintf("%s%d", padRight(m.T("overview.panel_cron"), 9), summary.TotalCronJobs),
 		)
 	} else {
 		lines = append(lines,
-			StyleTextMuted.Render("Limited detection"),
-			StyleTextMuted.Render("(based on labels)"),
+			StyleTextMuted.Render(m.T("overview.panel_limited_detection")),
+			StyleTextMuted.Render(m.T("overview.panel_based_on_labels")),
 		)
 	}
 

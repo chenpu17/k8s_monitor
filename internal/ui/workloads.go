@@ -531,7 +531,7 @@ func (m *Model) renderServicesList(sectionOffset int) ([]string, int) {
 
 	// Header with stats
 	header := fmt.Sprintf("%s  (Total: %d)",
-		StyleSubHeader.Render("Services"),
+		StyleSubHeader.Render(m.T("workloads.services.title")),
 		totalServices,
 	)
 	rows = append(rows, header)
@@ -547,17 +547,17 @@ func (m *Model) renderServicesList(sectionOffset int) ([]string, int) {
 	)
 
 	headerRow := fmt.Sprintf("%s  %s  %s  %s  %s  %s",
-		padRight("NAME", colName),
-		padRight("NAMESPACE", colNamespace),
-		padRight("TYPE", colType),
-		padRight("CLUSTER-IP", colClusterIP),
-		padRight("PORTS", colPorts),
-		padRight("ENDPOINTS", colEndpoints),
+		padRight(m.T("columns.name"), colName),
+		padRight(m.T("columns.namespace"), colNamespace),
+		padRight(m.T("columns.type"), colType),
+		padRight(m.T("columns.cluster_ip"), colClusterIP),
+		padRight(m.T("workloads.services.col_ports"), colPorts),
+		padRight(m.T("columns.endpoints"), colEndpoints),
 	)
 	rows = append(rows, StyleTextMuted.Render(headerRow))
 
 	if totalServices == 0 {
-		rows = append(rows, StyleTextMuted.Render("  No services found"))
+		rows = append(rows, StyleTextMuted.Render("  "+m.T("workloads.no_services")))
 		return rows, 0
 	}
 

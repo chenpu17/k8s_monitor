@@ -11,7 +11,7 @@ import (
 // renderServiceDetail renders the service detail view
 func (m *Model) renderServiceDetail() string {
 	if m.selectedService == nil {
-		return "No service selected"
+		return m.T("service.no_selected")
 	}
 
 	svc := m.selectedService
@@ -78,7 +78,11 @@ func (m *Model) renderServiceDetail() string {
 
 	// Add scroll indicator
 	if totalLines > maxVisible {
-		scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n[Lines %d-%d of %d] (↑/↓ to scroll)", startIdx+1, endIdx, totalLines))
+		scrollInfo := StyleTextMuted.Render("\n" + m.TF("detail.scroll_indicator_short", map[string]interface{}{
+			"Start": startIdx + 1,
+			"End":   endIdx,
+			"Total": totalLines,
+		}))
 		visibleLines = append(visibleLines, scrollInfo)
 	}
 
@@ -89,11 +93,11 @@ func (m *Model) renderServiceDetail() string {
 func (m *Model) renderServiceBasicInfo(svc *model.ServiceData) string {
 	var info []string
 
-	info = append(info, StyleHeader.Render(fmt.Sprintf("🔌 Service: %s", svc.Name)))
+	info = append(info, StyleHeader.Render(m.TF("service.title", map[string]interface{}{"Name": svc.Name})))
 	info = append(info, "")
 
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Namespace"),
+		StyleTextSecondary.Render(m.T("service.label_namespace")),
 		svc.Namespace))
 
 	// Service type
@@ -102,41 +106,41 @@ func (m *Model) renderServiceBasicInfo(svc *model.ServiceData) string {
 		svcType = "ClusterIP"
 	}
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Type"),
+		StyleTextSecondary.Render(m.T("service.label_type")),
 		StyleHighlight.Render(svcType)))
 
 	// Cluster IP
 	if svc.ClusterIP != "" {
 		info = append(info, fmt.Sprintf("  %s: %s",
-			StyleTextSecondary.Render("Cluster IP"),
+			StyleTextSecondary.Render(m.T("service.label_cluster_ip")),
 			svc.ClusterIP))
 	}
 
 	// External IPs
 	if len(svc.ExternalIPs) > 0 {
 		info = append(info, fmt.Sprintf("  %s: %s",
-			StyleTextSecondary.Render("External IPs"),
+			StyleTextSecondary.Render(m.T("service.label_external_ips")),
 			strings.Join(svc.ExternalIPs, ", ")))
 	}
 
 	// LoadBalancer IP
 	if svc.LoadBalancerIP != "" {
 		info = append(info, fmt.Sprintf("  %s: %s",
-			StyleTextSecondary.Render("LoadBalancer IP"),
+			StyleTextSecondary.Render(m.T("service.label_loadbalancer_ip")),
 			svc.LoadBalancerIP))
 	}
 
 	// Ingress
 	if len(svc.Ingress) > 0 {
 		info = append(info, fmt.Sprintf("  %s: %s",
-			StyleTextSecondary.Render("Ingress"),
+			StyleTextSecondary.Render(m.T("service.label_ingress")),
 			strings.Join(svc.Ingress, ", ")))
 	}
 
 	// Age
 	age := time.Since(svc.CreationTimestamp)
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Age"),
+		StyleTextSecondary.Render(m.T("service.label_age")),
 		formatAge(age)))
 
 	return strings.Join(info, "\n")
@@ -164,11 +168,11 @@ func (m *Model) renderServiceEndpoints(svc *model.ServiceData) string {
 func (m *Model) renderServicePorts(svc *model.ServiceData) string {
 	var info []string
 
-	info = append(info, StyleSubHeader.Render("Ports"))
+	info = append(info, StyleSubHeader.Render(m.T("service.ports_header")))
 	info = append(info, "")
 
 	if len(svc.Ports) == 0 {
-		info = append(info, StyleTextMuted.Render("  No ports configured"))
+		info = append(info, StyleTextMuted.Render(m.T("service.no_ports")))
 		return strings.Join(info, "\n")
 	}
 
@@ -182,11 +186,11 @@ func (m *Model) renderServicePorts(svc *model.ServiceData) string {
 	)
 
 	headerRow := fmt.Sprintf("  %s  %s  %s  %s  %s",
-		padRight("NAME", colName),
-		padRight("PROTOCOL", colProtocol),
-		padRight("PORT", colPort),
-		padRight("TARGET PORT", colTargetPort),
-		padRight("NODE PORT", colNodePort),
+		padRight(m.T("columns.name"), colName),
+		padRight(m.T("columns.protocol"), colProtocol),
+		padRight(m.T("columns.port"), colPort),
+		padRight(m.T("columns.target_port"), colTargetPort),
+		padRight(m.T("columns.node_port"), colNodePort),
 	)
 	info = append(info, StyleTextMuted.Render(headerRow))
 
@@ -219,11 +223,11 @@ func (m *Model) renderServicePorts(svc *model.ServiceData) string {
 func (m *Model) renderServiceSelector(svc *model.ServiceData) string {
 	var info []string
 
-	info = append(info, StyleSubHeader.Render("Selector"))
+	info = append(info, StyleSubHeader.Render(m.T("service.selector_header")))
 	info = append(info, "")
 
 	if len(svc.Selector) == 0 {
-		info = append(info, StyleTextMuted.Render("  No selector configured"))
+		info = append(info, StyleTextMuted.Render(m.T("service.no_selector")))
 	} else {
 		for _, key := range sortedKeys(svc.Selector) {
 			value := svc.Selector[key]
@@ -234,11 +238,11 @@ func (m *Model) renderServiceSelector(svc *model.ServiceData) string {
 	}
 
 	info = append(info, "")
-	info = append(info, StyleSubHeader.Render("Labels"))
+	info = append(info, StyleSubHeader.Render(m.T("service.labels_header")))
 	info = append(info, "")
 
 	if len(svc.Labels) == 0 {
-		info = append(info, StyleTextMuted.Render("  No labels"))
+		info = append(info, StyleTextMuted.Render(m.T("service.no_labels")))
 	} else {
 		for _, key := range sortedKeys(svc.Labels) {
 			value := svc.Labels[key]
@@ -256,17 +260,17 @@ func (m *Model) renderServicePods(svc *model.ServiceData) string {
 	var info []string
 
 	if m.clusterData == nil || len(m.clusterData.Pods) == 0 {
-		info = append(info, StyleSubHeader.Render("Backing Pods"))
+		info = append(info, StyleSubHeader.Render(m.T("service.pods_header")))
 		info = append(info, "")
-		info = append(info, StyleTextMuted.Render("  No pod information available"))
+		info = append(info, StyleTextMuted.Render(m.T("service.no_pod_info")))
 		return strings.Join(info, "\n")
 	}
 
 	// Check if service has a selector
 	if len(svc.Selector) == 0 {
-		info = append(info, StyleSubHeader.Render("Backing Pods"))
+		info = append(info, StyleSubHeader.Render(m.T("service.pods_header")))
 		info = append(info, "")
-		info = append(info, StyleTextMuted.Render("  No selector configured (ExternalName, manual Endpoints, or headless service)"))
+		info = append(info, StyleTextMuted.Render(m.T("service.no_selector_external")))
 		return strings.Join(info, "\n")
 	}
 
@@ -292,11 +296,11 @@ func (m *Model) renderServicePods(svc *model.ServiceData) string {
 		}
 	}
 
-	info = append(info, StyleSubHeader.Render(fmt.Sprintf("Backing Pods (%d)", len(matchingPods))))
+	info = append(info, StyleSubHeader.Render(m.TF("service.pods_header_count", map[string]interface{}{"Count": len(matchingPods)})))
 	info = append(info, "")
 
 	if len(matchingPods) == 0 {
-		info = append(info, StyleTextMuted.Render("  No pods match this service selector"))
+		info = append(info, StyleTextMuted.Render(m.T("service.no_pods_match")))
 		return strings.Join(info, "\n")
 	}
 
@@ -389,7 +393,7 @@ func (m *Model) renderServicePods(svc *model.ServiceData) string {
 
 	if len(matchingPods) > displayCount {
 		info = append(info, "")
-		info = append(info, StyleTextMuted.Render(fmt.Sprintf("  ... and %d more pods", len(matchingPods)-displayCount)))
+		info = append(info, StyleTextMuted.Render(m.TF("service.more_pods", map[string]interface{}{"Count": len(matchingPods) - displayCount})))
 	}
 
 	return strings.Join(info, "\n")
