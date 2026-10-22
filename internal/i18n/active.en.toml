@@ -1588,6 +1588,57 @@ other = "REPLICAS"
 other = "NPU Efficiency"
 
 # ============================================================================
+# CronJob Detail View
+# ============================================================================
+[detail.cronjob.no_selected]
+other = "No cronjob selected"
+
+[detail.cronjob.title]
+other = "⏰ CronJob: {{.Name}}"
+
+[detail.cronjob.schedule]
+other = "Schedule"
+
+[detail.cronjob.suspend]
+other = "Suspend"
+
+[detail.cronjob.suspended_note]
+other = "(Job execution suspended)"
+
+[detail.cronjob.active_jobs]
+other = "Active Jobs"
+
+[detail.cronjob.last_schedule]
+other = "Last Schedule Time"
+
+[detail.cronjob.last_schedule_ago]
+other = "  {{.Label}}: {{.Value}} ago"
+
+[detail.cronjob.never]
+other = "Never"
+
+[detail.cronjob.labels_header]
+other = "Labels"
+
+[detail.cronjob.no_labels]
+other = "  No labels"
+
+[detail.cronjob.no_job_info]
+other = "  No job information available"
+
+[detail.cronjob.related_jobs]
+other = "Related Jobs ({{.Count}})"
+
+[detail.cronjob.no_related_jobs]
+other = "  No jobs found for this cronjob"
+
+[detail.cronjob.col_job_name]
+other = "JOB NAME"
+
+[detail.cronjob.more_jobs]
+other = "  ... and {{.Count}} more jobs"
+
+# ============================================================================
 # Volcano Queue View
 # ============================================================================
 [views.queues.name]

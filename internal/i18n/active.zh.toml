@@ -1581,6 +1581,57 @@ other = "副本"
 other = "NPU 效率"
 
 # ============================================================================
+# CronJob 详情视图
+# ============================================================================
+[detail.cronjob.no_selected]
+other = "未选择定时任务"
+
+[detail.cronjob.title]
+other = "⏰ 定时任务：{{.Name}}"
+
+[detail.cronjob.schedule]
+other = "调度计划"
+
+[detail.cronjob.suspend]
+other = "暂停"
+
+[detail.cronjob.suspended_note]
+other = "（任务执行已暂停）"
+
+[detail.cronjob.active_jobs]
+other = "活跃任务"
+
+[detail.cronjob.last_schedule]
+other = "上次调度时间"
+
+[detail.cronjob.last_schedule_ago]
+other = "  {{.Label}}：{{.Value}} 前"
+
+[detail.cronjob.never]
+other = "从未"
+
+[detail.cronjob.labels_header]
+other = "标签"
+
+[detail.cronjob.no_labels]
+other = "  无标签"
+
+[detail.cronjob.no_job_info]
+other = "  暂无任务信息"
+
+[detail.cronjob.related_jobs]
+other = "关联任务（{{.Count}}）"
+
+[detail.cronjob.no_related_jobs]
+other = "  未找到该定时任务的关联任务"
+
+[detail.cronjob.col_job_name]
+other = "任务名称"
+
+[detail.cronjob.more_jobs]
+other = "  ... 还有 {{.Count}} 个任务"
+
+# ============================================================================
 # Volcano 队列视图
 # ============================================================================
 [views.queues.name]

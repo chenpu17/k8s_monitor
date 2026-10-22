@@ -11,7 +11,7 @@ import (
 // renderCronJobDetail renders the cronjob detail view
 func (m *Model) renderCronJobDetail() string {
 	if m.selectedCronJob == nil {
-		return "No cronjob selected"
+		return m.T("detail.cronjob.no_selected")
 	}
 
 	cj := m.selectedCronJob
@@ -78,7 +78,11 @@ func (m *Model) renderCronJobDetail() string {
 
 	// Add scroll indicator
 	if totalLines > maxVisible {
-		scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n[Lines %d-%d of %d] (↑/↓ to scroll)", startIdx+1, endIdx, totalLines))
+		scrollInfo := StyleTextMuted.Render("\n" + m.TF("detail.scroll_indicator_short", map[string]interface{}{
+			"Start": startIdx + 1,
+			"End":   endIdx,
+			"Total": totalLines,
+		}))
 		visibleLines = append(visibleLines, scrollInfo)
 	}
 
@@ -89,17 +93,17 @@ func (m *Model) renderCronJobDetail() string {
 func (m *Model) renderCronJobBasicInfo(cj *model.CronJobData) string {
 	var info []string
 
-	info = append(info, StyleHeader.Render(fmt.Sprintf("⏰ CronJob: %s", cj.Name)))
+	info = append(info, StyleHeader.Render(m.TF("detail.cronjob.title", map[string]interface{}{"Name": cj.Name})))
 	info = append(info, "")
 
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Namespace"),
+		StyleTextSecondary.Render(m.T("detail.namespace")),
 		cj.Namespace))
 
 	// Age
 	age := time.Since(cj.CreationTimestamp)
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Age"),
+		StyleTextSecondary.Render(m.T("detail.age")),
 		formatAge(age)))
 
 	return strings.Join(info, "\n")
@@ -109,23 +113,23 @@ func (m *Model) renderCronJobBasicInfo(cj *model.CronJobData) string {
 func (m *Model) renderCronJobSchedule(cj *model.CronJobData) string {
 	var info []string
 
-	info = append(info, StyleSubHeader.Render("Schedule"))
+	info = append(info, StyleSubHeader.Render(m.T("detail.cronjob.schedule")))
 	info = append(info, "")
 
 	// Schedule
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Schedule"),
+		StyleTextSecondary.Render(m.T("detail.cronjob.schedule")),
 		StyleHighlight.Render(cj.Schedule)))
 
 	// Suspend status
 	suspendStr := "False"
 	if cj.Suspend {
-		suspendStr = StyleWarning.Render("True") + " " + StyleTextMuted.Render("(Job execution suspended)")
+		suspendStr = StyleWarning.Render("True") + " " + StyleTextMuted.Render(m.T("detail.cronjob.suspended_note"))
 	} else {
 		suspendStr = StyleStatusReady.Render("False")
 	}
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Suspend"),
+		StyleTextSecondary.Render(m.T("detail.cronjob.suspend")),
 		suspendStr))
 
 	return strings.Join(info, "\n")
@@ -135,7 +139,7 @@ func (m *Model) renderCronJobSchedule(cj *model.CronJobData) string {
 func (m *Model) renderCronJobStatus(cj *model.CronJobData) string {
 	var info []string
 
-	info = append(info, StyleSubHeader.Render("Status"))
+	info = append(info, StyleSubHeader.Render(m.T("detail.status")))
 	info = append(info, "")
 
 	// Active jobs
@@ -146,19 +150,20 @@ func (m *Model) renderCronJobStatus(cj *model.CronJobData) string {
 		activeStr = StyleTextMuted.Render(activeStr)
 	}
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Active Jobs"),
+		StyleTextSecondary.Render(m.T("detail.cronjob.active_jobs")),
 		activeStr))
 
 	// Last schedule time
 	if !cj.LastScheduleTime.IsZero() {
 		lastSchedule := formatAge(time.Since(cj.LastScheduleTime))
-		info = append(info, fmt.Sprintf("  %s: %s ago",
-			StyleTextSecondary.Render("Last Schedule Time"),
-			lastSchedule))
+		info = append(info, m.TF("detail.cronjob.last_schedule_ago", map[string]interface{}{
+			"Label": StyleTextSecondary.Render(m.T("detail.cronjob.last_schedule")),
+			"Value": lastSchedule,
+		}))
 	} else {
 		info = append(info, fmt.Sprintf("  %s: %s",
-			StyleTextSecondary.Render("Last Schedule Time"),
-			StyleTextMuted.Render("Never")))
+			StyleTextSecondary.Render(m.T("detail.cronjob.last_schedule")),
+			StyleTextMuted.Render(m.T("detail.cronjob.never"))))
 	}
 
 	return strings.Join(info, "\n")
@@ -168,11 +173,11 @@ func (m *Model) renderCronJobStatus(cj *model.CronJobData) string {
 func (m *Model) renderCronJobSelector(cj *model.CronJobData) string {
 	var info []string
 
-	info = append(info, StyleSubHeader.Render("Labels"))
+	info = append(info, StyleSubHeader.Render(m.T("detail.cronjob.labels_header")))
 	info = append(info, "")
 
 	if len(cj.Labels) == 0 {
-		info = append(info, StyleTextMuted.Render("  No labels"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.cronjob.no_labels")))
 	} else {
 		for _, key := range sortedKeys(cj.Labels) {
 			value := cj.Labels[key]
@@ -190,9 +195,9 @@ func (m *Model) renderCronJobActiveJobs(cj *model.CronJobData) string {
 	var info []string
 
 	if m.clusterData == nil || len(m.clusterData.Jobs) == 0 {
-		info = append(info, StyleSubHeader.Render("Active Jobs"))
+		info = append(info, StyleSubHeader.Render(m.T("detail.cronjob.active_jobs")))
 		info = append(info, "")
-		info = append(info, StyleTextMuted.Render("  No job information available"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.cronjob.no_job_info")))
 		return strings.Join(info, "\n")
 	}
 
@@ -211,11 +216,11 @@ func (m *Model) renderCronJobActiveJobs(cj *model.CronJobData) string {
 		}
 	}
 
-	info = append(info, StyleSubHeader.Render(fmt.Sprintf("Related Jobs (%d)", len(relatedJobs))))
+	info = append(info, StyleSubHeader.Render(m.TF("detail.cronjob.related_jobs", map[string]interface{}{"Count": len(relatedJobs)})))
 	info = append(info, "")
 
 	if len(relatedJobs) == 0 {
-		info = append(info, StyleTextMuted.Render("  No jobs found for this cronjob"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.cronjob.no_related_jobs")))
 		return strings.Join(info, "\n")
 	}
 
@@ -229,11 +234,11 @@ func (m *Model) renderCronJobActiveJobs(cj *model.CronJobData) string {
 	)
 
 	headerRow := fmt.Sprintf("  %s  %s  %s  %s  %s",
-		padRight("JOB NAME", colName),
-		padRight("COMPLETIONS", colCompletions),
-		padRight("DURATION", colDuration),
-		padRight("AGE", colAge),
-		padRight("STATUS", colStatus),
+		padRight(m.T("detail.cronjob.col_job_name"), colName),
+		padRight(m.T("columns.completions"), colCompletions),
+		padRight(m.T("columns.duration"), colDuration),
+		padRight(m.T("columns.age"), colAge),
+		padRight(m.T("columns.status"), colStatus),
 	)
 	info = append(info, StyleTextMuted.Render(headerRow))
 
@@ -251,22 +256,22 @@ func (m *Model) renderCronJobActiveJobs(cj *model.CronJobData) string {
 
 		if job.Succeeded == job.Completions {
 			completions = StyleStatusReady.Render(completions)
-			statusStr = StyleStatusReady.Render("Complete")
+			statusStr = StyleStatusReady.Render(m.T("workloads.jobs.status_complete"))
 		} else if job.Failed > 0 {
 			completions = StyleStatusNotReady.Render(fmt.Sprintf("%d/%d", job.Succeeded, job.Completions))
-			statusStr = StyleStatusNotReady.Render(fmt.Sprintf("Failed(%d)", job.Failed))
+			statusStr = StyleStatusNotReady.Render(m.TF("workloads.jobs.status_failed", map[string]interface{}{"Count": job.Failed}))
 		} else if job.Active > 0 {
 			completions = StyleStatusRunning.Render(fmt.Sprintf("%d/%d", job.Succeeded, job.Completions))
-			statusStr = StyleStatusRunning.Render(fmt.Sprintf("Active(%d)", job.Active))
+			statusStr = StyleStatusRunning.Render(m.TF("workloads.jobs.status_active", map[string]interface{}{"Count": job.Active}))
 		} else {
-			statusStr = StyleTextMuted.Render("Pending")
+			statusStr = StyleTextMuted.Render(m.T("workloads.jobs.status_pending"))
 		}
 
 		duration := "-"
 		if job.Duration > 0 {
 			duration = formatDuration(job.Duration)
 		} else if job.Active > 0 {
-			duration = StyleTextMuted.Render("running")
+			duration = StyleTextMuted.Render(m.T("workloads.jobs.status_running"))
 		}
 
 		age := formatAge(time.Since(job.CreationTimestamp))
@@ -283,7 +288,9 @@ func (m *Model) renderCronJobActiveJobs(cj *model.CronJobData) string {
 
 	if len(relatedJobs) > displayCount {
 		info = append(info, "")
-		info = append(info, StyleTextMuted.Render(fmt.Sprintf("  ... and %d more jobs", len(relatedJobs)-displayCount)))
+		info = append(info, StyleTextMuted.Render(m.TF("detail.cronjob.more_jobs", map[string]interface{}{
+			"Count": len(relatedJobs) - displayCount,
+		})))
 	}
 
 	return strings.Join(info, "\n")
