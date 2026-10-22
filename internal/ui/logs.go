@@ -199,7 +199,10 @@ func (m *Model) renderLogs() string {
 	var statusParts []string
 
 	if m.logsSearchText != "" {
-		matchInfo := fmt.Sprintf("🔍 %d/%d matches", len(displayLines), totalLines)
+		matchInfo := m.TF("logs.search_matches", map[string]interface{}{
+			"Matches": len(displayLines),
+			"Total":   totalLines,
+		})
 		statusParts = append(statusParts, StyleKey.Render(matchInfo))
 	} else if totalDisplayLines > maxVisible {
 		scrollPosStr := m.TF("logs.lines_range", map[string]interface{}{
@@ -232,11 +235,11 @@ func (m *Model) renderLogs() string {
 
 	var helpText string
 	if m.logsSearchMode {
-		helpText = "Type to search • ESC to exit search"
+		helpText = m.T("logs.search_hint")
 	} else if totalDisplayLines > maxVisible {
-		helpText = m.T("logs.help.scroll") + " • / to search"
+		helpText = m.T("logs.help.scroll") + m.T("logs.search_hint_slash")
 	} else {
-		helpText = m.T("logs.help.back") + " • / to search"
+		helpText = m.T("logs.help.back") + m.T("logs.search_hint_slash")
 	}
 
 	scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n%s %s",

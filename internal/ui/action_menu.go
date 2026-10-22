@@ -37,39 +37,39 @@ func (m *Model) getActionMenuItems() []ActionMenuItem {
 	// Common actions for Pod detail view
 	if m.currentView == ViewPodDetail && m.selectedPod != nil {
 		items = append(items, ActionMenuItem{
-			Label:       "📜 View Logs",
+			Label:       m.T("action_menu.view_logs"),
 			Key:         "1",
-			Description: "Show container logs",
+			Description: m.T("action_menu.view_logs_desc"),
 			Action:      ActionViewLogs,
 		})
 		items = append(items, ActionMenuItem{
-			Label:       "📋 Describe",
+			Label:       m.T("action_menu.describe"),
 			Key:         "2",
-			Description: "kubectl describe pod",
+			Description: m.T("action_menu.describe_pod_desc"),
 			Action:      ActionDescribe,
 		})
 		items = append(items, ActionMenuItem{
-			Label:       "📄 Get YAML",
+			Label:       m.T("action_menu.get_yaml"),
 			Key:         "3",
-			Description: "kubectl get -o yaml",
+			Description: m.T("action_menu.get_yaml_desc"),
 			Action:      ActionGetYAML,
 		})
 		items = append(items, ActionMenuItem{
-			Label:       "📎 Copy Name",
+			Label:       m.T("action_menu.copy_name"),
 			Key:         "4",
-			Description: "Copy pod name to clipboard",
+			Description: m.T("action_menu.copy_name_pod_desc"),
 			Action:      ActionCopyName,
 		})
 		items = append(items, ActionMenuItem{
-			Label:       "📎 Copy Namespace/Name",
+			Label:       m.T("action_menu.copy_ns_name"),
 			Key:         "5",
-			Description: "Copy namespace/name",
+			Description: m.T("action_menu.copy_ns_name_desc"),
 			Action:      ActionCopyNamespaceName,
 		})
 		items = append(items, ActionMenuItem{
-			Label:       "⚡ Show Events",
+			Label:       m.T("action_menu.show_events"),
 			Key:         "6",
-			Description: "Related events",
+			Description: m.T("action_menu.show_events_desc"),
 			Action:      ActionShowEvents,
 		})
 	}
@@ -77,27 +77,27 @@ func (m *Model) getActionMenuItems() []ActionMenuItem {
 	// Actions for Node detail view
 	if m.currentView == ViewNodeDetail && m.selectedNode != nil {
 		items = append(items, ActionMenuItem{
-			Label:       "📋 Describe",
+			Label:       m.T("action_menu.describe"),
 			Key:         "1",
-			Description: "kubectl describe node",
+			Description: m.T("action_menu.describe_node_desc"),
 			Action:      ActionDescribe,
 		})
 		items = append(items, ActionMenuItem{
-			Label:       "📄 Get YAML",
+			Label:       m.T("action_menu.get_yaml"),
 			Key:         "2",
-			Description: "kubectl get -o yaml",
+			Description: m.T("action_menu.get_yaml_desc"),
 			Action:      ActionGetYAML,
 		})
 		items = append(items, ActionMenuItem{
-			Label:       "📎 Copy Name",
+			Label:       m.T("action_menu.copy_name"),
 			Key:         "3",
-			Description: "Copy node name",
+			Description: m.T("action_menu.copy_name_node_desc"),
 			Action:      ActionCopyName,
 		})
 		items = append(items, ActionMenuItem{
-			Label:       "⚡ Show Events",
+			Label:       m.T("action_menu.show_events"),
 			Key:         "4",
-			Description: "Related events",
+			Description: m.T("action_menu.show_events_desc"),
 			Action:      ActionShowEvents,
 		})
 	}
@@ -117,7 +117,7 @@ func (m *Model) renderActionMenu() string {
 	var menuLines []string
 
 	// Title
-	title := StyleHeader.Render("🎯 Quick Actions")
+	title := StyleHeader.Render(m.T("action_menu.title"))
 	menuLines = append(menuLines, title)
 	menuLines = append(menuLines, "")
 
@@ -141,7 +141,7 @@ func (m *Model) renderActionMenu() string {
 	}
 
 	menuLines = append(menuLines, "")
-	menuLines = append(menuLines, StyleTextMuted.Render("  ↑/↓ Navigate • Enter Select • ESC Cancel"))
+	menuLines = append(menuLines, StyleTextMuted.Render(m.T("action_menu.help")))
 
 	// Join and apply border
 	content := strings.Join(menuLines, "\n")
@@ -192,8 +192,8 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 
 			if !ok {
 				return commandOutputMsg{
-					title:   "Error",
-					content: "API client does not support describe functionality",
+					title:   m.T("common.error"),
+					content: m.T("action_menu.unsupported_describe"),
 					err:     fmt.Errorf("unsupported operation"),
 				}
 			}
@@ -207,7 +207,7 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 
 			if err != nil {
 				return commandOutputMsg{
-					title:   "Describe Error",
+					title:   m.T("action_menu.describe_error_title"),
 					content: err.Error(),
 					err:     err,
 				}
@@ -215,9 +215,14 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 
 			var title string
 			if m.selectedPod != nil {
-				title = fmt.Sprintf("Describe Pod: %s/%s", m.selectedPod.Namespace, m.selectedPod.Name)
+				title = m.TF("action_menu.describe_pod_title", map[string]interface{}{
+					"Namespace": m.selectedPod.Namespace,
+					"Name":      m.selectedPod.Name,
+				})
 			} else if m.selectedNode != nil {
-				title = fmt.Sprintf("Describe Node: %s", m.selectedNode.Name)
+				title = m.TF("action_menu.describe_node_title", map[string]interface{}{
+					"Name": m.selectedNode.Name,
+				})
 			}
 
 			return commandOutputMsg{
@@ -240,8 +245,8 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 
 			if !ok {
 				return commandOutputMsg{
-					title:   "Error",
-					content: "API client does not support YAML export",
+					title:   m.T("common.error"),
+					content: m.T("action_menu.unsupported_yaml"),
 					err:     fmt.Errorf("unsupported operation"),
 				}
 			}
@@ -255,7 +260,7 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 
 			if err != nil {
 				return commandOutputMsg{
-					title:   "Get YAML Error",
+					title:   m.T("action_menu.get_yaml_error_title"),
 					content: err.Error(),
 					err:     err,
 				}
@@ -263,9 +268,14 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 
 			var title string
 			if m.selectedPod != nil {
-				title = fmt.Sprintf("YAML: %s/%s", m.selectedPod.Namespace, m.selectedPod.Name)
+				title = m.TF("action_menu.yaml_pod_title", map[string]interface{}{
+					"Namespace": m.selectedPod.Namespace,
+					"Name":      m.selectedPod.Name,
+				})
 			} else if m.selectedNode != nil {
-				title = fmt.Sprintf("YAML: %s", m.selectedNode.Name)
+				title = m.TF("action_menu.yaml_node_title", map[string]interface{}{
+					"Name": m.selectedNode.Name,
+				})
 			}
 
 			return commandOutputMsg{

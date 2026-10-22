@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 	"time"
 	"unicode"
@@ -653,7 +652,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.jobPodSelectedIndex < displayCount && m.jobPodSelectedIndex < len(jobPods) {
 					selectedPod := jobPods[m.jobPodSelectedIndex]
 					if len(selectedPod.ContainerStates) == 0 {
-						m.logsError = "No containers available"
+						m.logsError = m.T("logs.no_containers")
 						return m, nil
 					}
 
@@ -678,7 +677,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.detailMode && m.currentView == ViewPodDetail && m.selectedPod != nil {
 				// Get containers from the selected pod
 				if len(m.selectedPod.ContainerStates) == 0 {
-					m.logsError = "No containers available"
+					m.logsError = m.T("logs.no_containers")
 					return m, nil
 				}
 
@@ -1251,23 +1250,32 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case exportSuccessMsg:
 		m.exportInProgress = false
-		m.exportMessage = fmt.Sprintf("✅ Exported %d items to: %s", msg.count, msg.filePath)
+		m.exportMessage = m.TF("export.success", map[string]interface{}{
+			"Count": msg.count,
+			"Path":  msg.filePath,
+		})
 		return m, tea.Tick(time.Second*3, func(time.Time) tea.Msg {
 			return clearExportMessageMsg{}
 		})
 
 	case exportErrorMsg:
 		m.exportInProgress = false
-		m.exportMessage = fmt.Sprintf("❌ Export failed: %v", msg.err)
+		m.exportMessage = m.TF("export.failed", map[string]interface{}{
+			"Err": msg.err,
+		})
 		return m, tea.Tick(time.Second*3, func(time.Time) tea.Msg {
 			return clearExportMessageMsg{}
 		})
 
 	case clipboardResultMsg:
 		if msg.err != nil {
-			m.exportMessage = fmt.Sprintf("❌ Copy failed: %v", msg.err)
+			m.exportMessage = m.TF("clipboard.failed", map[string]interface{}{
+				"Err": msg.err,
+			})
 		} else {
-			m.exportMessage = fmt.Sprintf("✅ Copied: %s", msg.text)
+			m.exportMessage = m.TF("clipboard.success", map[string]interface{}{
+				"Text": msg.text,
+			})
 		}
 		return m, tea.Tick(time.Second*2, func(time.Time) tea.Msg {
 			return clearExportMessageMsg{}

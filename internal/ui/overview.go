@@ -522,7 +522,7 @@ func (m *Model) renderClusterLoadCompact(summary *model.ClusterSummary) string {
 
 func (m *Model) cpuDetailsLines(summary *model.ClusterSummary) []string {
 	lines := []string{
-		StyleHeader.Render("[⚡ CPU]"),
+		StyleHeader.Render(m.T("overview.panel_cpu")),
 		"",
 		fmt.Sprintf("%s   %s", m.T("overview.capacity"), StyleHighlight.Render(formatCPU(summary.CPUCapacity))),
 		fmt.Sprintf("%s %s", m.T("overview.allocatable"), formatCPU(summary.CPUAllocatable)),
@@ -536,7 +536,7 @@ func (m *Model) cpuDetailsLines(summary *model.ClusterSummary) []string {
 
 func (m *Model) memoryDetailsLines(summary *model.ClusterSummary) []string {
 	lines := []string{
-		StyleHeader.Render("[🧠 Memory]"),
+		StyleHeader.Render(m.T("overview.panel_memory")),
 		"",
 		fmt.Sprintf("%s   %s", m.T("overview.capacity"), StyleHighlight.Render(formatMemory(summary.MemoryCapacity))),
 		fmt.Sprintf("%s %s", m.T("overview.allocatable"), formatMemory(summary.MemoryAllocatable)),

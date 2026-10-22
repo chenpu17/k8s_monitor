@@ -2,7 +2,7 @@ package ui
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -88,7 +88,7 @@ func (m *Model) fetchLogs() tea.Cmd {
 		})
 
 		if !ok {
-			return logsMsg{err: fmt.Errorf("data provider does not support log fetching")}
+			return logsMsg{err: errors.New(m.T("logs.provider_unsupported"))}
 		}
 
 		ctx := context.Background()

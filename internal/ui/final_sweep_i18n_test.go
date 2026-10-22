@@ -12,12 +12,15 @@ package ui
 // hardcoded label literals of the shapes this campaign eliminated.
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +29,11 @@ import (
 
 	"github.com/chenpu/k8s-monitor/internal/model"
 )
+
+// verbRe matches one fmt verb with its flags/width/precision, e.g. "%-10.2f",
+// "%*d", "%%". Used to strip verbs from format strings before checking for
+// hardcoded words (pattern C).
+var verbRe = regexp.MustCompile(`%[-+ #0]*(\*|\d+)?(\.(\*|\d+)?)?[a-zA-Z%]`)
 
 // superPodNodes returns a fixture with two SuperPods: SP-0 with five nodes
 // (exercises the >4-IP "+N" suffix path) and SP-1 with one node.
@@ -245,18 +253,20 @@ func TestFinalSweepScheduleColumnZh(t *testing.T) {
 }
 
 // TestFinalSweepGuardNoHardcodedUILabels is the census ratchet. It parses
-// every non-test file in the ui package and rejects two shapes the i18n
+// every non-test file in the ui package and rejects three shapes the i18n
 // campaign eliminated:
 //
 //	A) a string literal containing ASCII letters passed directly to a
 //	   .Render(...) call (the "StyleKey.Render(\"Search: \")" shape);
 //	B) a bare `return <string literal with letters>` statement (the
-//	   "return \"Goodbye!\"" shape; the kubelet hint helpers used it too).
+//	   "return \"Goodbye!\"" shape; the kubelet hint helpers used it too);
+//	C) a fmt.Sprintf/Fprintf/Errorf first argument whose letters survive
+//	   stripping the fmt verbs — i.e. a format string carrying hardcoded
+//	   words, not just verbs and separators (the "Sched: %s" shape).
 //
-// Allowlist entries are frozen and must carry a reason. Four entries are
-// KNOWN RESIDUALS reported by the batch-18 census (action_menu.go menu
-// labels, overview cpu/memory panel headers) — they are scheduled for their
-// own batch and must not grow.
+// Pattern C auto-allows verb-only formats ("  %s: %s", "%.0f%% (%d/%d)"):
+// after verb stripping they leave no letters, so its allowlist stays
+// value-class only. Every allowlist entry is frozen and carries a reason.
 func TestFinalSweepGuardNoHardcodedUILabels(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
@@ -264,27 +274,105 @@ func TestFinalSweepGuardNoHardcodedUILabels(t *testing.T) {
 	}
 	dir := filepath.Dir(thisFile)
 
-	hasLetters := regexp.MustCompile(`[A-Za-z]`).MatchString
-
-	// Pattern A allowlist: value -> reason.
-	allowRender := map[string]string{
-		"True":      "k8s boolean value (suspend column), untranslated by convention",
-		"False":     "k8s boolean value (suspend column), untranslated by convention",
-		"0 B/s":     "zero-rate placeholder (unit, not a label)",
-		"0B":        "zero-size placeholder (unit, not a label)",
-		"  🧮 NPU: ": "technical term prefix, locale-invariant",
-		// Known residuals from the batch-18 census — pending their own batch.
-		"🎯 Quick Actions": "KNOWN RESIDUAL (action menu title) — census batch 18",
-		"  ↑/↓ Navigate • Enter Select • ESC Cancel": "KNOWN RESIDUAL (action menu help) — census batch 18",
-		"[⚡ CPU]":    "KNOWN RESIDUAL (overview panel header) — census batch 18",
-		"[🧠 Memory]": "KNOWN RESIDUAL (overview panel header) — census batch 18",
-	}
-
 	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
 	if err != nil || len(files) == 0 {
 		t.Fatalf("cannot list ui package files in %s: %v", dir, err)
 	}
 
+	for _, v := range censusScan(t, files) {
+		t.Errorf("%s", v)
+	}
+}
+
+// censusScan parses the given files and returns one violation string per
+// hardcoded-label site (patterns A/B/C above; test files are skipped).
+// It is a standalone function so the anti-blind-positive probe can run it
+// against injected files without touching the package directory.
+func censusScan(t *testing.T, files []string) []string {
+	t.Helper()
+
+	hasLetters := regexp.MustCompile(`[A-Za-z]`).MatchString
+
+	// Pattern A allowlist: value -> reason.
+	allowRender := map[string]string{
+		"True":  "k8s boolean value (suspend column), untranslated by convention",
+		"False": "k8s boolean value (suspend column), untranslated by convention",
+		"0 B/s": "zero-rate placeholder (unit, not a label)",
+		"0B":    "zero-size placeholder (unit, not a label)",
+	}
+
+	// Pattern C allowlist: format literal -> reason. Entries are value-class:
+	// their letters survive verb stripping because they name files, units or
+	// technical terms — never UI copy. Frozen at batch 19 (census clear-out).
+	allowFmt := map[string]string{
+		"unsupported operation": "sentinel error value; commandOutputMsg.err is dropped by Update (never rendered) — the title/content carry the user copy",
+
+		// Export filename prefixes — product artifacts, not UI copy.
+		"k8s-nodes-%s":    "export filename prefix",
+		"k8s-pods-%s":     "export filename prefix",
+		"k8s-events-%s":   "export filename prefix",
+		"k8s-services-%s": "export filename prefix",
+
+		// NPU / CPU technical terms and allocation arithmetic.
+		"%d NPU":                            "NPU count, technical term",
+		"%s: %s (%d NPU)":                   "NPU count annotation, technical term",
+		"  %s %s: %s  (%d%s × %d NPU = %s)": "superpod NPU arithmetic line, technical term",
+		"%dx%d=%d":                          "NPU allocation multiplication rendering (task×replica=result)",
+		"        CPU: %s":                   "CPU technical-term label, locale-invariant by convention (columns.cpu)",
+
+		// k8s resource request/limit annotations (technical key=value form).
+		" req=%s":    "k8s request annotation, technical form",
+		" limit=%s":  "k8s limit annotation, technical form",
+		" (req: %s)": "k8s request annotation, technical form",
+
+		// Scroll-indicator frame: the verbs carry keyed labels, the surviving
+		// letters are key names (PgUp/PgDn).
+		"\n[%s] (↑/↓ %s, PgUp/PgDn %s)": "scroll hint frame; key names only, labels come from keyed verbs",
+
+		// Unit suffixes — value formatting, not labels.
+		"%.1fG":                            "size unit (G)",
+		"%.1fGi":                           "size unit (Gi)",
+		"%.1fK":                            "size unit (K)",
+		"%.1fKB":                           "size unit (KB)",
+		"%.1fKi":                           "size unit (Ki)",
+		"%.1fMB":                           "size unit (MB)",
+		"%.1fMi":                           "size unit (Mi)",
+		"%.1fT":                            "size unit (T)",
+		"%.1fTi":                           "size unit (Ti)",
+		"%.2fG":                            "size unit (G)",
+		"%.2fGB":                           "size unit (GB)",
+		"%.2fM":                            "size unit (M)",
+		"%.2fTB":                           "size unit (TB)",
+		"%.0fK":                            "size unit (K)",
+		"%.0fM":                            "size unit (M)",
+		"%d B":                             "size unit (B)",
+		"%dB":                              "size unit (B)",
+		"%d/%d MB":                         "size unit (MB)",
+		"%d/%dMB (%.0f%%)":                 "size unit with percentage (MB)",
+		"%.1f/%.0fG(%d%%)":                 "size unit with percentage (G)",
+		"    %s: %.1f / %.1f GiB (%.1f%%)": "size unit with percentage (GiB)",
+		"%.1f %ciB":                        "size unit built from a %c SI prefix + iB",
+		"%.1f KB/s":                        "rate unit (KB/s)",
+		"%.0f KB/s":                        "rate unit (KB/s)",
+		"%.1f MB/s":                        "rate unit (MB/s)",
+		"%.2f MB/s":                        "rate unit (MB/s)",
+		"%.2f GB/s":                        "rate unit (GB/s)",
+		"%.1fW":                            "power unit (W)",
+		"%dW":                              "power unit (W)",
+		"    %s: %dW":                      "power unit (W)",
+		"%.2fV":                            "voltage unit (V)",
+		"%d°C":                             "temperature unit (°C)",
+		"    %s: %d W   %s: %d °C":         "power/temperature units (W, °C)",
+		"%dd":                              "duration unit (days)",
+		"%dh":                              "duration unit (hours)",
+		"%dh%dm":                           "duration units (h/m)",
+		"%dm":                              "duration unit (minutes)",
+		"%dm%ds":                           "duration units (m/s)",
+		"%ds":                              "duration unit (seconds)",
+		"%dMHz":                            "frequency unit (MHz)",
+	}
+
+	var violations []string
 	fset := token.NewFileSet()
 	for _, fn := range files {
 		if strings.HasSuffix(fn, "_test.go") {
@@ -299,21 +387,54 @@ func TestFinalSweepGuardNoHardcodedUILabels(t *testing.T) {
 			switch node := n.(type) {
 			case *ast.CallExpr:
 				sel, isSel := node.Fun.(*ast.SelectorExpr)
-				if !isSel || sel.Sel.Name != "Render" {
+				if !isSel {
 					return true
 				}
-				for _, arg := range node.Args {
-					lit, isLit := arg.(*ast.BasicLit)
-					if !isLit || lit.Kind != token.STRING || !hasLetters(lit.Value) {
-						continue
+				switch sel.Sel.Name {
+				case "Render":
+					for _, arg := range node.Args {
+						lit, isLit := arg.(*ast.BasicLit)
+						if !isLit || lit.Kind != token.STRING || !hasLetters(lit.Value) {
+							continue
+						}
+						value := strings.Trim(lit.Value, `"`)
+						if _, allowed := allowRender[value]; !allowed {
+							violations = append(violations, fmt.Sprintf("%s:%d: hardcoded label passed to Render: %s (use m.T with a bundle key, or extend the census allowlist with a reason)", base, fset.Position(lit.Pos()).Line, lit.Value))
+						}
 					}
-					value := strings.Trim(lit.Value, `"`)
-					reason, allowed := allowRender[value]
-					if !allowed {
-						t.Errorf("%s:%d: hardcoded label passed to Render: %s (use m.T with a bundle key, or extend the census allowlist with a reason)", base, fset.Position(lit.Pos()).Line, lit.Value)
-						continue
+				case "Sprintf", "Fprintf", "Errorf":
+					pkg, isPkg := sel.X.(*ast.Ident)
+					if !isPkg || pkg.Name != "fmt" {
+						return true
 					}
-					_ = reason
+					// Sprintf/Errorf take the format first; Fprintf takes it
+					// after the writer.
+					fmtIdx := 0
+					if sel.Sel.Name == "Fprintf" {
+						fmtIdx = 1
+					}
+					if len(node.Args) <= fmtIdx {
+						return true
+					}
+					lit, isLit := node.Args[fmtIdx].(*ast.BasicLit)
+					if !isLit || lit.Kind != token.STRING {
+						return true
+					}
+					// Work on the interpreted value so escape sequences
+					// (\n, \t, …) cannot masquerade as letters.
+					value, err := strconv.Unquote(lit.Value)
+					if err != nil {
+						value = strings.Trim(lit.Value, `"`)
+					}
+					// Strip fmt verbs: what remains must be free of letters,
+					// else the format string carries hardcoded words.
+					nonVerb := verbRe.ReplaceAllString(value, "")
+					if !hasLetters(nonVerb) {
+						return true
+					}
+					if _, allowed := allowFmt[value]; !allowed {
+						violations = append(violations, fmt.Sprintf("%s:%d: hardcoded words in fmt format string: %q (use m.T/m.TF with a bundle key, or extend the census allowlist with a reason)", base, fset.Position(lit.Pos()).Line, value))
+					}
 				}
 			case *ast.ReturnStmt:
 				if len(node.Results) != 1 {
@@ -323,11 +444,12 @@ func TestFinalSweepGuardNoHardcodedUILabels(t *testing.T) {
 				if !isLit || lit.Kind != token.STRING || !hasLetters(lit.Value) {
 					return true
 				}
-				t.Errorf("%s:%d: bare return of a string literal with letters: %s (use m.T with a bundle key)", base, fset.Position(lit.Pos()).Line, lit.Value)
+				violations = append(violations, fmt.Sprintf("%s:%d: bare return of a string literal with letters: %s (use m.T with a bundle key)", base, fset.Position(lit.Pos()).Line, lit.Value))
 			}
 			return true
 		})
 	}
+	return violations
 }
 
 // TestQueuesScrollIndicatorKeyed locks the queues list scroll indicator onto
@@ -358,4 +480,54 @@ func TestQueuesScrollIndicatorKeyed(t *testing.T) {
 	if strings.Contains(zh, "(viewing") {
 		t.Errorf("zh queues render still contains the English scroll hint:\n%s", zh)
 	}
+}
+
+// TestCensusGuardPatternsFire is the anti-blind-positive probe: the census
+// scanner must report each of its three shapes on injected files. The probe
+// files live in a temp dir (never the package dir) and are deleted by the
+// temp-dir cleanup.
+func TestCensusGuardPatternsFire(t *testing.T) {
+	dir := t.TempDir()
+
+	files := []string{
+		// Pattern C: fmt format string carrying hardcoded words. The file is
+		// only parsed (never compiled), so the fmt import can be omitted.
+		writeProbe(t, dir, "probe_fmt.go", "package ui\n\nfunc probeFmt() string {\n\treturn fmt.Sprintf(\"Hardcoded label %d\", 1)\n}\n"),
+		// Pattern A: letter-bearing literal passed straight to Render.
+		writeProbe(t, dir, "probe_render.go", "package ui\n\ntype probeStyle struct{}\n\nfunc (probeStyle) Render(s string) string { return s }\n\nfunc probeRender() string {\n\tvar st probeStyle\n\treturn st.Render(\"Hardcoded X\")\n}\n"),
+		// Pattern B: bare return of a letter-bearing string literal.
+		writeProbe(t, dir, "probe_return.go", "package ui\n\nfunc probeReturn() string {\n\treturn \"Hardcoded Y\"\n}\n"),
+	}
+
+	violations := censusScan(t, files)
+	if len(violations) != 3 {
+		t.Fatalf("censusScan reported %d violations on the probe files, want exactly 3 (one per pattern):\n%s",
+			len(violations), strings.Join(violations, "\n"))
+	}
+	shapes := map[string]bool{
+		"Hardcoded label %d": false, // pattern C
+		"Hardcoded X":        false, // pattern A
+		"Hardcoded Y":        false, // pattern B
+	}
+	for _, v := range violations {
+		for shape := range shapes {
+			if strings.Contains(v, shape) {
+				shapes[shape] = true
+			}
+		}
+	}
+	for shape, seen := range shapes {
+		if !seen {
+			t.Errorf("censusScan missed the %q probe shape:\n%s", shape, strings.Join(violations, "\n"))
+		}
+	}
+}
+
+func writeProbe(t *testing.T, dir, name, content string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

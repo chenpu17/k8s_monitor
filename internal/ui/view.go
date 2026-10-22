@@ -121,7 +121,11 @@ func (m *Model) renderHeader() string {
 	titleText := m.T("app.title")
 	author := m.T("app.author")
 	version := m.version
-	title := StyleTitle.Render(fmt.Sprintf("%s  by %s  %s", titleText, author, version))
+	title := StyleTitle.Render(m.TF("app.title_byline", map[string]interface{}{
+		"Title":   titleText,
+		"Author":  author,
+		"Version": version,
+	}))
 
 	// spinner indicator toggles on each refresh
 	spinChars := []string{"◐", "◓", "◑", "◒"}

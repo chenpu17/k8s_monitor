@@ -10,6 +10,9 @@ other = "🔍 Kubernetes Monitor"
 [app.author]
 other = "chenpu"
 
+[app.title_byline]
+other = "{{.Title}}  by {{.Author}}  {{.Version}}"
+
 # ============================================================================
 # Top-level View Chrome
 # ============================================================================
@@ -392,6 +395,81 @@ other = "🔍 Search"
 other = "Esc cancel • Backspace delete"
 
 # ============================================================================
+# Action Menu (Pod / Node Detail)
+# ============================================================================
+[action_menu.title]
+other = "🎯 Quick Actions"
+
+[action_menu.help]
+other = "  ↑/↓ Navigate • Enter Select • ESC Cancel"
+
+[action_menu.view_logs]
+other = "📜 View Logs"
+
+[action_menu.view_logs_desc]
+other = "Show container logs"
+
+[action_menu.describe]
+other = "📋 Describe"
+
+[action_menu.describe_pod_desc]
+other = "kubectl describe pod"
+
+[action_menu.describe_node_desc]
+other = "kubectl describe node"
+
+[action_menu.get_yaml]
+other = "📄 Get YAML"
+
+[action_menu.get_yaml_desc]
+other = "kubectl get -o yaml"
+
+[action_menu.copy_name]
+other = "📎 Copy Name"
+
+[action_menu.copy_name_pod_desc]
+other = "Copy pod name to clipboard"
+
+[action_menu.copy_name_node_desc]
+other = "Copy node name"
+
+[action_menu.copy_ns_name]
+other = "📎 Copy Namespace/Name"
+
+[action_menu.copy_ns_name_desc]
+other = "Copy namespace/name"
+
+[action_menu.show_events]
+other = "⚡ Show Events"
+
+[action_menu.show_events_desc]
+other = "Related events"
+
+[action_menu.unsupported_describe]
+other = "API client does not support describe functionality"
+
+[action_menu.unsupported_yaml]
+other = "API client does not support YAML export"
+
+[action_menu.describe_error_title]
+other = "Describe Error"
+
+[action_menu.get_yaml_error_title]
+other = "Get YAML Error"
+
+[action_menu.describe_pod_title]
+other = "Describe Pod: {{.Namespace}}/{{.Name}}"
+
+[action_menu.describe_node_title]
+other = "Describe Node: {{.Name}}"
+
+[action_menu.yaml_pod_title]
+other = "YAML: {{.Namespace}}/{{.Name}}"
+
+[action_menu.yaml_node_title]
+other = "YAML: {{.Name}}"
+
+# ============================================================================
 # Logs Viewer
 # ============================================================================
 [logs.title]
@@ -591,6 +669,14 @@ other = "[💻 Nodes]"
 [overview.panel_events]
 other = "[📋 Events]"
 
+# CPU/Memory panel headers. CPU stays a technical term in both locales on
+# purpose (same-value key); Memory translates like columns.memory.
+[overview.panel_cpu]
+other = "[⚡ CPU]"
+
+[overview.panel_memory]
+other = "[🧠 Memory]"
+
 [overview.nodes_ready]
 other = "Ready:"
 
@@ -658,6 +744,14 @@ other = "NPU Run:"
 
 [overview.volcano_queues]
 other = "Queues:"
+
+# ============================================================================
+# Nodes View
+# ============================================================================
+# The NPU summary prefix is a technical-term line prefix with leading spaces
+# for alignment; it stays identical in both locales on purpose (same-value key).
+[nodes.npu_prefix]
+other = "  🧮 NPU: "
 
 # ============================================================================
 # Service Detail
@@ -1261,6 +1355,12 @@ other = "Volcano Avg"
 [workloads.volcano.running]
 other = "Volcano Running"
 
+# Scheduling-efficiency label for the Volcano NPU summary bar. Bare label:
+# the ": " separator comes from the render format, matching the sibling
+# detail.job.efficiency / detail.volcanojob.npu_total parts in the same line.
+[workloads.sched]
+other = "Sched"
+
 # ============================================================================
 # Job Detail View
 # ============================================================================
@@ -1386,6 +1486,67 @@ other = "↑/↓ scroll • PgUp/PgDn page • Esc back"
 
 [logs.help.back]
 other = "Esc back"
+
+[logs.search_matches]
+other = "🔍 {{.Matches}}/{{.Total}} matches"
+
+[logs.search_hint]
+other = "Type to search • ESC to exit search"
+
+# Suffix appended after logs.help.scroll / logs.help.back; the leading space
+# and " • " separator are part of the value so en output stays byte-identical.
+[logs.search_hint_slash]
+other = " • / to search"
+
+[logs.no_containers]
+other = "No containers available"
+
+[logs.provider_unsupported]
+other = "data provider does not support log fetching"
+
+# ============================================================================
+# Command Output Viewer
+# ============================================================================
+[command_output.lines_range]
+other = "Lines {{.Start}}-{{.End}} of {{.Total}}"
+
+# ============================================================================
+# Export & Clipboard
+# ============================================================================
+[export.success]
+other = "✅ Exported {{.Count}} items to: {{.Path}}"
+
+[export.failed]
+other = "❌ Export failed: {{.Err}}"
+
+[export.view_unsupported]
+other = "export not supported for this view"
+
+[export.no_nodes_data]
+other = "no nodes data to export"
+
+[export.no_pods_data]
+other = "no pods data to export"
+
+[export.no_events_data]
+other = "no events data to export"
+
+[export.no_services_data]
+other = "no services data to export"
+
+# The two errors below keep their ": %w" separator in code so errors.Is
+# still unwraps the underlying fs error.
+[export.dir_create_failed]
+other = "cannot create export directory {{.Dir}}"
+
+[export.dir_not_writable]
+other = "export directory {{.Dir}} is not writable"
+
+[clipboard.failed]
+other = "❌ Copy failed: {{.Err}}"
+
+[clipboard.success]
+other = "✅ Copied: {{.Text}}"
 
 # ============================================================================
 # Additional Search Panel Keys

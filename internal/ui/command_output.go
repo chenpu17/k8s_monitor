@@ -59,7 +59,11 @@ func (m *Model) renderCommandOutput() string {
 
 	// Status bar
 	if totalLines > maxVisible {
-		scrollInfo := fmt.Sprintf("Lines %d-%d of %d", startIdx+1, endIdx, totalLines)
+		scrollInfo := m.TF("command_output.lines_range", map[string]interface{}{
+			"Start": startIdx + 1,
+			"End":   endIdx,
+			"Total": totalLines,
+		})
 		sections = append(sections, "")
 		sections = append(sections, StyleTextMuted.Render(scrollInfo))
 	}

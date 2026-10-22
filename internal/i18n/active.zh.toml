@@ -10,6 +10,9 @@ other = "🔍 Kubernetes 监控器"
 [app.author]
 other = "陈普"
 
+[app.title_byline]
+other = "{{.Title}}  作者 {{.Author}}  {{.Version}}"
+
 # ============================================================================
 # 顶层视图外壳
 # ============================================================================
@@ -390,6 +393,82 @@ other = "🔍 搜索"
 other = "Esc 取消 • Backspace 删除"
 
 # ============================================================================
+# 操作菜单（Pod / 节点详情）
+# ============================================================================
+[action_menu.title]
+other = "🎯 快捷操作"
+
+[action_menu.help]
+other = "  ↑/↓ 导航 • Enter 选择 • Esc 取消"
+
+[action_menu.view_logs]
+other = "📜 查看日志"
+
+[action_menu.view_logs_desc]
+other = "查看容器日志"
+
+[action_menu.describe]
+other = "📋 描述"
+
+# kubectl 命令示例原文保留,两种语言刻意同值。
+[action_menu.describe_pod_desc]
+other = "kubectl describe pod"
+
+[action_menu.describe_node_desc]
+other = "kubectl describe node"
+
+[action_menu.get_yaml]
+other = "📄 获取 YAML"
+
+[action_menu.get_yaml_desc]
+other = "kubectl get -o yaml"
+
+[action_menu.copy_name]
+other = "📎 复制名称"
+
+[action_menu.copy_name_pod_desc]
+other = "复制 Pod 名称到剪贴板"
+
+[action_menu.copy_name_node_desc]
+other = "复制节点名称"
+
+[action_menu.copy_ns_name]
+other = "📎 复制命名空间/名称"
+
+[action_menu.copy_ns_name_desc]
+other = "复制命名空间/名称"
+
+[action_menu.show_events]
+other = "⚡ 查看事件"
+
+[action_menu.show_events_desc]
+other = "相关事件"
+
+[action_menu.unsupported_describe]
+other = "API 客户端不支持 describe 功能"
+
+[action_menu.unsupported_yaml]
+other = "API 客户端不支持 YAML 导出"
+
+[action_menu.describe_error_title]
+other = "描述出错"
+
+[action_menu.get_yaml_error_title]
+other = "获取 YAML 出错"
+
+[action_menu.describe_pod_title]
+other = "描述 Pod：{{.Namespace}}/{{.Name}}"
+
+[action_menu.describe_node_title]
+other = "描述节点：{{.Name}}"
+
+[action_menu.yaml_pod_title]
+other = "YAML：{{.Namespace}}/{{.Name}}"
+
+[action_menu.yaml_node_title]
+other = "YAML：{{.Name}}"
+
+# ============================================================================
 # 日志查看器
 # ============================================================================
 [logs.title]
@@ -586,6 +665,13 @@ other = "[💻 节点]"
 [overview.panel_events]
 other = "[📋 事件]"
 
+# CPU/内存面板表头。CPU 两种语言同为技术名词(同值刻意);内存随 columns.memory 先例。
+[overview.panel_cpu]
+other = "[⚡ CPU]"
+
+[overview.panel_memory]
+other = "[🧠 内存]"
+
 [overview.nodes_ready]
 other = "就绪："
 
@@ -652,6 +738,13 @@ other = "NPU 运行："
 
 [overview.volcano_queues]
 other = "队列："
+
+# ============================================================================
+# 节点视图
+# ============================================================================
+# NPU 汇总行前缀为技术名词行首,含对齐用前导空格;两种语言刻意同值。
+[nodes.npu_prefix]
+other = "  🧮 NPU: "
 
 # ============================================================================
 # 服务详情
@@ -1250,6 +1343,11 @@ other = "Volcano平均"
 [workloads.volcano.running]
 other = "Volcano运行中"
 
+# Volcano NPU 汇总条的调度效率标签。裸键:": "分隔符由渲染格式串提供,
+# 与同一行的 detail.job.efficiency / detail.volcanojob.npu_total 兄弟键一致。
+[workloads.sched]
+other = "调度"
+
 # ============================================================================
 # Job 详情视图
 # ============================================================================
@@ -1375,6 +1473,66 @@ other = "↑/↓ 滚动 • PgUp/PgDn 翻页 • Esc 返回"
 
 [logs.help.back]
 other = "Esc 返回"
+
+[logs.search_matches]
+other = "🔍 {{.Matches}}/{{.Total}} 个匹配"
+
+[logs.search_hint]
+other = "输入以搜索 • Esc 退出搜索"
+
+# 追加在 logs.help.scroll / logs.help.back 之后的后缀;前导空格与 " • " 分隔
+# 结构保留在值内,与英文侧渲染结构一致。
+[logs.search_hint_slash]
+other = " • / 搜索"
+
+[logs.no_containers]
+other = "无可用容器"
+
+[logs.provider_unsupported]
+other = "数据源不支持日志获取"
+
+# ============================================================================
+# 命令输出查看器
+# ============================================================================
+[command_output.lines_range]
+other = "第 {{.Start}}-{{.End}} 行，共 {{.Total}} 行"
+
+# ============================================================================
+# 导出与剪贴板
+# ============================================================================
+[export.success]
+other = "✅ 已导出 {{.Count}} 项到：{{.Path}}"
+
+[export.failed]
+other = "❌ 导出失败：{{.Err}}"
+
+[export.view_unsupported]
+other = "当前视图不支持导出"
+
+[export.no_nodes_data]
+other = "暂无可导出的节点数据"
+
+[export.no_pods_data]
+other = "暂无可导出的 Pod 数据"
+
+[export.no_events_data]
+other = "暂无可导出的事件数据"
+
+[export.no_services_data]
+other = "暂无可导出的服务数据"
+
+# 下面两条错误的 ": %w" 分隔符保留在代码中,errors.Is 仍可解包底层 fs 错误。
+[export.dir_create_failed]
+other = "无法创建导出目录 {{.Dir}}"
+
+[export.dir_not_writable]
+other = "导出目录 {{.Dir}} 不可写"
+
+[clipboard.failed]
+other = "❌ 复制失败：{{.Err}}"
+
+[clipboard.success]
+other = "✅ 已复制：{{.Text}}"
 
 # ============================================================================
 # 搜索面板附加键

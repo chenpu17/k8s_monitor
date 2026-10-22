@@ -1103,7 +1103,8 @@ func (m *Model) renderVolcanoNPUSummary(totalNPURequested, totalNPURunning int64
 		} else if schedEfficiency < 50 {
 			schedStyle = StyleStatusNotReady
 		}
-		parts = append(parts, fmt.Sprintf("Sched: %s",
+		parts = append(parts, fmt.Sprintf("%s: %s",
+			m.T("workloads.sched"),
 			schedStyle.Render(fmt.Sprintf("%.0f%%", schedEfficiency))))
 	}
 

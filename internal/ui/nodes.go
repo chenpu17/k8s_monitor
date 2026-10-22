@@ -150,7 +150,7 @@ func (m *Model) renderNPUClusterSummary(summary *model.ClusterSummary) string {
 			StyleHighlight.Render(summary.NPUChipType)))
 	}
 
-	return StyleTextMuted.Render("  🧮 NPU: ") + strings.Join(parts, " • ")
+	return StyleTextMuted.Render(m.T("nodes.npu_prefix")) + strings.Join(parts, " • ")
 }
 
 // renderNodesList renders the list of nodes, showing at most maxVisible rows.

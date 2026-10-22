@@ -3,6 +3,7 @@ package ui
 import (
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,7 +34,7 @@ type exportErrorMsg struct {
 }
 
 // getExportDir returns the export directory path and ensures it exists
-func getExportDir() (string, error) {
+func (m *Model) getExportDir() (string, error) {
 	// Get user home directory
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -48,7 +49,10 @@ func getExportDir() (string, error) {
 	if _, err := os.Stat(exportDir); os.IsNotExist(err) {
 		// Create directory with proper permissions
 		if err := os.MkdirAll(exportDir, 0755); err != nil {
-			return "", fmt.Errorf("cannot create export directory %s: %w", exportDir, err)
+			// The ": %w" separator stays in code so errors.Is keeps unwrapping.
+			return "", fmt.Errorf("%s: %w", m.TF("export.dir_create_failed", map[string]interface{}{
+				"Dir": exportDir,
+			}), err)
 		}
 	}
 
@@ -56,7 +60,9 @@ func getExportDir() (string, error) {
 	testFile := filepath.Join(exportDir, ".write_test")
 	f, err := os.Create(testFile)
 	if err != nil {
-		return "", fmt.Errorf("export directory %s is not writable: %w", exportDir, err)
+		return "", fmt.Errorf("%s: %w", m.TF("export.dir_not_writable", map[string]interface{}{
+			"Dir": exportDir,
+		}), err)
 	}
 	f.Close()
 	os.Remove(testFile)
@@ -74,7 +80,7 @@ func (m *Model) exportData(format ExportFormat) tea.Cmd {
 
 	return func() tea.Msg {
 		// Get export directory
-		exportDir, err := getExportDir()
+		exportDir, err := m.getExportDir()
 		if err != nil {
 			return exportErrorMsg{err: err}
 		}
@@ -97,7 +103,7 @@ func (m *Model) exportData(format ExportFormat) tea.Cmd {
 			filename = fmt.Sprintf("k8s-services-%s", timestamp)
 			exportErr = m.exportServices(data, exportDir, filename, format)
 		default:
-			return exportErrorMsg{err: fmt.Errorf("export not supported for this view")}
+			return exportErrorMsg{err: errors.New(m.T("export.view_unsupported"))}
 		}
 
 		if exportErr != nil {
@@ -139,7 +145,7 @@ func (m *Model) getExportCount(view ViewType, data *model.ClusterData) int {
 // exportNodes exports nodes data
 func (m *Model) exportNodes(data *model.ClusterData, exportDir, filename string, format ExportFormat) error {
 	if data == nil || len(data.Nodes) == 0 {
-		return fmt.Errorf("no nodes data to export")
+		return errors.New(m.T("export.no_nodes_data"))
 	}
 
 	if format == ExportCSV {
@@ -216,7 +222,7 @@ func (m *Model) exportNodesJSON(data *model.ClusterData, exportDir, filename str
 // exportPods exports pods data
 func (m *Model) exportPods(data *model.ClusterData, exportDir, filename string, format ExportFormat) error {
 	if data == nil || len(data.Pods) == 0 {
-		return fmt.Errorf("no pods data to export")
+		return errors.New(m.T("export.no_pods_data"))
 	}
 
 	if format == ExportCSV {
@@ -291,7 +297,7 @@ func (m *Model) exportPodsJSON(data *model.ClusterData, exportDir, filename stri
 // exportEvents exports events data
 func (m *Model) exportEvents(data *model.ClusterData, exportDir, filename string, format ExportFormat) error {
 	if data == nil || len(data.Events) == 0 {
-		return fmt.Errorf("no events data to export")
+		return errors.New(m.T("export.no_events_data"))
 	}
 
 	if format == ExportCSV {
@@ -355,7 +361,7 @@ func (m *Model) exportEventsJSON(data *model.ClusterData, exportDir, filename st
 // exportServices exports services data
 func (m *Model) exportServices(data *model.ClusterData, exportDir, filename string, format ExportFormat) error {
 	if data == nil || len(data.Services) == 0 {
-		return fmt.Errorf("no services data to export")
+		return errors.New(m.T("export.no_services_data"))
 	}
 
 	if format == ExportCSV {
