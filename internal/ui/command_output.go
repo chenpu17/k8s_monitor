@@ -8,7 +8,7 @@ import (
 // renderCommandOutput renders the command output viewer
 func (m *Model) renderCommandOutput() string {
 	if m.commandOutputContent == "" {
-		return StyleTextMuted.Render("Loading...")
+		return StyleTextMuted.Render(m.T("view.loading"))
 	}
 
 	var sections []string

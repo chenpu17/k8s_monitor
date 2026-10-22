@@ -106,34 +106,16 @@ func detectKubeletHintKind(errMsg string) kubeletHintKind {
 	}
 }
 
-func kubeletHintEnglish(kind kubeletHintKind) string {
-	switch kind {
-	case kubeletHintRBAC:
-		return "Check RBAC: kubectl auth can-i get nodes/proxy"
-	case kubeletHintTLS:
-		return "Use --insecure-kubelet for TLS issues (test clusters only)"
-	default:
-		return "Try --insecure-kubelet"
-	}
-}
-
-func kubeletHintChinese(kind kubeletHintKind) string {
-	switch kind {
-	case kubeletHintRBAC:
-		return "检查 RBAC：kubectl auth can-i get nodes/proxy"
-	case kubeletHintTLS:
-		return "使用 --insecure-kubelet（仅限测试环境）"
-	default:
-		return "尝试 --insecure-kubelet"
-	}
-}
-
 // kubeletHint returns the appropriate hint based on current locale
 func (m *Model) kubeletHint(kind kubeletHintKind) string {
-	if m.isChinese() {
-		return kubeletHintChinese(kind)
+	switch kind {
+	case kubeletHintRBAC:
+		return m.T("overview.kubelet_hint_rbac")
+	case kubeletHintTLS:
+		return m.T("overview.kubelet_hint_tls")
+	default:
+		return m.T("overview.kubelet_hint_default")
 	}
-	return kubeletHintEnglish(kind)
 }
 
 // renderProgressBar renders a simple progress bar
@@ -198,12 +180,12 @@ func renderSummaryPanel(lines []string, targetContentLines int) string {
 // renderOverview renders the overview view with adaptive layout
 func (m *Model) renderOverview() string {
 	if m.clusterData == nil {
-		return "Loading cluster data..."
+		return m.T("overview.loading_data")
 	}
 
 	summary := m.clusterData.Summary
 	if summary == nil {
-		return "No cluster summary available"
+		return m.T("overview.no_summary")
 	}
 
 	allLines := m.overviewContentLines(summary)
@@ -964,7 +946,7 @@ func (m *Model) renderSuperPodTopology() string {
 
 		// Format: Superpod X: IP1, IP2 (N节点 × M NPU = Total NPU)
 		line := fmt.Sprintf("  %s %s: %s  (%d%s × %d NPU = %s)",
-			StyleTextMuted.Render("Superpod"),
+			StyleTextMuted.Render(m.T("topology.superpod.label")),
 			StyleHighlight.Render(sp.ID),
 			StyleTextSecondary.Render(ipStr),
 			sp.NodeCount,

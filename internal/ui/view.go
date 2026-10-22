@@ -8,11 +8,11 @@ import (
 // View renders the UI
 func (m *Model) View() string {
 	if m.quitting {
-		return "Goodbye!\n"
+		return m.T("view.goodbye") + "\n"
 	}
 
 	if m.width == 0 {
-		return "Loading..."
+		return m.T("view.loading")
 	}
 
 	// Render header

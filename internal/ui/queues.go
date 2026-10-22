@@ -432,8 +432,11 @@ func (m *Model) renderQueueDetail() string {
 
 	// Add scroll indicator
 	if len(lines) > maxVisible {
-		scrollInfo := fmt.Sprintf("(viewing %d-%d of %d lines, use ↑↓ or PgUp/PgDn to scroll)",
-			startIdx+1, endIdx, len(lines))
+		scrollInfo := m.TF("detail.scroll_indicator_viewing", map[string]interface{}{
+			"Start": startIdx + 1,
+			"End":   endIdx,
+			"Total": len(lines),
+		})
 		visibleLines = append(visibleLines, "")
 		visibleLines = append(visibleLines, StyleTextMuted.Render(scrollInfo))
 	}

@@ -11,6 +11,15 @@ other = "🔍 Kubernetes 监控器"
 other = "陈普"
 
 # ============================================================================
+# 顶层视图外壳
+# ============================================================================
+[view.goodbye]
+other = "再见！"
+
+[view.loading]
+other = "加载中..."
+
+# ============================================================================
 # 视图标题
 # ============================================================================
 [views.nodes.title]
@@ -128,7 +137,7 @@ other = "已更新"
 other = "期望"
 
 [columns.schedule]
-other = "调度"
+other = "调度计划"
 
 [columns.suspend]
 other = "暂停"
@@ -389,6 +398,9 @@ other = "📜 日志：{{.Namespace}}/{{.Pod}}"
 [logs.container]
 other = "容器：{{.Name}}"
 
+[logs.search_label]
+other = "搜索："
+
 [logs.no_pod]
 other = "未选择 Pod"
 
@@ -437,6 +449,12 @@ other = "ℹ️  信息"
 # ============================================================================
 # 概览视图
 # ============================================================================
+[overview.loading_data]
+other = "正在加载集群数据..."
+
+[overview.no_summary]
+other = "暂无集群摘要"
+
 [overview.cluster_load_header]
 other = "⚡ 集群负载 - 所有节点总和"
 
@@ -445,6 +463,15 @@ other = "网络：正在收集带宽数据..."
 
 [overview.metrics_unavailable]
 other = "网络：指标不可用"
+
+[overview.kubelet_hint_rbac]
+other = "检查 RBAC：kubectl auth can-i get nodes/proxy"
+
+[overview.kubelet_hint_tls]
+other = "使用 --insecure-kubelet（仅限测试环境）"
+
+[overview.kubelet_hint_default]
+other = "尝试 --insecure-kubelet"
 
 [overview.partial_metrics]
 other = "部分指标：{{.WithMetrics}}/{{.Total}} 个节点已上报"
@@ -1501,6 +1528,9 @@ other = "NPU 详情"
 # SuperPod 超节点拓扑部分
 [topology.superpod.title]
 other = "🔷 超节点拓扑结构"
+
+[topology.superpod.label]
+other = "超节点"
 
 [topology.superpod.nodes]
 other = "节点"

@@ -11,6 +11,15 @@ other = "🔍 Kubernetes Monitor"
 other = "chenpu"
 
 # ============================================================================
+# Top-level View Chrome
+# ============================================================================
+[view.goodbye]
+other = "Goodbye!"
+
+[view.loading]
+other = "Loading..."
+
+# ============================================================================
 # View Titles
 # ============================================================================
 [views.nodes.title]
@@ -391,6 +400,9 @@ other = "📜 Logs: {{.Namespace}}/{{.Pod}}"
 [logs.container]
 other = "Container: {{.Name}}"
 
+[logs.search_label]
+other = "Search: "
+
 [logs.no_pod]
 other = "No pod selected"
 
@@ -439,6 +451,12 @@ other = "ℹ️  Info"
 # ============================================================================
 # Overview View
 # ============================================================================
+[overview.loading_data]
+other = "Loading cluster data..."
+
+[overview.no_summary]
+other = "No cluster summary available"
+
 [overview.cluster_load_header]
 other = "⚡ Cluster Load - Sum of All Nodes"
 
@@ -447,6 +465,15 @@ other = "Net: collecting bandwidth data..."
 
 [overview.metrics_unavailable]
 other = "Net: metrics unavailable"
+
+[overview.kubelet_hint_rbac]
+other = "Check RBAC: kubectl auth can-i get nodes/proxy"
+
+[overview.kubelet_hint_tls]
+other = "Use --insecure-kubelet for TLS issues (test clusters only)"
+
+[overview.kubelet_hint_default]
+other = "Try --insecure-kubelet"
 
 [overview.partial_metrics]
 other = "Partial metrics: {{.WithMetrics}}/{{.Total}} nodes reporting"
@@ -1513,6 +1540,9 @@ other = "NPU Details"
 # SuperPod Topology Section
 [topology.superpod.title]
 other = "🔷 SuperPod Topology"
+
+[topology.superpod.label]
+other = "Superpod"
 
 [topology.superpod.nodes]
 other = " nodes"

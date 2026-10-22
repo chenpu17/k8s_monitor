@@ -61,7 +61,7 @@ func (m *Model) renderLogs() string {
 
 	// Show search bar if in search mode
 	if m.logsSearchMode {
-		searchBar := StyleKey.Render("Search: ") + m.logsSearchText + StyleTextMuted.Render("_")
+		searchBar := StyleKey.Render(m.T("logs.search_label")) + m.logsSearchText + StyleTextMuted.Render("_")
 		sections = append(sections, searchBar)
 	}
 	sections = append(sections, "")
