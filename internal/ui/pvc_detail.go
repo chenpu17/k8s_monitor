@@ -64,11 +64,19 @@ func (m *Model) renderPVCDetail() string {
 
 	// Used (if available)
 	if pvc.UsedBytes > 0 {
-		usagePercent := float64(pvc.UsedBytes) / float64(pvc.Capacity) * 100
-		lines = append(lines, fmt.Sprintf("  %s: %s (%.1f%%)",
-			m.T("detail.pvc.used"),
-			StyleWarning.Render(formatMemory(pvc.UsedBytes)),
-			usagePercent))
+		if pvc.Capacity > 0 {
+			usagePercent := float64(pvc.UsedBytes) / float64(pvc.Capacity) * 100
+			lines = append(lines, fmt.Sprintf("  %s: %s (%.1f%%)",
+				m.T("detail.pvc.used"),
+				StyleWarning.Render(formatMemory(pvc.UsedBytes)),
+				usagePercent))
+		} else {
+			// Capacity unknown: show the usage without a percentage
+			// (positive usage over a zero capacity would render as +Inf%).
+			lines = append(lines, fmt.Sprintf("  %s: %s",
+				m.T("detail.pvc.used"),
+				StyleWarning.Render(formatMemory(pvc.UsedBytes))))
+		}
 	}
 
 	// Storage Configuration

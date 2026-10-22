@@ -133,6 +133,7 @@ type Model struct {
 	scrollOffset        int                    // Scroll offset for lists
 	selectedIndex       int                    // Selected item index in lists
 	listRows            int                    // Rows the current list view printed (reported by the renderer, read by Update)
+	networkServiceLines []int                  // Document lines of the network service table rows (reported by the renderer, read by Update's selection-follow)
 	detailMode          bool                   // True when viewing node/pod/event/job detail
 	detailScrollOffset  int                    // Scroll offset for detail view content
 	selectedNode        *model.NodeData        // Currently selected node for detail view
@@ -155,6 +156,7 @@ type Model struct {
 	volcanoJobPodSelectedIndex int  // Selected pod index in volcano job detail view
 	fromJobDetail              bool // True when navigating from job detail to pod detail
 	fromVolcanoJobDetail       bool // True when navigating from volcano job detail to pod detail
+	fromNetworkView            bool // True when navigating from network view to service detail
 
 	// Filter state
 	filterMode      bool   // True when in filter mode

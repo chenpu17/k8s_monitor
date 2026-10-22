@@ -55,9 +55,20 @@ func (m *Model) networkContentLines() []string {
 
 	// Services and Endpoints
 	if len(m.clusterData.Services) > 0 {
+		base := len(allLines)
 		servicesLines := strings.Split(m.renderServices(), "\n")
 		allLines = append(allLines, servicesLines...)
 		allLines = append(allLines, "")
+
+		// The table prints its stats header, a blank line and the column header
+		// before the first data row; report the document line of every service
+		// row so Update's selection-follow can bring the selection into view.
+		m.networkServiceLines = make([]int, len(m.clusterData.Services))
+		for i := range m.networkServiceLines {
+			m.networkServiceLines[i] = base + 3 + i
+		}
+	} else {
+		m.networkServiceLines = nil
 	}
 
 	// Pod Network Information
@@ -125,6 +136,37 @@ func (m *Model) renderNetworkHeader() string {
 	)
 }
 
+// networkScrollToSelection adjusts the document scroll offset so the selected
+// service row stays inside the visible window. It shares the visible-line
+// arithmetic with scrollWindow, so the row it brings in is the row the renderer
+// shows. Without reported geometry (nothing rendered yet) it is a no-op.
+func (m *Model) networkScrollToSelection() {
+	total := len(m.networkContentLines())
+	if m.selectedIndex < 0 || m.selectedIndex >= len(m.networkServiceLines) {
+		return
+	}
+	line := m.networkServiceLines[m.selectedIndex]
+	visible := visibleLines(total, m.contentBudget(), scrollIndicatorLines)
+	if line < m.scrollOffset {
+		m.scrollOffset = line
+	} else if line >= m.scrollOffset+visible {
+		m.scrollOffset = line - visible + 1
+	}
+	m.scrollOffset = max(0, min(m.scrollOffset, maxScrollOffset(total, m.contentBudget(), scrollIndicatorLines)))
+}
+
+// sortedNetworkServices returns the services in the order the network view's
+// table renders them (endpoint-less first). Enter navigation must index into
+// the same order the user sees, so both paths share this helper.
+func (m *Model) sortedNetworkServices() []*model.ServiceData {
+	sortedServices := make([]*model.ServiceData, len(m.clusterData.Services))
+	copy(sortedServices, m.clusterData.Services)
+	sort.Slice(sortedServices, func(i, j int) bool {
+		return sortedServices[i].EndpointCount < sortedServices[j].EndpointCount
+	})
+	return sortedServices
+}
+
 // renderServices renders services and their endpoints
 func (m *Model) renderServices() string {
 	var rows []string
@@ -183,14 +225,11 @@ func (m *Model) renderServices() string {
 	)
 	rows = append(rows, StyleTextMuted.Render(headerRow))
 
-	// Sort services: without endpoints first (they need attention) - O(n log n)
-	sortedServices := make([]*model.ServiceData, len(m.clusterData.Services))
-	copy(sortedServices, m.clusterData.Services)
-	sort.Slice(sortedServices, func(i, j int) bool {
-		return sortedServices[i].EndpointCount < sortedServices[j].EndpointCount
-	})
+	// Sort services: without endpoints first (they need attention), in the same
+	// order Enter navigation indexes into.
+	sortedServices := m.sortedNetworkServices()
 
-	for _, svc := range sortedServices {
+	for idx, svc := range sortedServices {
 		// Format ports with better truncation
 		var portStrs []string
 		for i, port := range svc.Ports {
@@ -228,6 +267,10 @@ func (m *Model) renderServices() string {
 			padRight(endpointsStr, colEndpoints),
 			padRight(statusStr, colStatus),
 		)
+		// Highlight the selected row (render-order index, like the workload lists)
+		if idx == m.selectedIndex {
+			row = StyleSelected.Render("> " + row)
+		}
 		rows = append(rows, row)
 	}
 

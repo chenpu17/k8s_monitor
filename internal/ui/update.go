@@ -348,6 +348,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.detailMode = true
 						m.detailScrollOffset = 0 // Reset scroll when entering detail
 					}
+				case ViewNetwork:
+					// Mirror the order the network table renders (endpoint-less first).
+					services := m.sortedNetworkServices()
+					if m.selectedIndex < len(services) {
+						m.selectedService = services[m.selectedIndex]
+						m.currentView = ViewServiceDetail
+						m.detailMode = true
+						m.detailScrollOffset = 0
+						m.fromNetworkView = true
+					}
 				case ViewWorkloads:
 					// Determine which workload section contains the selected index
 					currentItemIndex := 0
@@ -530,6 +540,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.detailScrollOffset = 0
 					m.selectedPod = nil
 					// Keep m.selectedVolcanoJob intact
+					return m, nil
+				}
+
+				// Special handling for navigating back from Service detail to Network view
+				if m.currentView == ViewServiceDetail && m.fromNetworkView {
+					m.currentView = ViewNetwork
+					m.fromNetworkView = false
+					m.detailMode = false
+					m.detailScrollOffset = 0
+					m.selectedService = nil
+					// Keep m.scrollOffset and m.selectedIndex intact
 					return m, nil
 				}
 
@@ -827,6 +848,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.detailScrollBy(-1)
 				return m, nil
 			}
+			// Network view moves a selection across the service table rows when it
+			// has services; without services it falls through to line-based
+			// scrolling so the header and pod-network sections stay reachable.
+			if m.currentView == ViewNetwork && m.clusterData != nil && len(m.clusterData.Services) > 0 {
+				if m.selectedIndex > 0 {
+					m.selectedIndex--
+					m.networkScrollToSelection()
+				}
+				return m, nil
+			}
 			// Overview and Network views use line-based scrolling
 			if m.scrollLineViewBy(-1) {
 				return m, nil
@@ -930,6 +961,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// Scroll down in detail view
 				m.detailScrollBy(1)
+				return m, nil
+			}
+			// Network view moves a selection across the service table rows when it
+			// has services; without services it falls through to line-based
+			// scrolling so the header and pod-network sections stay reachable.
+			if m.currentView == ViewNetwork && m.clusterData != nil && len(m.clusterData.Services) > 0 {
+				if m.selectedIndex < m.getMaxIndex()-1 {
+					m.selectedIndex++
+					m.networkScrollToSelection()
+				}
 				return m, nil
 			}
 			// Overview and Network views use line-based scrolling
