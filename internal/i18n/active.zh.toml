@@ -851,6 +851,26 @@ other = "镜像"
 [detail.pod.state]
 other = "状态"
 
+[detail.pod.usage]
+other = "用量"
+
+[detail.pod.resources]
+other = "资源"
+
+# 容器级紧凑速率行。RX/TX 与箭头为技术记号保留（箭头）;接收/发送/总计按
+# bundle 既有译法（detail.node.rx/tx/total、detail.pod.network_rx_label 同源）。
+[detail.pod.network_rates]
+other = "    接收 ↓: {{.Rx}}  •  发送 ↑: {{.Tx}}  •  总计: {{.Total}}"
+
+[detail.pod.restarts_info]
+other = "（重启次数：{{.Count}}）"
+
+# 紧凑内存标签,用量行（Mem: ...）与资源行（Mem: req=... limit=...）共用。
+# 与 detail.field.memory 同步翻译;并行的 CPU 标签保留硬编码——CPU 为技术
+# 记号,zh 值与 en 逐字节相同,键化无收益。
+[detail.pod.mem_label]
+other = "内存"
+
 # 节点详情视图
 [detail.node.no_selected]
 other = "未选择节点"
@@ -909,6 +929,37 @@ other = "本节点上没有运行中的 Pod"
 [detail.node.more_pods]
 other = "... 还有 {{.Count}} 个 Pod"
 
+# 事件详情视图
+[detail.event.no_selected]
+other = "未选择事件"
+
+[detail.event.title]
+other = "⚡ 事件：{{.Reason}}"
+
+[detail.event.basic_info]
+other = "📋 基本信息"
+
+[detail.event.type]
+other = "类型"
+
+[detail.event.involved_object]
+other = "涉及对象"
+
+[detail.event.count]
+other = "次数"
+
+[detail.event.timing_info]
+other = "🕐 时间信息"
+
+[detail.event.first_seen]
+other = "首次出现"
+
+[detail.event.last_seen]
+other = "最近出现"
+
+[detail.event.last_occurrence]
+other = "最近发生"
+
 # 详情视图通用
 [detail.scroll_indicator]
 other = "[第 {{.Start}}-{{.End}} 行，共 {{.Total}} 行]（↑/↓ 滚动，PgUp/PgDn 翻页）"
@@ -917,6 +968,11 @@ other = "[第 {{.Start}}-{{.End}} 行，共 {{.Total}} 行]（↑/↓ 滚动，P
 # 与上面的长值分开成独立键：长值已被已迁移的 pod/node/job/volcanojob 详情视图锁定。
 [detail.scroll_indicator_short]
 other = "[第 {{.Start}}-{{.End}} 行，共 {{.Total}} 行]（↑/↓ 滚动）"
+
+# 第三变体:pvc/pv 详情视图渲染的（查看第 N 行）前缀行,不带方括号表头,
+# 与上面两个变体字节不同,故独立成键。
+[detail.scroll_indicator_viewing]
+other = "（查看第 {{.Start}}-{{.End}} 行，共 {{.Total}} 行，↑↓ 或 PgUp/PgDn 滚动）"
 
 [detail.field.name]
 other = "名称"
@@ -959,6 +1015,14 @@ other = "角色"
 
 [detail.field.npu]
 other = "NPU"
+
+# pod 容器信息与事件基本信息共用（同批迁移、en 值逐字节相同）:
+# 每个标签一个键,避免两文件文案漂移。
+[detail.field.reason]
+other = "原因"
+
+[detail.field.message]
+other = "消息"
 
 # ============================================================================
 # 网络视图 - Pod 网络部分
@@ -1209,6 +1273,23 @@ other = "Esc 返回"
 other = "输入名称即时筛选（不区分大小写）"
 
 # ============================================================================
+# 存储详情共用键（PV / PVC）
+# 两个存储视图为模板同构:英文字节相同的字面量共用一个 detail.storage.* 键,
+# 避免两文件文案漂移。
+# ============================================================================
+[detail.storage.labels_header]
+other = "🏷️  标签"
+
+[detail.storage.annotations_header]
+other = "📝 注解"
+
+[detail.storage.more_annotations]
+other = "  ... 还有 {{.Count}} 条"
+
+[detail.storage.created_ago]
+other = "（{{.Duration}} 前）"
+
+# ============================================================================
 # PV 详情视图
 # ============================================================================
 [detail.pv.no_selected]
@@ -1252,6 +1333,9 @@ other = "类型"
 
 [detail.pv.lifecycle]
 other = "📅 生命周期"
+
+[detail.pv.none]
+other = "<无>"
 
 # ============================================================================
 # PVC 详情视图
@@ -1303,6 +1387,12 @@ other = "请求"
 
 [detail.pvc.lifecycle]
 other = "📅 生命周期"
+
+[detail.pvc.used]
+other = "已用"
+
+[detail.pvc.storage_config]
+other = "⚙️  存储配置"
 
 # ============================================================================
 # NPU（昇腾 AI 加速器）相关

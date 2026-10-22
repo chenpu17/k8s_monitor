@@ -44,7 +44,7 @@ func (m *Model) renderPVDetail() string {
 	if pv.StorageClass != "" {
 		lines = append(lines, fmt.Sprintf("  %s: %s", m.T("detail.pv.storageclass"), StyleHighlight.Render(pv.StorageClass)))
 	} else {
-		lines = append(lines, fmt.Sprintf("  %s: %s", m.T("detail.pv.storageclass"), StyleTextMuted.Render("<none>")))
+		lines = append(lines, fmt.Sprintf("  %s: %s", m.T("detail.pv.storageclass"), StyleTextMuted.Render(m.T("detail.pv.none"))))
 	}
 
 	// Reclaim Policy
@@ -78,7 +78,7 @@ func (m *Model) renderPVDetail() string {
 	// Labels Section
 	if len(pv.Labels) > 0 {
 		lines = append(lines, "")
-		lines = append(lines, StyleSubHeader.Render("🏷️  Labels"))
+		lines = append(lines, StyleSubHeader.Render(m.T("detail.storage.labels_header")))
 		lines = append(lines, renderSeparator(m.width))
 		for _, key := range sortedKeys(pv.Labels) {
 			value := pv.Labels[key]
@@ -93,13 +93,15 @@ func (m *Model) renderPVDetail() string {
 	// Annotations Section (show only if present and not too many)
 	if len(pv.Annotations) > 0 && len(pv.Annotations) < 10 {
 		lines = append(lines, "")
-		lines = append(lines, StyleSubHeader.Render("📝 Annotations"))
+		lines = append(lines, StyleSubHeader.Render(m.T("detail.storage.annotations_header")))
 		lines = append(lines, renderSeparator(m.width))
 		count := 0
 		for _, key := range sortedKeys(pv.Annotations) {
 			value := pv.Annotations[key]
 			if count >= 5 {
-				lines = append(lines, StyleTextMuted.Render(fmt.Sprintf("  ... and %d more", len(pv.Annotations)-5)))
+				lines = append(lines, StyleTextMuted.Render(m.TF("detail.storage.more_annotations", map[string]interface{}{
+					"Count": len(pv.Annotations) - 5,
+				})))
 				break
 			}
 			if len(key)+len(value) > 70 {
@@ -115,10 +117,12 @@ func (m *Model) renderPVDetail() string {
 	lines = append(lines, "")
 	lines = append(lines, StyleSubHeader.Render(m.T("detail.pv.lifecycle")))
 	lines = append(lines, renderSeparator(m.width))
-	lines = append(lines, fmt.Sprintf("  %s: %s (%s ago)",
+	lines = append(lines, fmt.Sprintf("  %s: %s %s",
 		m.T("detail.created"),
 		pv.CreationTimestamp.Format("2006-01-02 15:04:05"),
-		formatDuration(time.Since(pv.CreationTimestamp))))
+		m.TF("detail.storage.created_ago", map[string]interface{}{
+			"Duration": formatDuration(time.Since(pv.CreationTimestamp)),
+		})))
 
 	// Handle scrolling for detail view
 	maxVisible := m.height - 10
@@ -149,8 +153,11 @@ func (m *Model) renderPVDetail() string {
 
 	// Add scroll indicator
 	if len(lines) > maxVisible {
-		scrollInfo := fmt.Sprintf("(viewing %d-%d of %d lines, use ↑↓ or PgUp/PgDn to scroll)",
-			startIdx+1, endIdx, len(lines))
+		scrollInfo := m.TF("detail.scroll_indicator_viewing", map[string]interface{}{
+			"Start": startIdx + 1,
+			"End":   endIdx,
+			"Total": len(lines),
+		})
 		visibleLines = append(visibleLines, "")
 		visibleLines = append(visibleLines, StyleTextMuted.Render(scrollInfo))
 	}

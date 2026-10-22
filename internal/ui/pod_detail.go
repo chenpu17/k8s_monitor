@@ -142,10 +142,11 @@ func (m *Model) renderPodBasicInfo(pod *model.PodData) string {
 			txRate := m.calculatePodNetworkTxRate(pod.Namespace, pod.Name)
 			totalRate := rxRate + txRate
 
-			info = append(info, fmt.Sprintf("    RX ↓: %s  •  TX ↑: %s  •  Total: %s",
-				formatNetworkRate(rxRate),
-				formatNetworkRate(txRate),
-				formatNetworkRate(totalRate)))
+			info = append(info, m.TF("detail.pod.network_rates", map[string]interface{}{
+				"Rx":    formatNetworkRate(rxRate),
+				"Tx":    formatNetworkRate(txRate),
+				"Total": formatNetworkRate(totalRate),
+			}))
 		}
 	}
 
@@ -238,15 +239,17 @@ func (m *Model) renderPodContainerInfo(pod *model.PodData) string {
 			image))
 
 		// Container status
-		info = append(info, fmt.Sprintf("      %s: %s (restarts: %d)",
+		info = append(info, fmt.Sprintf("      %s: %s %s",
 			StyleTextSecondary.Render(m.T("detail.pod.state")),
 			container.State,
-			container.RestartCount))
+			m.TF("detail.pod.restarts_info", map[string]interface{}{
+				"Count": container.RestartCount,
+			})))
 
 		// Show reason and message if available
 		if container.Reason != "" {
 			info = append(info, fmt.Sprintf("      %s: %s",
-				StyleTextSecondary.Render("Reason"),
+				StyleTextSecondary.Render(m.T("detail.field.reason")),
 				container.Reason))
 		}
 
@@ -256,14 +259,14 @@ func (m *Model) renderPodContainerInfo(pod *model.PodData) string {
 				msg = msg[:67] + "..."
 			}
 			info = append(info, fmt.Sprintf("      %s: %s",
-				StyleTextSecondary.Render("Message"),
+				StyleTextSecondary.Render(m.T("detail.field.message")),
 				msg))
 		}
 
 		// Resource usage (from kubelet metrics)
 		if container.CPUUsage > 0 || container.MemoryUsage > 0 {
 			info = append(info, fmt.Sprintf("      %s:",
-				StyleTextSecondary.Render("Usage")))
+				StyleTextSecondary.Render(m.T("detail.pod.usage"))))
 
 			if container.CPUUsage > 0 {
 				cpuUsage := FormatMillicores(container.CPUUsage)
@@ -281,7 +284,7 @@ func (m *Model) renderPodContainerInfo(pod *model.PodData) string {
 
 			if container.MemoryUsage > 0 {
 				memUsage := FormatBytes(container.MemoryUsage)
-				memLine := fmt.Sprintf("        Mem: %s", StyleWarning.Render(memUsage))
+				memLine := fmt.Sprintf("        %s: %s", m.T("detail.pod.mem_label"), StyleWarning.Render(memUsage))
 				if container.MemoryLimit > 0 {
 					memPercent := float64(container.MemoryUsage) / float64(container.MemoryLimit) * 100
 					memLine += fmt.Sprintf(" / %s (%s)",
@@ -300,7 +303,7 @@ func (m *Model) renderPodContainerInfo(pod *model.PodData) string {
 				container.MemoryRequest > 0 || container.MemoryLimit > 0) {
 
 			info = append(info, fmt.Sprintf("      %s:",
-				StyleTextSecondary.Render("Resources")))
+				StyleTextSecondary.Render(m.T("detail.pod.resources"))))
 
 			if container.CPURequest > 0 || container.CPULimit > 0 {
 				cpuLine := "        CPU:"
@@ -317,7 +320,7 @@ func (m *Model) renderPodContainerInfo(pod *model.PodData) string {
 			}
 
 			if container.MemoryRequest > 0 || container.MemoryLimit > 0 {
-				memLine := "        Mem:"
+				memLine := fmt.Sprintf("        %s:", m.T("detail.pod.mem_label"))
 				if container.MemoryRequest > 0 {
 					memLine += fmt.Sprintf(" req=%s", FormatBytes(container.MemoryRequest))
 				}

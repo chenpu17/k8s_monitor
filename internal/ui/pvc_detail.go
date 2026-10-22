@@ -65,14 +65,15 @@ func (m *Model) renderPVCDetail() string {
 	// Used (if available)
 	if pvc.UsedBytes > 0 {
 		usagePercent := float64(pvc.UsedBytes) / float64(pvc.Capacity) * 100
-		lines = append(lines, fmt.Sprintf("  Used: %s (%.1f%%)",
+		lines = append(lines, fmt.Sprintf("  %s: %s (%.1f%%)",
+			m.T("detail.pvc.used"),
 			StyleWarning.Render(formatMemory(pvc.UsedBytes)),
 			usagePercent))
 	}
 
 	// Storage Configuration
 	lines = append(lines, "")
-	lines = append(lines, StyleSubHeader.Render("⚙️  Storage Configuration"))
+	lines = append(lines, StyleSubHeader.Render(m.T("detail.pvc.storage_config")))
 	lines = append(lines, renderSeparator(m.width))
 
 	// StorageClass
@@ -95,7 +96,7 @@ func (m *Model) renderPVCDetail() string {
 	// Labels Section
 	if len(pvc.Labels) > 0 {
 		lines = append(lines, "")
-		lines = append(lines, StyleSubHeader.Render("🏷️  Labels"))
+		lines = append(lines, StyleSubHeader.Render(m.T("detail.storage.labels_header")))
 		lines = append(lines, renderSeparator(m.width))
 		for _, key := range sortedKeys(pvc.Labels) {
 			value := pvc.Labels[key]
@@ -110,13 +111,15 @@ func (m *Model) renderPVCDetail() string {
 	// Annotations Section (show only if present and not too many)
 	if len(pvc.Annotations) > 0 && len(pvc.Annotations) < 10 {
 		lines = append(lines, "")
-		lines = append(lines, StyleSubHeader.Render("📝 Annotations"))
+		lines = append(lines, StyleSubHeader.Render(m.T("detail.storage.annotations_header")))
 		lines = append(lines, renderSeparator(m.width))
 		count := 0
 		for _, key := range sortedKeys(pvc.Annotations) {
 			value := pvc.Annotations[key]
 			if count >= 5 {
-				lines = append(lines, StyleTextMuted.Render(fmt.Sprintf("  ... and %d more", len(pvc.Annotations)-5)))
+				lines = append(lines, StyleTextMuted.Render(m.TF("detail.storage.more_annotations", map[string]interface{}{
+					"Count": len(pvc.Annotations) - 5,
+				})))
 				break
 			}
 			if len(key)+len(value) > 70 {
@@ -132,10 +135,12 @@ func (m *Model) renderPVCDetail() string {
 	lines = append(lines, "")
 	lines = append(lines, StyleSubHeader.Render(m.T("detail.pvc.lifecycle")))
 	lines = append(lines, renderSeparator(m.width))
-	lines = append(lines, fmt.Sprintf("  %s: %s (%s ago)",
+	lines = append(lines, fmt.Sprintf("  %s: %s %s",
 		m.T("detail.created"),
 		pvc.CreationTimestamp.Format("2006-01-02 15:04:05"),
-		formatDuration(time.Since(pvc.CreationTimestamp))))
+		m.TF("detail.storage.created_ago", map[string]interface{}{
+			"Duration": formatDuration(time.Since(pvc.CreationTimestamp)),
+		})))
 
 	// Handle scrolling for detail view
 	maxVisible := m.height - 10
@@ -166,8 +171,11 @@ func (m *Model) renderPVCDetail() string {
 
 	// Add scroll indicator
 	if len(lines) > maxVisible {
-		scrollInfo := fmt.Sprintf("(viewing %d-%d of %d lines, use ↑↓ or PgUp/PgDn to scroll)",
-			startIdx+1, endIdx, len(lines))
+		scrollInfo := m.TF("detail.scroll_indicator_viewing", map[string]interface{}{
+			"Start": startIdx + 1,
+			"End":   endIdx,
+			"Total": len(lines),
+		})
 		visibleLines = append(visibleLines, "")
 		visibleLines = append(visibleLines, StyleTextMuted.Render(scrollInfo))
 	}

@@ -857,6 +857,27 @@ other = "Image"
 [detail.pod.state]
 other = "State"
 
+[detail.pod.usage]
+other = "Usage"
+
+[detail.pod.resources]
+other = "Resources"
+
+# Compact per-container network rate line. RX/TX and the arrows are technical
+# notation kept in both locales; "Total" translates (see detail.node.total).
+[detail.pod.network_rates]
+other = "    RX ↓: {{.Rx}}  •  TX ↑: {{.Tx}}  •  Total: {{.Total}}"
+
+[detail.pod.restarts_info]
+other = "(restarts: {{.Count}})"
+
+# Compact memory label used by the usage line ("Mem: ...") and the resources
+# line ("Mem: req=... limit=..."). Translates like detail.field.memory; the
+# parallel CPU labels stay hardcoded because CPU is a technical token whose
+# Chinese value is identical.
+[detail.pod.mem_label]
+other = "Mem"
+
 # Node Detail View
 [detail.node.no_selected]
 other = "No node selected"
@@ -915,6 +936,37 @@ other = "No pods running on this node"
 [detail.node.more_pods]
 other = "... and {{.Count}} more pods"
 
+# Event Detail View
+[detail.event.no_selected]
+other = "No event selected"
+
+[detail.event.title]
+other = "⚡ Event: {{.Reason}}"
+
+[detail.event.basic_info]
+other = "📋 Basic Information"
+
+[detail.event.type]
+other = "Type"
+
+[detail.event.involved_object]
+other = "Involved Object"
+
+[detail.event.count]
+other = "Count"
+
+[detail.event.timing_info]
+other = "🕐 Timing Information"
+
+[detail.event.first_seen]
+other = "First Seen"
+
+[detail.event.last_seen]
+other = "Last Seen"
+
+[detail.event.last_occurrence]
+other = "Last Occurrence"
+
 # Common Detail View
 [detail.scroll_indicator]
 other = "[Lines {{.Start}}-{{.End}} of {{.Total}}] (↑/↓ to scroll, PgUp/PgDn for page)"
@@ -924,6 +976,12 @@ other = "[Lines {{.Start}}-{{.End}} of {{.Total}}] (↑/↓ to scroll, PgUp/PgDn
 # already-migrated pod/node/job/volcanojob detail views.
 [detail.scroll_indicator_short]
 other = "[Lines {{.Start}}-{{.End}} of {{.Total}}] (↑/↓ to scroll)"
+
+# Third variant, rendered by the pvc/pv detail views: a "(viewing ...)" prefix
+# line without the bracketed header. Byte-distinct from both variants above,
+# hence its own key.
+[detail.scroll_indicator_viewing]
+other = "(viewing {{.Start}}-{{.End}} of {{.Total}} lines, use ↑↓ or PgUp/PgDn to scroll)"
 
 [detail.field.name]
 other = "Name"
@@ -966,6 +1024,14 @@ other = "Roles"
 
 [detail.field.npu]
 other = "NPU"
+
+# Shared by the pod container info and the event basic info (same batch, same
+# byte-identical literals): one key per label so the wording cannot drift.
+[detail.field.reason]
+other = "Reason"
+
+[detail.field.message]
+other = "Message"
 
 # ============================================================================
 # Network View - Pod Network Section
@@ -1216,6 +1282,24 @@ other = "Esc back"
 other = "Type to filter by name instantly (case-insensitive)"
 
 # ============================================================================
+# Storage Detail Shared Keys (PV / PVC)
+# The two storage views are template siblings: literals whose English value is
+# byte-identical in both files share one detail.storage.* key, so the wording
+# cannot drift between them.
+# ============================================================================
+[detail.storage.labels_header]
+other = "🏷️  Labels"
+
+[detail.storage.annotations_header]
+other = "📝 Annotations"
+
+[detail.storage.more_annotations]
+other = "  ... and {{.Count}} more"
+
+[detail.storage.created_ago]
+other = "({{.Duration}} ago)"
+
+# ============================================================================
 # PV Detail View
 # ============================================================================
 [detail.pv.no_selected]
@@ -1259,6 +1343,9 @@ other = "Type"
 
 [detail.pv.lifecycle]
 other = "📅 Lifecycle"
+
+[detail.pv.none]
+other = "<none>"
 
 # ============================================================================
 # PVC Detail View
@@ -1310,6 +1397,12 @@ other = "Requested"
 
 [detail.pvc.lifecycle]
 other = "📅 Lifecycle"
+
+[detail.pvc.used]
+other = "Used"
+
+[detail.pvc.storage_config]
+other = "⚙️  Storage Configuration"
 
 # ============================================================================
 # NPU (Ascend AI Accelerator) Related

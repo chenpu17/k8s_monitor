@@ -11,7 +11,7 @@ import (
 // renderEventDetail renders the event detail view
 func (m *Model) renderEventDetail() string {
 	if m.selectedEvent == nil {
-		return "No event selected"
+		return m.T("detail.event.no_selected")
 	}
 
 	event := m.selectedEvent
@@ -71,8 +71,11 @@ func (m *Model) renderEventDetail() string {
 
 	// Add scroll indicator if needed
 	if totalLines > maxVisible {
-		scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n[Lines %d-%d of %d] (↑/↓ to scroll, PgUp/PgDn for page)",
-			startIdx+1, endIdx, totalLines))
+		scrollInfo := StyleTextMuted.Render("\n" + m.TF("detail.scroll_indicator", map[string]interface{}{
+			"Start": startIdx + 1,
+			"End":   endIdx,
+			"Total": totalLines,
+		}))
 		visibleLines = append(visibleLines, scrollInfo)
 	}
 
@@ -81,7 +84,9 @@ func (m *Model) renderEventDetail() string {
 
 // renderEventDetailHeader renders the event detail view header
 func (m *Model) renderEventDetailHeader(event *model.EventData) string {
-	title := StyleHeader.Render(fmt.Sprintf("⚡ Event: %s", event.Reason))
+	title := StyleHeader.Render(m.TF("detail.event.title", map[string]interface{}{
+		"Reason": event.Reason,
+	}))
 
 	// Event type with color
 	eventType := event.Type
@@ -103,34 +108,34 @@ func (m *Model) renderEventDetailHeader(event *model.EventData) string {
 func (m *Model) renderEventBasicInfo(event *model.EventData) string {
 	var info []string
 
-	info = append(info, StyleHeader.Render("📋 Basic Information"))
+	info = append(info, StyleHeader.Render(m.T("detail.event.basic_info")))
 	info = append(info, "")
 
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Type"),
+		StyleTextSecondary.Render(m.T("detail.event.type")),
 		event.Type))
 
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Reason"),
+		StyleTextSecondary.Render(m.T("detail.field.reason")),
 		event.Reason))
 
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Involved Object"),
+		StyleTextSecondary.Render(m.T("detail.event.involved_object")),
 		event.InvolvedObject))
 
 	if event.InvolvedNamespace != "" {
 		info = append(info, fmt.Sprintf("  %s: %s",
-			StyleTextSecondary.Render("Namespace"),
+			StyleTextSecondary.Render(m.T("detail.namespace")),
 			event.InvolvedNamespace))
 	}
 
 	info = append(info, fmt.Sprintf("  %s: %d",
-		StyleTextSecondary.Render("Count"),
+		StyleTextSecondary.Render(m.T("detail.event.count")),
 		event.Count))
 
 	info = append(info, "")
 	info = append(info, fmt.Sprintf("  %s:",
-		StyleTextSecondary.Render("Message")))
+		StyleTextSecondary.Render(m.T("detail.field.message"))))
 
 	// Word wrap the message
 	messageLines := wrapText(event.Message, 70)
@@ -145,21 +150,21 @@ func (m *Model) renderEventBasicInfo(event *model.EventData) string {
 func (m *Model) renderEventTimingInfo(event *model.EventData) string {
 	var info []string
 
-	info = append(info, StyleHeader.Render("🕐 Timing Information"))
+	info = append(info, StyleHeader.Render(m.T("detail.event.timing_info")))
 	info = append(info, "")
 
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("First Seen"),
+		StyleTextSecondary.Render(m.T("detail.event.first_seen")),
 		event.FirstTimestamp.Format("2006-01-02 15:04:05")))
 
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Last Seen"),
+		StyleTextSecondary.Render(m.T("detail.event.last_seen")),
 		event.LastTimestamp.Format("2006-01-02 15:04:05")))
 
 	// Calculate time since last occurrence
 	timeSince := event.LastTimestamp.Local().Format("2006-01-02 15:04:05")
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Last Occurrence"),
+		StyleTextSecondary.Render(m.T("detail.event.last_occurrence")),
 		timeSince))
 
 	return strings.Join(info, "\n")
