@@ -173,11 +173,11 @@ func (m *Model) renderCronJobStatus(cj *model.CronJobData) string {
 func (m *Model) renderCronJobSelector(cj *model.CronJobData) string {
 	var info []string
 
-	info = append(info, StyleSubHeader.Render(m.T("detail.cronjob.labels_header")))
+	info = append(info, StyleSubHeader.Render(m.T("detail.workload.labels_header")))
 	info = append(info, "")
 
 	if len(cj.Labels) == 0 {
-		info = append(info, StyleTextMuted.Render(m.T("detail.cronjob.no_labels")))
+		info = append(info, StyleTextMuted.Render(m.T("detail.workload.no_labels")))
 	} else {
 		for _, key := range sortedKeys(cj.Labels) {
 			value := cj.Labels[key]

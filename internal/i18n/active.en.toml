@@ -553,6 +553,85 @@ other = "No PVs"
 [overview.panel_no_pvcs]
 other = "No PVCs"
 
+# Pods / Nodes / Events panels of the overview resource row. Headers carry
+# their emoji; row labels are bare and padded by the renderers with padRight.
+[overview.panel_pods]
+other = "[📦 Pods]"
+
+[overview.panel_nodes]
+other = "[💻 Nodes]"
+
+[overview.panel_events]
+other = "[📋 Events]"
+
+[overview.nodes_ready]
+other = "Ready:"
+
+[overview.nodes_notready]
+other = "NotReady:"
+
+[overview.events_warning]
+other = "Warning:"
+
+[overview.events_error]
+other = "Error:"
+
+# NPU panel: the header and value formats keep technical jargon (NPU, the
+# chip model) untranslated in both locales on purpose. Row labels are bare
+# and padded with padRight to the historical column widths.
+[overview.panel_npu]
+other = "🧮 NPU"
+
+[overview.npu_alloc]
+other = "Alloc:"
+
+[overview.npu_usage]
+other = "Usage:"
+
+[overview.npu_eff]
+other = "Eff:"
+
+[overview.npu_sched]
+other = "Sched:"
+
+[overview.npu_trend]
+other = "Trend:"
+
+[overview.npu_chip]
+other = "Chip:"
+
+[overview.npu_superpod_nodes]
+other = "Pods: {{.Count}} nodes"
+
+[overview.npu_deploy_collector]
+other = "Deploy collector"
+
+[overview.npu_chip_metrics_hint]
+other = "for chip metrics"
+
+[overview.npu_no_nodes]
+other = "No NPU nodes"
+
+# Volcano panel: the header stays untranslated (product name). Row labels are
+# bare and padded with padRight to the historical column widths.
+[overview.panel_volcano]
+other = "🌋 Volcano"
+
+[overview.volcano_not_available]
+other = "Not available"
+
+[overview.volcano_jobs]
+other = "Jobs:"
+
+[overview.volcano_npu_req]
+other = "NPU Req:"
+
+[overview.volcano_npu_run]
+other = "NPU Run:"
+
+[overview.volcano_queues]
+other = "Queues:"
+
 # ============================================================================
 # Service Detail
 # ============================================================================
@@ -1063,6 +1142,12 @@ other = "Ready"
 # ============================================================================
 # Workloads View - Detailed Sections
 # ============================================================================
+# Shared "(Total: N)" suffix printed after the five workload/services section
+# titles; the two-space separator between title and suffix stays in the
+# renderer so the styled title never flows through the template.
+[workloads.total_count]
+other = "(Total: {{.Count}})"
+
 [workloads.deployments.title]
 other = "Deployments"
 
@@ -1709,12 +1794,6 @@ other = "  {{.Label}}: {{.Value}} ago"
 
 [detail.cronjob.never]
 other = "Never"
-
-[detail.cronjob.labels_header]
-other = "Labels"
-
-[detail.cronjob.no_labels]
-other = "  No labels"
 
 [detail.cronjob.no_job_info]
 other = "  No job information available"

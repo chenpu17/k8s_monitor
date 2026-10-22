@@ -568,7 +568,7 @@ func (m *Model) memoryDetailsLines(summary *model.ClusterSummary) []string {
 
 func (m *Model) podDetailsLines(summary *model.ClusterSummary) []string {
 	return []string{
-		StyleHeader.Render("[📦 Pods]"),
+		StyleHeader.Render(m.T("overview.panel_pods")),
 		"",
 		fmt.Sprintf("%s %s", m.T("overview.capacity"), StyleHighlight.Render(fmt.Sprintf("%d", summary.PodAllocatable))),
 		fmt.Sprintf("%s %s", m.T("overview.running"), StyleStatusRunning.Render(fmt.Sprintf("%d", summary.RunningPods))),
@@ -580,22 +580,22 @@ func (m *Model) podDetailsLines(summary *model.ClusterSummary) []string {
 // renderNodesAndPods renders nodes and pods summary
 func (m *Model) nodesAndPodsLines(summary *model.ClusterSummary) []string {
 	return []string{
-		StyleHeader.Render("[💻 Nodes]"),
+		StyleHeader.Render(m.T("overview.panel_nodes")),
 		"",
-		fmt.Sprintf("Total:    %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalNodes))),
-		fmt.Sprintf("Ready:    %s", StyleStatusReady.Render(fmt.Sprintf("%d", summary.ReadyNodes))),
-		fmt.Sprintf("NotReady: %s", StyleStatusNotReady.Render(fmt.Sprintf("%d", summary.NotReadyNodes))),
+		fmt.Sprintf("%s%s", padRight(m.T("overview.panel_total"), 10), StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalNodes))),
+		fmt.Sprintf("%s%s", padRight(m.T("overview.nodes_ready"), 10), StyleStatusReady.Render(fmt.Sprintf("%d", summary.ReadyNodes))),
+		fmt.Sprintf("%s%s", padRight(m.T("overview.nodes_notready"), 10), StyleStatusNotReady.Render(fmt.Sprintf("%d", summary.NotReadyNodes))),
 	}
 }
 
 // renderEventSummary renders event summary section
 func (m *Model) eventSummaryLines(summary *model.ClusterSummary) []string {
 	return []string{
-		StyleHeader.Render("[📋 Events]"),
+		StyleHeader.Render(m.T("overview.panel_events")),
 		"",
-		fmt.Sprintf("Total:   %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalEvents))),
-		fmt.Sprintf("Warning: %s", StyleWarning.Render(fmt.Sprintf("%d", summary.WarningEvents))),
-		fmt.Sprintf("Error:   %s", StyleDanger.Render(fmt.Sprintf("%d", summary.ErrorEvents))),
+		fmt.Sprintf("%s%s", padRight(m.T("overview.panel_total"), 9), StyleHighlight.Render(fmt.Sprintf("%d", summary.TotalEvents))),
+		fmt.Sprintf("%s%s", padRight(m.T("overview.events_warning"), 9), StyleWarning.Render(fmt.Sprintf("%d", summary.WarningEvents))),
+		fmt.Sprintf("%s%s", padRight(m.T("overview.events_error"), 9), StyleDanger.Render(fmt.Sprintf("%d", summary.ErrorEvents))),
 	}
 }
 
@@ -743,16 +743,16 @@ func (m *Model) workloadsPanelLines(summary *model.ClusterSummary) []string {
 // npuPanelLines generates NPU (Ascend AI accelerator) panel content
 func (m *Model) npuPanelLines(summary *model.ClusterSummary) []string {
 	lines := []string{
-		StyleHeader.Render("🧮 NPU"),
+		StyleHeader.Render(m.T("overview.panel_npu")),
 		"",
 	}
 
 	if summary.NPUCapacity > 0 {
 		// Basic NPU stats
 		lines = append(lines,
-			fmt.Sprintf("Total:   %s", StyleHighlight.Render(fmt.Sprintf("%d", summary.NPUAllocatable))),
-			fmt.Sprintf("Alloc:   %s", StyleStatusRunning.Render(fmt.Sprintf("%d", summary.NPUAllocated))),
-			fmt.Sprintf("Usage:   %s", StyleHighlight.Render(formatPercentage(summary.NPUUtilization))),
+			fmt.Sprintf("%s%s", padRight(m.T("overview.panel_total"), 9), StyleHighlight.Render(fmt.Sprintf("%d", summary.NPUAllocatable))),
+			fmt.Sprintf("%s%s", padRight(m.T("overview.npu_alloc"), 9), StyleStatusRunning.Render(fmt.Sprintf("%d", summary.NPUAllocated))),
+			fmt.Sprintf("%s%s", padRight(m.T("overview.npu_usage"), 9), StyleHighlight.Render(formatPercentage(summary.NPUUtilization))),
 		)
 
 		// Progress bar
@@ -770,7 +770,7 @@ func (m *Model) npuPanelLines(summary *model.ClusterSummary) []string {
 				effStyle = StyleTextMuted
 			}
 			lines = append(lines,
-				fmt.Sprintf("Eff:     %s", effStyle.Render(formatPercentage(npuEfficiency))),
+				fmt.Sprintf("%s%s", padRight(m.T("overview.npu_eff"), 9), effStyle.Render(formatPercentage(npuEfficiency))),
 			)
 
 			// Job scheduling efficiency: Running / (Running + Pending)
@@ -784,7 +784,7 @@ func (m *Model) npuPanelLines(summary *model.ClusterSummary) []string {
 					schedStyle = StyleStatusNotReady
 				}
 				lines = append(lines,
-					fmt.Sprintf("Sched:   %s", schedStyle.Render(fmt.Sprintf("%.0f%% (%d/%d)", schedEfficiency, volcanoSummary.RunningJobs, totalActive))),
+					fmt.Sprintf("%s%s", padRight(m.T("overview.npu_sched"), 9), schedStyle.Render(fmt.Sprintf("%.0f%% (%d/%d)", schedEfficiency, volcanoSummary.RunningJobs, totalActive))),
 				)
 			}
 		}
@@ -795,21 +795,21 @@ func (m *Model) npuPanelLines(summary *model.ClusterSummary) []string {
 			sparkline := RenderSparkline(npuHistory, 14)
 			trend := m.calculateClusterNPUTrend(summary.NPUAllocated)
 			trendIndicator := renderTrendIndicator(trend)
-			lines = append(lines, fmt.Sprintf("Trend: %s %s", sparkline, trendIndicator))
+			lines = append(lines, fmt.Sprintf("%s %s %s", padRight(m.T("overview.npu_trend"), 6), sparkline, trendIndicator))
 		}
 
 		// NPU type info
 		if summary.NPUChipType != "" {
 			lines = append(lines,
 				"",
-				fmt.Sprintf("Chip: %s", StyleTextMuted.Render(summary.NPUChipType)),
+				fmt.Sprintf("%s%s", padRight(m.T("overview.npu_chip"), 6), StyleTextMuted.Render(summary.NPUChipType)),
 			)
 		}
 
 		// Topology info
 		if summary.SuperPodCount > 0 {
 			lines = append(lines,
-				fmt.Sprintf("Pods: %d nodes", summary.NPUNodesCount),
+				m.TF("overview.npu_superpod_nodes", map[string]interface{}{"Count": summary.NPUNodesCount}),
 			)
 		}
 
@@ -825,11 +825,11 @@ func (m *Model) npuPanelLines(summary *model.ClusterSummary) []string {
 		}
 		if !hasDetailedMetrics && summary.NPUNodesCount > 0 {
 			lines = append(lines, "")
-			lines = append(lines, StyleTextMuted.Render("Deploy collector"))
-			lines = append(lines, StyleTextMuted.Render("for chip metrics"))
+			lines = append(lines, StyleTextMuted.Render(m.T("overview.npu_deploy_collector")))
+			lines = append(lines, StyleTextMuted.Render(m.T("overview.npu_chip_metrics_hint")))
 		}
 	} else {
-		lines = append(lines, StyleTextMuted.Render("No NPU nodes"))
+		lines = append(lines, StyleTextMuted.Render(m.T("overview.npu_no_nodes")))
 	}
 
 	return lines
@@ -838,26 +838,26 @@ func (m *Model) npuPanelLines(summary *model.ClusterSummary) []string {
 // volcanoPanelLines generates Volcano scheduler panel content
 func (m *Model) volcanoPanelLines(summary *model.ClusterSummary) []string {
 	lines := []string{
-		StyleHeader.Render("🌋 Volcano"),
+		StyleHeader.Render(m.T("overview.panel_volcano")),
 		"",
 	}
 
 	volcanoSummary := m.clusterData.VolcanoSummary
 	if volcanoSummary == nil {
-		lines = append(lines, StyleTextMuted.Render("Not available"))
+		lines = append(lines, StyleTextMuted.Render(m.T("overview.volcano_not_available")))
 		return lines
 	}
 
 	// Job statistics
 	lines = append(lines,
-		fmt.Sprintf("Jobs:    %s", StyleHighlight.Render(fmt.Sprintf("%d", volcanoSummary.TotalJobs))),
-		fmt.Sprintf("Running: %s", StyleStatusRunning.Render(fmt.Sprintf("%d", volcanoSummary.RunningJobs))),
-		fmt.Sprintf("Pending: %s", StyleStatusPending.Render(fmt.Sprintf("%d", volcanoSummary.PendingJobs))),
+		fmt.Sprintf("%s%s", padRight(m.T("overview.volcano_jobs"), 9), StyleHighlight.Render(fmt.Sprintf("%d", volcanoSummary.TotalJobs))),
+		fmt.Sprintf("%s%s", padRight(m.T("overview.running"), 9), StyleStatusRunning.Render(fmt.Sprintf("%d", volcanoSummary.RunningJobs))),
+		fmt.Sprintf("%s%s", padRight(m.T("overview.pending"), 9), StyleStatusPending.Render(fmt.Sprintf("%d", volcanoSummary.PendingJobs))),
 	)
 
 	if volcanoSummary.FailedJobs > 0 {
 		lines = append(lines,
-			fmt.Sprintf("Failed:  %s", StyleDanger.Render(fmt.Sprintf("%d", volcanoSummary.FailedJobs))),
+			fmt.Sprintf("%s%s", padRight(m.T("overview.failed"), 9), StyleDanger.Render(fmt.Sprintf("%d", volcanoSummary.FailedJobs))),
 		)
 	}
 
@@ -865,8 +865,8 @@ func (m *Model) volcanoPanelLines(summary *model.ClusterSummary) []string {
 	if summary.NPUCapacity > 0 && volcanoSummary.NPURequestedByJobs > 0 {
 		lines = append(lines,
 			"",
-			fmt.Sprintf("NPU Req: %s", StyleHighlight.Render(fmt.Sprintf("%d", volcanoSummary.NPURequestedByJobs))),
-			fmt.Sprintf("NPU Run: %s", StyleStatusRunning.Render(fmt.Sprintf("%d", volcanoSummary.NPURunningByJobs))),
+			fmt.Sprintf("%s%s", padRight(m.T("overview.volcano_npu_req"), 9), StyleHighlight.Render(fmt.Sprintf("%d", volcanoSummary.NPURequestedByJobs))),
+			fmt.Sprintf("%s%s", padRight(m.T("overview.volcano_npu_run"), 9), StyleStatusRunning.Render(fmt.Sprintf("%d", volcanoSummary.NPURunningByJobs))),
 		)
 	}
 
@@ -874,7 +874,7 @@ func (m *Model) volcanoPanelLines(summary *model.ClusterSummary) []string {
 	if volcanoSummary.TotalQueues > 0 {
 		lines = append(lines,
 			"",
-			fmt.Sprintf("Queues:  %s", StyleTextMuted.Render(fmt.Sprintf("%d", volcanoSummary.TotalQueues))),
+			fmt.Sprintf("%s%s", padRight(m.T("overview.volcano_queues"), 9), StyleTextMuted.Render(fmt.Sprintf("%d", volcanoSummary.TotalQueues))),
 		)
 	}
 

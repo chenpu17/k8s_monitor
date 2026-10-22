@@ -530,9 +530,9 @@ func (m *Model) renderServicesList(sectionOffset int) ([]string, int) {
 	totalServices := len(services)
 
 	// Header with stats
-	header := fmt.Sprintf("%s  (Total: %d)",
+	header := fmt.Sprintf("%s  %s",
 		StyleSubHeader.Render(m.T("workloads.services.title")),
-		totalServices,
+		m.TF("workloads.total_count", map[string]interface{}{"Count": totalServices}),
 	)
 	rows = append(rows, header)
 	rows = append(rows, "")
@@ -641,9 +641,9 @@ func (m *Model) renderDeploymentsList(sectionOffset int) ([]string, int) {
 	deployments := m.clusterData.Deployments
 	totalDeployments := len(deployments)
 
-	header := fmt.Sprintf("%s  (Total: %d)",
+	header := fmt.Sprintf("%s  %s",
 		StyleSubHeader.Render(m.T("workloads.deployments.title")),
-		totalDeployments,
+		m.TF("workloads.total_count", map[string]interface{}{"Count": totalDeployments}),
 	)
 	rows = append(rows, header)
 	rows = append(rows, "")
@@ -708,9 +708,9 @@ func (m *Model) renderStatefulSetsList(sectionOffset int) ([]string, int) {
 	statefulsets := m.clusterData.StatefulSets
 	totalStatefulSets := len(statefulsets)
 
-	header := fmt.Sprintf("%s  (Total: %d)",
+	header := fmt.Sprintf("%s  %s",
 		StyleSubHeader.Render(m.T("workloads.statefulsets.title")),
-		totalStatefulSets,
+		m.TF("workloads.total_count", map[string]interface{}{"Count": totalStatefulSets}),
 	)
 	rows = append(rows, header)
 	rows = append(rows, "")
@@ -775,9 +775,9 @@ func (m *Model) renderDaemonSetsList(sectionOffset int) ([]string, int) {
 	daemonsets := m.clusterData.DaemonSets
 	totalDaemonSets := len(daemonsets)
 
-	header := fmt.Sprintf("%s  (Total: %d)",
+	header := fmt.Sprintf("%s  %s",
 		StyleSubHeader.Render(m.T("workloads.daemonsets.title")),
-		totalDaemonSets,
+		m.TF("workloads.total_count", map[string]interface{}{"Count": totalDaemonSets}),
 	)
 	rows = append(rows, header)
 	rows = append(rows, "")
@@ -836,9 +836,9 @@ func (m *Model) renderCronJobsList(sectionOffset int) ([]string, int) {
 	cronjobs := m.clusterData.CronJobs
 	totalCronJobs := len(cronjobs)
 
-	header := fmt.Sprintf("%s  (Total: %d)",
+	header := fmt.Sprintf("%s  %s",
 		StyleSubHeader.Render(m.T("workloads.cronjobs.title")),
-		totalCronJobs,
+		m.TF("workloads.total_count", map[string]interface{}{"Count": totalCronJobs}),
 	)
 	rows = append(rows, header)
 	rows = append(rows, "")

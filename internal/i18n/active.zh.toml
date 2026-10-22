@@ -548,6 +548,84 @@ other = "暂无 PV"
 [overview.panel_no_pvcs]
 other = "暂无 PVC"
 
+# 概览资源行的 Pod/节点/事件面板。表头带 emoji;行标签为裸键,
+# 由渲染端按历史列宽用 padRight 补齐。
+[overview.panel_pods]
+other = "[📦 Pod]"
+
+[overview.panel_nodes]
+other = "[💻 节点]"
+
+[overview.panel_events]
+other = "[📋 事件]"
+
+[overview.nodes_ready]
+other = "就绪："
+
+[overview.nodes_notready]
+other = "未就绪："
+
+[overview.events_warning]
+other = "警告："
+
+[overview.events_error]
+other = "错误："
+
+# NPU 面板:表头与取值格式串在两种语言下都刻意保留技术名词(NPU、芯片型号)。
+# 行标签为裸键,由渲染端按历史列宽用 padRight 补齐。
+[overview.panel_npu]
+other = "🧮 NPU"
+
+[overview.npu_alloc]
+other = "已分配："
+
+[overview.npu_usage]
+other = "使用率："
+
+[overview.npu_eff]
+other = "效率："
+
+[overview.npu_sched]
+other = "调度："
+
+[overview.npu_trend]
+other = "趋势："
+
+[overview.npu_chip]
+other = "芯片："
+
+[overview.npu_superpod_nodes]
+other = "Pods: {{.Count}} 节点"
+
+[overview.npu_deploy_collector]
+other = "部署采集器"
+
+[overview.npu_chip_metrics_hint]
+other = "以获取芯片指标"
+
+[overview.npu_no_nodes]
+other = "无 NPU 节点"
+
+# Volcano 面板:表头保留产品名不译。行标签为裸键,
+# 由渲染端按历史列宽用 padRight 补齐。
+[overview.panel_volcano]
+other = "🌋 Volcano"
+
+[overview.volcano_not_available]
+other = "暂无数据"
+
+[overview.volcano_jobs]
+other = "任务："
+
+[overview.volcano_npu_req]
+other = "NPU 请求："
+
+[overview.volcano_npu_run]
+other = "NPU 运行："
+
+[overview.volcano_queues]
+other = "队列："
+
 # ============================================================================
 # 服务详情
 # ============================================================================
@@ -1054,6 +1132,11 @@ other = "就绪"
 # ============================================================================
 # 工作负载视图 - 详细部分
 # ============================================================================
+# 五个工作负载/服务小节标题后共用的「(共 N 个)」后缀;标题与后缀之间的
+# 两个空格留在渲染端,带样式的标题不进模板。
+[workloads.total_count]
+other = "(共 {{.Count}} 个)"
+
 [workloads.deployments.title]
 other = "部署"
 
@@ -1699,12 +1782,6 @@ other = "  {{.Label}}：{{.Value}} 前"
 
 [detail.cronjob.never]
 other = "从未"
-
-[detail.cronjob.labels_header]
-other = "标签"
-
-[detail.cronjob.no_labels]
-other = "  无标签"
 
 [detail.cronjob.no_job_info]
 other = "  暂无任务信息"
