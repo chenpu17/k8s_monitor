@@ -11,7 +11,7 @@ import (
 // renderDaemonSetDetail renders the daemonset detail view
 func (m *Model) renderDaemonSetDetail() string {
 	if m.selectedDaemonSet == nil {
-		return "No daemonset selected"
+		return m.T("detail.daemonset.no_selected")
 	}
 
 	ds := m.selectedDaemonSet
@@ -74,7 +74,11 @@ func (m *Model) renderDaemonSetDetail() string {
 
 	// Add scroll indicator
 	if totalLines > maxVisible {
-		scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n[Lines %d-%d of %d] (↑/↓ to scroll)", startIdx+1, endIdx, totalLines))
+		scrollInfo := StyleTextMuted.Render("\n" + m.TF("detail.scroll_indicator_short", map[string]interface{}{
+			"Start": startIdx + 1,
+			"End":   endIdx,
+			"Total": totalLines,
+		}))
 		visibleLines = append(visibleLines, scrollInfo)
 	}
 
@@ -85,17 +89,17 @@ func (m *Model) renderDaemonSetDetail() string {
 func (m *Model) renderDaemonSetBasicInfo(ds *model.DaemonSetData) string {
 	var info []string
 
-	info = append(info, StyleHeader.Render(fmt.Sprintf("👾 DaemonSet: %s", ds.Name)))
+	info = append(info, StyleHeader.Render(m.TF("detail.daemonset.title", map[string]interface{}{"Name": ds.Name})))
 	info = append(info, "")
 
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Namespace"),
+		StyleTextSecondary.Render(m.T("detail.namespace")),
 		ds.Namespace))
 
 	// Age
 	age := time.Since(ds.CreationTimestamp)
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Age"),
+		StyleTextSecondary.Render(m.T("detail.age")),
 		formatAge(age)))
 
 	return strings.Join(info, "\n")
@@ -105,12 +109,12 @@ func (m *Model) renderDaemonSetBasicInfo(ds *model.DaemonSetData) string {
 func (m *Model) renderDaemonSetStatus(ds *model.DaemonSetData) string {
 	var info []string
 
-	info = append(info, StyleSubHeader.Render("Status"))
+	info = append(info, StyleSubHeader.Render(m.T("detail.status")))
 	info = append(info, "")
 
 	// Desired number scheduled
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Desired Number Scheduled"),
+		StyleTextSecondary.Render(m.T("detail.daemonset.desired_scheduled")),
 		StyleHighlight.Render(fmt.Sprintf("%d", ds.DesiredNumberScheduled))))
 
 	// Current number scheduled
@@ -121,7 +125,7 @@ func (m *Model) renderDaemonSetStatus(ds *model.DaemonSetData) string {
 		currentStr = StyleStatusPending.Render(currentStr)
 	}
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Current Number Scheduled"),
+		StyleTextSecondary.Render(m.T("detail.daemonset.current_scheduled")),
 		currentStr))
 
 	// Number ready
@@ -134,12 +138,12 @@ func (m *Model) renderDaemonSetStatus(ds *model.DaemonSetData) string {
 		readyStr = StyleStatusPending.Render(readyStr)
 	}
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Number Ready"),
+		StyleTextSecondary.Render(m.T("detail.daemonset.number_ready")),
 		readyStr))
 
 	// Number available
 	info = append(info, fmt.Sprintf("  %s: %d",
-		StyleTextSecondary.Render("Number Available"),
+		StyleTextSecondary.Render(m.T("detail.daemonset.number_available")),
 		ds.NumberAvailable))
 
 	return strings.Join(info, "\n")
@@ -149,11 +153,11 @@ func (m *Model) renderDaemonSetStatus(ds *model.DaemonSetData) string {
 func (m *Model) renderDaemonSetSelector(ds *model.DaemonSetData) string {
 	var info []string
 
-	info = append(info, StyleSubHeader.Render("Selector"))
+	info = append(info, StyleSubHeader.Render(m.T("detail.workload.selector_header")))
 	info = append(info, "")
 
 	if len(ds.Selector) == 0 {
-		info = append(info, StyleTextMuted.Render("  No selector configured"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.workload.no_selector")))
 	} else {
 		for _, key := range sortedKeys(ds.Selector) {
 			value := ds.Selector[key]
@@ -164,11 +168,11 @@ func (m *Model) renderDaemonSetSelector(ds *model.DaemonSetData) string {
 	}
 
 	info = append(info, "")
-	info = append(info, StyleSubHeader.Render("Labels"))
+	info = append(info, StyleSubHeader.Render(m.T("detail.workload.labels_header")))
 	info = append(info, "")
 
 	if len(ds.Labels) == 0 {
-		info = append(info, StyleTextMuted.Render("  No labels"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.workload.no_labels")))
 	} else {
 		for _, key := range sortedKeys(ds.Labels) {
 			value := ds.Labels[key]
@@ -186,17 +190,17 @@ func (m *Model) renderDaemonSetPods(ds *model.DaemonSetData) string {
 	var info []string
 
 	if m.clusterData == nil || len(m.clusterData.Pods) == 0 {
-		info = append(info, StyleSubHeader.Render("Managed Pods"))
+		info = append(info, StyleSubHeader.Render(m.T("detail.workload.managed_pods")))
 		info = append(info, "")
-		info = append(info, StyleTextMuted.Render("  No pod information available"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.workload.no_pod_info")))
 		return strings.Join(info, "\n")
 	}
 
 	// Check if daemonset has a selector
 	if len(ds.Selector) == 0 {
-		info = append(info, StyleSubHeader.Render("Managed Pods"))
+		info = append(info, StyleSubHeader.Render(m.T("detail.workload.managed_pods")))
 		info = append(info, "")
-		info = append(info, StyleTextMuted.Render("  No selector configured (matchLabels is empty)"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.workload.no_selector_matchlabels")))
 		return strings.Join(info, "\n")
 	}
 
@@ -222,11 +226,11 @@ func (m *Model) renderDaemonSetPods(ds *model.DaemonSetData) string {
 		}
 	}
 
-	info = append(info, StyleSubHeader.Render(fmt.Sprintf("Managed Pods (%d)", len(matchingPods))))
+	info = append(info, StyleSubHeader.Render(m.TF("detail.workload.managed_pods_count", map[string]interface{}{"Count": len(matchingPods)})))
 	info = append(info, "")
 
 	if len(matchingPods) == 0 {
-		info = append(info, StyleTextMuted.Render("  No pods match this daemonset selector"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.daemonset.no_matching_pods")))
 		return strings.Join(info, "\n")
 	}
 

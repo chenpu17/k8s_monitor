@@ -11,7 +11,7 @@ import (
 // renderDeploymentDetail renders the deployment detail view
 func (m *Model) renderDeploymentDetail() string {
 	if m.selectedDeployment == nil {
-		return "No deployment selected"
+		return m.T("detail.deployment.no_selected")
 	}
 
 	deploy := m.selectedDeployment
@@ -78,7 +78,11 @@ func (m *Model) renderDeploymentDetail() string {
 
 	// Add scroll indicator
 	if totalLines > maxVisible {
-		scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n[Lines %d-%d of %d] (↑/↓ to scroll)", startIdx+1, endIdx, totalLines))
+		scrollInfo := StyleTextMuted.Render("\n" + m.TF("detail.scroll_indicator_short", map[string]interface{}{
+			"Start": startIdx + 1,
+			"End":   endIdx,
+			"Total": totalLines,
+		}))
 		visibleLines = append(visibleLines, scrollInfo)
 	}
 
@@ -89,17 +93,17 @@ func (m *Model) renderDeploymentDetail() string {
 func (m *Model) renderDeploymentBasicInfo(deploy *model.DeploymentData) string {
 	var info []string
 
-	info = append(info, StyleHeader.Render(fmt.Sprintf("🚀 Deployment: %s", deploy.Name)))
+	info = append(info, StyleHeader.Render(m.TF("detail.deployment.title", map[string]interface{}{"Name": deploy.Name})))
 	info = append(info, "")
 
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Namespace"),
+		StyleTextSecondary.Render(m.T("detail.namespace")),
 		deploy.Namespace))
 
 	// Age
 	age := time.Since(deploy.CreationTimestamp)
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Age"),
+		StyleTextSecondary.Render(m.T("detail.age")),
 		formatAge(age)))
 
 	return strings.Join(info, "\n")
@@ -109,12 +113,12 @@ func (m *Model) renderDeploymentBasicInfo(deploy *model.DeploymentData) string {
 func (m *Model) renderDeploymentReplicaStatus(deploy *model.DeploymentData) string {
 	var info []string
 
-	info = append(info, StyleSubHeader.Render("Replica Status"))
+	info = append(info, StyleSubHeader.Render(m.T("detail.workload.replica_status")))
 	info = append(info, "")
 
 	// Desired replicas
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Desired Replicas"),
+		StyleTextSecondary.Render(m.T("detail.workload.desired_replicas")),
 		StyleHighlight.Render(fmt.Sprintf("%d", deploy.Replicas))))
 
 	// Ready replicas
@@ -127,17 +131,17 @@ func (m *Model) renderDeploymentReplicaStatus(deploy *model.DeploymentData) stri
 		readyStr = StyleStatusPending.Render(readyStr)
 	}
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Ready Replicas"),
+		StyleTextSecondary.Render(m.T("detail.workload.ready_replicas")),
 		readyStr))
 
 	// Updated replicas
 	info = append(info, fmt.Sprintf("  %s: %d",
-		StyleTextSecondary.Render("Updated Replicas"),
+		StyleTextSecondary.Render(m.T("detail.workload.updated_replicas")),
 		deploy.UpdatedReplicas))
 
 	// Available replicas
 	info = append(info, fmt.Sprintf("  %s: %d",
-		StyleTextSecondary.Render("Available Replicas"),
+		StyleTextSecondary.Render(m.T("detail.deployment.available_replicas")),
 		deploy.AvailableReplicas))
 
 	return strings.Join(info, "\n")
@@ -147,7 +151,7 @@ func (m *Model) renderDeploymentReplicaStatus(deploy *model.DeploymentData) stri
 func (m *Model) renderDeploymentStrategy(deploy *model.DeploymentData) string {
 	var info []string
 
-	info = append(info, StyleSubHeader.Render("Deployment Strategy"))
+	info = append(info, StyleSubHeader.Render(m.T("detail.deployment.strategy")))
 	info = append(info, "")
 
 	strategy := deploy.Strategy
@@ -155,7 +159,7 @@ func (m *Model) renderDeploymentStrategy(deploy *model.DeploymentData) string {
 		strategy = "RollingUpdate"
 	}
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Type"),
+		StyleTextSecondary.Render(m.T("detail.deployment.type")),
 		StyleHighlight.Render(strategy)))
 
 	return strings.Join(info, "\n")
@@ -165,11 +169,11 @@ func (m *Model) renderDeploymentStrategy(deploy *model.DeploymentData) string {
 func (m *Model) renderDeploymentSelector(deploy *model.DeploymentData) string {
 	var info []string
 
-	info = append(info, StyleSubHeader.Render("Selector"))
+	info = append(info, StyleSubHeader.Render(m.T("detail.workload.selector_header")))
 	info = append(info, "")
 
 	if len(deploy.Selector) == 0 {
-		info = append(info, StyleTextMuted.Render("  No selector configured"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.workload.no_selector")))
 	} else {
 		for _, key := range sortedKeys(deploy.Selector) {
 			value := deploy.Selector[key]
@@ -180,11 +184,11 @@ func (m *Model) renderDeploymentSelector(deploy *model.DeploymentData) string {
 	}
 
 	info = append(info, "")
-	info = append(info, StyleSubHeader.Render("Labels"))
+	info = append(info, StyleSubHeader.Render(m.T("detail.workload.labels_header")))
 	info = append(info, "")
 
 	if len(deploy.Labels) == 0 {
-		info = append(info, StyleTextMuted.Render("  No labels"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.workload.no_labels")))
 	} else {
 		for _, key := range sortedKeys(deploy.Labels) {
 			value := deploy.Labels[key]
@@ -202,17 +206,17 @@ func (m *Model) renderDeploymentPods(deploy *model.DeploymentData) string {
 	var info []string
 
 	if m.clusterData == nil || len(m.clusterData.Pods) == 0 {
-		info = append(info, StyleSubHeader.Render("Managed Pods"))
+		info = append(info, StyleSubHeader.Render(m.T("detail.workload.managed_pods")))
 		info = append(info, "")
-		info = append(info, StyleTextMuted.Render("  No pod information available"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.workload.no_pod_info")))
 		return strings.Join(info, "\n")
 	}
 
 	// Check if deployment has a selector
 	if len(deploy.Selector) == 0 {
-		info = append(info, StyleSubHeader.Render("Managed Pods"))
+		info = append(info, StyleSubHeader.Render(m.T("detail.workload.managed_pods")))
 		info = append(info, "")
-		info = append(info, StyleTextMuted.Render("  No selector configured (matchLabels is empty)"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.workload.no_selector_matchlabels")))
 		return strings.Join(info, "\n")
 	}
 
@@ -238,11 +242,11 @@ func (m *Model) renderDeploymentPods(deploy *model.DeploymentData) string {
 		}
 	}
 
-	info = append(info, StyleSubHeader.Render(fmt.Sprintf("Managed Pods (%d)", len(matchingPods))))
+	info = append(info, StyleSubHeader.Render(m.TF("detail.workload.managed_pods_count", map[string]interface{}{"Count": len(matchingPods)})))
 	info = append(info, "")
 
 	if len(matchingPods) == 0 {
-		info = append(info, StyleTextMuted.Render("  No pods match this deployment selector"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.deployment.no_matching_pods")))
 		return strings.Join(info, "\n")
 	}
 
@@ -335,7 +339,9 @@ func (m *Model) renderDeploymentPods(deploy *model.DeploymentData) string {
 
 	if len(matchingPods) > displayCount {
 		info = append(info, "")
-		info = append(info, StyleTextMuted.Render(fmt.Sprintf("  ... and %d more pods", len(matchingPods)-displayCount)))
+		info = append(info, StyleTextMuted.Render(m.TF("detail.workload.more_pods", map[string]interface{}{
+			"Count": len(matchingPods) - displayCount,
+		})))
 	}
 
 	return strings.Join(info, "\n")

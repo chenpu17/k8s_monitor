@@ -11,7 +11,7 @@ import (
 // renderStatefulSetDetail renders the statefulset detail view
 func (m *Model) renderStatefulSetDetail() string {
 	if m.selectedStatefulSet == nil {
-		return "No statefulset selected"
+		return m.T("detail.statefulset.no_selected")
 	}
 
 	sts := m.selectedStatefulSet
@@ -74,7 +74,11 @@ func (m *Model) renderStatefulSetDetail() string {
 
 	// Add scroll indicator
 	if totalLines > maxVisible {
-		scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n[Lines %d-%d of %d] (↑/↓ to scroll)", startIdx+1, endIdx, totalLines))
+		scrollInfo := StyleTextMuted.Render("\n" + m.TF("detail.scroll_indicator_short", map[string]interface{}{
+			"Start": startIdx + 1,
+			"End":   endIdx,
+			"Total": totalLines,
+		}))
 		visibleLines = append(visibleLines, scrollInfo)
 	}
 
@@ -85,17 +89,17 @@ func (m *Model) renderStatefulSetDetail() string {
 func (m *Model) renderStatefulSetBasicInfo(sts *model.StatefulSetData) string {
 	var info []string
 
-	info = append(info, StyleHeader.Render(fmt.Sprintf("📊 StatefulSet: %s", sts.Name)))
+	info = append(info, StyleHeader.Render(m.TF("detail.statefulset.title", map[string]interface{}{"Name": sts.Name})))
 	info = append(info, "")
 
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Namespace"),
+		StyleTextSecondary.Render(m.T("detail.namespace")),
 		sts.Namespace))
 
 	// Age
 	age := time.Since(sts.CreationTimestamp)
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Age"),
+		StyleTextSecondary.Render(m.T("detail.age")),
 		formatAge(age)))
 
 	return strings.Join(info, "\n")
@@ -105,12 +109,12 @@ func (m *Model) renderStatefulSetBasicInfo(sts *model.StatefulSetData) string {
 func (m *Model) renderStatefulSetReplicaStatus(sts *model.StatefulSetData) string {
 	var info []string
 
-	info = append(info, StyleSubHeader.Render("Replica Status"))
+	info = append(info, StyleSubHeader.Render(m.T("detail.workload.replica_status")))
 	info = append(info, "")
 
 	// Desired replicas
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Desired Replicas"),
+		StyleTextSecondary.Render(m.T("detail.workload.desired_replicas")),
 		StyleHighlight.Render(fmt.Sprintf("%d", sts.Replicas))))
 
 	// Ready replicas
@@ -123,17 +127,17 @@ func (m *Model) renderStatefulSetReplicaStatus(sts *model.StatefulSetData) strin
 		readyStr = StyleStatusPending.Render(readyStr)
 	}
 	info = append(info, fmt.Sprintf("  %s: %s",
-		StyleTextSecondary.Render("Ready Replicas"),
+		StyleTextSecondary.Render(m.T("detail.workload.ready_replicas")),
 		readyStr))
 
 	// Current replicas
 	info = append(info, fmt.Sprintf("  %s: %d",
-		StyleTextSecondary.Render("Current Replicas"),
+		StyleTextSecondary.Render(m.T("detail.statefulset.current_replicas")),
 		sts.CurrentReplicas))
 
 	// Updated replicas
 	info = append(info, fmt.Sprintf("  %s: %d",
-		StyleTextSecondary.Render("Updated Replicas"),
+		StyleTextSecondary.Render(m.T("detail.workload.updated_replicas")),
 		sts.UpdatedReplicas))
 
 	return strings.Join(info, "\n")
@@ -143,11 +147,11 @@ func (m *Model) renderStatefulSetReplicaStatus(sts *model.StatefulSetData) strin
 func (m *Model) renderStatefulSetSelector(sts *model.StatefulSetData) string {
 	var info []string
 
-	info = append(info, StyleSubHeader.Render("Selector"))
+	info = append(info, StyleSubHeader.Render(m.T("detail.workload.selector_header")))
 	info = append(info, "")
 
 	if len(sts.Selector) == 0 {
-		info = append(info, StyleTextMuted.Render("  No selector configured"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.workload.no_selector")))
 	} else {
 		for _, key := range sortedKeys(sts.Selector) {
 			value := sts.Selector[key]
@@ -158,11 +162,11 @@ func (m *Model) renderStatefulSetSelector(sts *model.StatefulSetData) string {
 	}
 
 	info = append(info, "")
-	info = append(info, StyleSubHeader.Render("Labels"))
+	info = append(info, StyleSubHeader.Render(m.T("detail.workload.labels_header")))
 	info = append(info, "")
 
 	if len(sts.Labels) == 0 {
-		info = append(info, StyleTextMuted.Render("  No labels"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.workload.no_labels")))
 	} else {
 		for _, key := range sortedKeys(sts.Labels) {
 			value := sts.Labels[key]
@@ -180,17 +184,17 @@ func (m *Model) renderStatefulSetPods(sts *model.StatefulSetData) string {
 	var info []string
 
 	if m.clusterData == nil || len(m.clusterData.Pods) == 0 {
-		info = append(info, StyleSubHeader.Render("Managed Pods"))
+		info = append(info, StyleSubHeader.Render(m.T("detail.workload.managed_pods")))
 		info = append(info, "")
-		info = append(info, StyleTextMuted.Render("  No pod information available"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.workload.no_pod_info")))
 		return strings.Join(info, "\n")
 	}
 
 	// Check if statefulset has a selector
 	if len(sts.Selector) == 0 {
-		info = append(info, StyleSubHeader.Render("Managed Pods"))
+		info = append(info, StyleSubHeader.Render(m.T("detail.workload.managed_pods")))
 		info = append(info, "")
-		info = append(info, StyleTextMuted.Render("  No selector configured (matchLabels is empty)"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.workload.no_selector_matchlabels")))
 		return strings.Join(info, "\n")
 	}
 
@@ -216,11 +220,11 @@ func (m *Model) renderStatefulSetPods(sts *model.StatefulSetData) string {
 		}
 	}
 
-	info = append(info, StyleSubHeader.Render(fmt.Sprintf("Managed Pods (%d)", len(matchingPods))))
+	info = append(info, StyleSubHeader.Render(m.TF("detail.workload.managed_pods_count", map[string]interface{}{"Count": len(matchingPods)})))
 	info = append(info, "")
 
 	if len(matchingPods) == 0 {
-		info = append(info, StyleTextMuted.Render("  No pods match this statefulset selector"))
+		info = append(info, StyleTextMuted.Render(m.T("detail.statefulset.no_matching_pods")))
 		return strings.Join(info, "\n")
 	}
 
@@ -313,7 +317,9 @@ func (m *Model) renderStatefulSetPods(sts *model.StatefulSetData) string {
 
 	if len(matchingPods) > displayCount {
 		info = append(info, "")
-		info = append(info, StyleTextMuted.Render(fmt.Sprintf("  ... and %d more pods", len(matchingPods)-displayCount)))
+		info = append(info, StyleTextMuted.Render(m.TF("detail.workload.more_pods", map[string]interface{}{
+			"Count": len(matchingPods) - displayCount,
+		})))
 	}
 
 	return strings.Join(info, "\n")

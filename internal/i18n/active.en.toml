@@ -1639,6 +1639,103 @@ other = "JOB NAME"
 other = "  ... and {{.Count}} more jobs"
 
 # ============================================================================
+# Workload Detail Views (Deployment / StatefulSet / DaemonSet)
+# The three views are template siblings: literals whose English value is
+# byte-identical across the families share one detail.workload.* key, so the
+# wording cannot drift between them; family-specific wording lives under
+# detail.<kind>.*.
+# ============================================================================
+[detail.workload.replica_status]
+other = "Replica Status"
+
+[detail.workload.desired_replicas]
+other = "Desired Replicas"
+
+[detail.workload.ready_replicas]
+other = "Ready Replicas"
+
+[detail.workload.updated_replicas]
+other = "Updated Replicas"
+
+[detail.workload.selector_header]
+other = "Selector"
+
+[detail.workload.no_selector]
+other = "  No selector configured"
+
+[detail.workload.no_selector_matchlabels]
+other = "  No selector configured (matchLabels is empty)"
+
+[detail.workload.labels_header]
+other = "Labels"
+
+[detail.workload.no_labels]
+other = "  No labels"
+
+[detail.workload.managed_pods]
+other = "Managed Pods"
+
+[detail.workload.managed_pods_count]
+other = "Managed Pods ({{.Count}})"
+
+[detail.workload.no_pod_info]
+other = "  No pod information available"
+
+[detail.workload.more_pods]
+other = "  ... and {{.Count}} more pods"
+
+[detail.deployment.no_selected]
+other = "No deployment selected"
+
+[detail.deployment.title]
+other = "🚀 Deployment: {{.Name}}"
+
+[detail.deployment.available_replicas]
+other = "Available Replicas"
+
+[detail.deployment.strategy]
+other = "Deployment Strategy"
+
+[detail.deployment.type]
+other = "Type"
+
+[detail.deployment.no_matching_pods]
+other = "  No pods match this deployment selector"
+
+[detail.statefulset.no_selected]
+other = "No statefulset selected"
+
+[detail.statefulset.title]
+other = "📊 StatefulSet: {{.Name}}"
+
+[detail.statefulset.current_replicas]
+other = "Current Replicas"
+
+[detail.statefulset.no_matching_pods]
+other = "  No pods match this statefulset selector"
+
+[detail.daemonset.no_selected]
+other = "No daemonset selected"
+
+[detail.daemonset.title]
+other = "👾 DaemonSet: {{.Name}}"
+
+[detail.daemonset.desired_scheduled]
+other = "Desired Number Scheduled"
+
+[detail.daemonset.current_scheduled]
+other = "Current Number Scheduled"
+
+[detail.daemonset.number_ready]
+other = "Number Ready"
+
+[detail.daemonset.number_available]
+other = "Number Available"
+
+[detail.daemonset.no_matching_pods]
+other = "  No pods match this daemonset selector"
+
+# ============================================================================
 # Volcano Queue View
 # ============================================================================
 [views.queues.name]

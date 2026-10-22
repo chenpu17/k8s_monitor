@@ -1632,6 +1632,101 @@ other = "任务名称"
 other = "  ... 还有 {{.Count}} 个任务"
 
 # ============================================================================
+# 工作负载详情视图（Deployment / StatefulSet / DaemonSet）
+# 三个视图同构：en 值逐字节相同的字面量共用 detail.workload.* 一个键，
+# 措辞不会在族群间漂移；仅单一族群使用的措辞放 detail.<kind>.*。
+# ============================================================================
+[detail.workload.replica_status]
+other = "副本状态"
+
+[detail.workload.desired_replicas]
+other = "期望副本数"
+
+[detail.workload.ready_replicas]
+other = "就绪副本数"
+
+[detail.workload.updated_replicas]
+other = "已更新副本数"
+
+[detail.workload.selector_header]
+other = "选择器"
+
+[detail.workload.no_selector]
+other = "  未配置选择器"
+
+[detail.workload.no_selector_matchlabels]
+other = "  未配置选择器（matchLabels 为空）"
+
+[detail.workload.labels_header]
+other = "标签"
+
+[detail.workload.no_labels]
+other = "  无标签"
+
+[detail.workload.managed_pods]
+other = "托管 Pod"
+
+[detail.workload.managed_pods_count]
+other = "托管 Pod（{{.Count}}）"
+
+[detail.workload.no_pod_info]
+other = "  暂无 Pod 信息"
+
+[detail.workload.more_pods]
+other = "  ... 还有 {{.Count}} 个 Pod"
+
+[detail.deployment.no_selected]
+other = "未选择部署"
+
+[detail.deployment.title]
+other = "🚀 部署：{{.Name}}"
+
+[detail.deployment.available_replicas]
+other = "可用副本数"
+
+[detail.deployment.strategy]
+other = "部署策略"
+
+[detail.deployment.type]
+other = "类型"
+
+[detail.deployment.no_matching_pods]
+other = "  没有 Pod 匹配此部署的选择器"
+
+[detail.statefulset.no_selected]
+other = "未选择有状态副本集"
+
+[detail.statefulset.title]
+other = "📊 有状态副本集：{{.Name}}"
+
+[detail.statefulset.current_replicas]
+other = "当前副本数"
+
+[detail.statefulset.no_matching_pods]
+other = "  没有 Pod 匹配此有状态副本集的选择器"
+
+[detail.daemonset.no_selected]
+other = "未选择守护进程集"
+
+[detail.daemonset.title]
+other = "👾 守护进程集：{{.Name}}"
+
+[detail.daemonset.desired_scheduled]
+other = "期望调度数"
+
+[detail.daemonset.current_scheduled]
+other = "当前调度数"
+
+[detail.daemonset.number_ready]
+other = "就绪数"
+
+[detail.daemonset.number_available]
+other = "可用数"
+
+[detail.daemonset.no_matching_pods]
+other = "  没有 Pod 匹配此守护进程集的选择器"
+
+# ============================================================================
 # Volcano 队列视图
 # ============================================================================
 [views.queues.name]
