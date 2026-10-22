@@ -879,6 +879,9 @@ other = "RX"
 [detail.node.tx]
 other = "TX"
 
+[detail.node.total]
+other = "Total"
+
 [detail.node.historical_trends]
 other = "Historical Trends:"
 
@@ -957,6 +960,12 @@ other = "Memory"
 
 [detail.field.pods]
 other = "Pods"
+
+[detail.field.roles]
+other = "Roles"
+
+[detail.field.npu]
+other = "NPU"
 
 # ============================================================================
 # Network View - Pod Network Section
@@ -1832,6 +1841,14 @@ other = "Link"
 
 [npudetail.col_health]
 other = "Health"
+
+# Link column cell values of the extended chip table (en values must stay
+# byte-identical to the previously hardcoded "Up"/"Down").
+[npudetail.link_up]
+other = "Up"
+
+[npudetail.link_down]
+other = "Down"
 
 [npudetail.roce_section]
 other = "RoCE Network Statistics"

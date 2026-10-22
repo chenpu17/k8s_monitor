@@ -873,6 +873,9 @@ other = "接收"
 [detail.node.tx]
 other = "发送"
 
+[detail.node.total]
+other = "总计"
+
 [detail.node.historical_trends]
 other = "历史趋势："
 
@@ -950,6 +953,12 @@ other = "内存"
 
 [detail.field.pods]
 other = "Pods"
+
+[detail.field.roles]
+other = "角色"
+
+[detail.field.npu]
+other = "NPU"
 
 # ============================================================================
 # 网络视图 - Pod 网络部分
@@ -1825,6 +1834,14 @@ other = "链路"
 
 [npudetail.col_health]
 other = "健康"
+
+# Link column cell values of the extended chip table (en values must stay
+# byte-identical to the previously hardcoded "Up"/"Down").
+[npudetail.link_up]
+other = "在线"
+
+[npudetail.link_down]
+other = "离线"
 
 [npudetail.roce_section]
 other = "RoCE 网络统计"

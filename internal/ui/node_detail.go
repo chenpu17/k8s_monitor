@@ -107,7 +107,7 @@ func (m *Model) renderNodeBasicInfo(node *model.NodeData) string {
 
 	if len(node.Roles) > 0 {
 		info = append(info, fmt.Sprintf("  %s: %s",
-			StyleTextSecondary.Render("Roles"),
+			StyleTextSecondary.Render(m.T("detail.field.roles")),
 			strings.Join(node.Roles, ", ")))
 	}
 
@@ -184,7 +184,7 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 			npuPercent = fmt.Sprintf("%.1f%%", float64(node.NPUAllocated)*100.0/float64(node.NPUAllocatable))
 		}
 		info = append(info, fmt.Sprintf("  %s: %d / %d (%s)",
-			StyleTextSecondary.Render("NPU"),
+			StyleTextSecondary.Render(m.T("detail.field.npu")),
 			node.NPUAllocated,
 			node.NPUAllocatable,
 			npuPercent))
@@ -410,11 +410,11 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 					}
 					if showLink {
 						// Link status
-						linkStr := "Down"
+						linkStr := m.T("npudetail.link_down")
 						if chip.LinkStatus == 1 {
-							linkStr = StyleStatusReady.Render("Up")
+							linkStr = StyleStatusReady.Render(m.T("npudetail.link_up"))
 						} else {
-							linkStr = StyleStatusNotReady.Render("Down")
+							linkStr = StyleStatusNotReady.Render(m.T("npudetail.link_down"))
 						}
 						cells = append(cells, linkStr)
 					}
@@ -709,7 +709,7 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 			)
 
 			info = append(info, StyleTextSecondary.Render(fmt.Sprintf("    %s %s %s %s",
-				padRight("ID", colNetID),
+				padRight(m.T("npudetail.col_id"), colNetID),
 				padRight(m.T("npudetail.col_dev_ip"), colNetDevIP),
 				padRight(m.T("npudetail.col_tor"), colNetTOR),
 				m.T("npudetail.col_tor_port"))))
@@ -734,11 +734,12 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 		txStr := formatNetworkTraffic(node.NetworkTxBytes)
 		totalStr := formatNetworkTraffic(node.NetworkRxBytes + node.NetworkTxBytes)
 
-		info = append(info, fmt.Sprintf("  %s: %s  %s: %s  Total: %s",
+		info = append(info, fmt.Sprintf("  %s: %s  %s: %s  %s: %s",
 			StyleTextMuted.Render(m.T("detail.node.rx")),
 			rxStr,
 			StyleTextMuted.Render(m.T("detail.node.tx")),
 			txStr,
+			m.T("detail.node.total"),
 			totalStr,
 		))
 	}
