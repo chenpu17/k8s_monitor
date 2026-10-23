@@ -15,7 +15,7 @@ k8s-monitor 是一个基于终端的 Kubernetes 集群监控工具，专为需�
 
 ### 核心特性
 
-- **🎯 全面视图**：8 个核心视图，集群提供 Volcano Queues / SuperPod Topology 时额外显示对应视图
+- **🎯 全面视图**：8 个核心视图，另有 NPU 总览，集群提供 Volcano Queues / SuperPod Topology 时再额外显示对应视图
 - **📊 资源监控**：实时 CPU/内存/网络指标，带可视化进度条
 - **🚀 NPU 监控**：华为昇腾 NPU 支持，提供详细芯片指标
 - **📈 趋势分析**：历史指标跟踪和趋势指示器
@@ -139,7 +139,7 @@ k8s-monitor --help
 ### 高级功能
 
 - **Vim 风格导航**：`j/k` 上下移动，`Enter` 查看详情，`Esc` 返回
-- **快速视图切换**：数字键 `1-8` 切换核心视图，`9` 切换 Queues（需 Volcano），`0` 切换 Topology（需 SuperPod）
+- **快速视图切换**：数字键 `1-8` 切换核心视图，`n` 切换 NPU 总览（需 NPU 节点），`9` 切换 Queues（需 Volcano），`0` 切换 Topology（需 SuperPod）
 - **灵活过滤**：按命名空间、状态、标签过滤
 - **全文搜索**：按名称搜索资源
 - **数据导出**：导出视图数据为 CSV/JSON
@@ -155,6 +155,7 @@ k8s-monitor --help
 | `q` / `Ctrl+C` | 退出应用 |
 | `r` | 手动刷新 |
 | `1-8` | 切换到核心视图（1=概览，2=节点，3=Pod，4=工作负载，5=网络，6=存储，7=事件，8=告警） |
+| `n` | 切换到 NPU 总览（仅在集群存在 NPU 节点时可用） |
 | `9` | 切换到 Queues 视图（仅在检测到 Volcano Queues 时可用） |
 | `0` | 切换到 Topology 视图（仅在检测到 SuperPod 拓扑时可用） |
 | `Tab` | 在当前可用视图间循环切换 |

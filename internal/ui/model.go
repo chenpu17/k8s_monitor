@@ -31,6 +31,7 @@ const (
 	ViewAlerts
 	ViewQueues   // Volcano Queues view (AI/HPC)
 	ViewTopology // SuperPod Topology view (Ascend NPU)
+	ViewNPU      // NPU overview (Ascend chip health across nodes)
 	ViewNodeDetail
 	ViewPodDetail
 	ViewEventDetail
@@ -134,6 +135,7 @@ type Model struct {
 	selectedIndex       int                    // Selected item index in lists
 	listRows            int                    // Rows the current list view printed (reported by the renderer, read by Update)
 	networkServiceLines []int                  // Document lines of the network service table rows (reported by the renderer, read by Update's selection-follow)
+	npuNodeLines        []int                  // Document lines of the NPU view's node rows (reported by the renderer, read by Update's selection-follow)
 	detailMode          bool                   // True when viewing node/pod/event/job detail
 	detailScrollOffset  int                    // Scroll offset for detail view content
 	selectedNode        *model.NodeData        // Currently selected node for detail view
@@ -157,6 +159,7 @@ type Model struct {
 	fromJobDetail              bool // True when navigating from job detail to pod detail
 	fromVolcanoJobDetail       bool // True when navigating from volcano job detail to pod detail
 	fromNetworkView            bool // True when navigating from network view to service detail
+	fromNPUView                bool // True when navigating from the NPU view to a node detail
 
 	// Filter state
 	filterMode      bool   // True when in filter mode

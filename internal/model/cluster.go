@@ -311,6 +311,24 @@ type NPUChipData struct {
 	BandwidthTx          float64 `json:"bandwidth_tx"`     // Bandwidth TX in MB/s
 }
 
+// NPU chip health grades, produced per chip by the datasource's per-chip
+// detection (npu_health.go fills NPUChipHealth while it builds the per-chip
+// alerts). They are plain strings so the JSON export carries a stable,
+// locale-independent value.
+const (
+	NPUChipGradeHealthy  = "healthy"
+	NPUChipGradeDegraded = "degraded"
+	NPUChipGradeFault    = "fault"
+)
+
+// NPUChipGrade is the health grade of a single NPU chip.
+type NPUChipGrade struct {
+	NPUID  int    `json:"npu"`
+	Chip   int    `json:"chip"`
+	Grade  string `json:"grade"`            // "healthy" | "degraded" | "fault"
+	Reason string `json:"reason,omitempty"` // stable English phrase, e.g. "double-bit ECC", "temp 91>=90"
+}
+
 // NPUFaultInfo describes management-plane faults reported for a node's NPU
 // subsystem (device / switch / custom fault levels and events).
 type NPUFaultInfo struct {
@@ -407,6 +425,11 @@ type NodeData struct {
 	NPUAICoreCount  int           // Number of AI cores per NPU
 	NPUMetricsTime  time.Time     // Timestamp of last metrics update
 	NPUChips        []NPUChipData // Detailed per-chip metrics from collector
+
+	// NPUChipHealth carries one grade per chip of this node, ordered by the
+	// node's canonical chip order (same order npu_health.go reports chips).
+	// Empty when the node has no NPU or the exporter data is absent.
+	NPUChipHealth []NPUChipGrade `json:"npu_chip_health,omitempty"`
 
 	// NPU health/fault status (from node annotations)
 	NPUStatusMask    uint64        // Low 8 bits are per-chip, 1 = faulty

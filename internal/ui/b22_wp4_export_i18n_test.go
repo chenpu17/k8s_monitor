@@ -402,7 +402,7 @@ func TestZhCopyFixes(t *testing.T) {
 // key added without the other locale (or removed by accident) is caught even
 // when both remaining key sets still agree.
 func TestBundleKeyCount(t *testing.T) {
-	const want = 761
+	const want = 784
 
 	en := readBundleMessages(t, "../../internal/i18n/active.en.toml")
 	zh := readBundleMessages(t, "../../internal/i18n/active.zh.toml")

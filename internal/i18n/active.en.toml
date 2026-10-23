@@ -1028,6 +1028,9 @@ other = "Events"
 [views.alerts.name]
 other = "Alerts"
 
+[views.npu.name]
+other = "NPU"
+
 # ============================================================================
 # Detail Views
 # ============================================================================
@@ -1721,6 +1724,75 @@ other = "Resource Name"
 
 [npu.details]
 other = "NPU Details"
+
+# ============================================================================
+# NPU Overview View (cross-node chip health)
+# ============================================================================
+[npuview.title]
+other = "🧮 NPU Overview"
+
+[npuview.health_summary]
+other = "{{.Healthy}}/{{.Total}} healthy · {{.Degraded}} degraded · {{.Fault}} fault"
+
+[npuview.health_no_data]
+other = "Chip health: no data"
+
+[npuview.alloc_summary]
+other = "Allocation {{.Allocated}}/{{.Allocatable}} ({{.Percent}}%)"
+
+[npuview.alloc_summary_no_pct]
+other = "Allocation {{.Allocated}}/{{.Allocatable}}"
+
+[npuview.coverage]
+other = "Monitoring {{.With}}/{{.Total}} nodes"
+
+[npuview.legend]
+other = "▉ healthy  ▒ degraded  ▁ fault"
+
+[npuview.row_degraded]
+other = "{{.Count}} degraded"
+
+[npuview.row_fault]
+other = "{{.Count}} fault"
+
+[npuview.monitoring_unavailable]
+other = "monitoring unavailable"
+
+[npuview.no_nodes]
+other = "No NPU nodes found in the cluster"
+
+[npuview.alerts_header]
+other = "NPU Alerts"
+
+[npuview.type_chip_fault]
+other = "chip fault"
+
+[npuview.type_fault_level]
+other = "fault level"
+
+[npuview.type_switch_fault]
+other = "switch fault"
+
+[npuview.type_check_failed]
+other = "check failed"
+
+[npuview.type_temp_high]
+other = "temp high"
+
+[npuview.type_ecc_double]
+other = "ECC double-bit"
+
+[npuview.type_ecc_single]
+other = "ECC single-bit"
+
+[npuview.type_link_down]
+other = "link down"
+
+[npuview.type_error_code]
+other = "error code"
+
+[npuview.type_monitor_degraded]
+other = "monitoring degraded"
 
 # SuperPod Topology Section
 [topology.superpod.title]

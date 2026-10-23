@@ -237,6 +237,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case msg.String() == "n":
+			// Only switch to the NPU view if the cluster has NPU nodes. The
+			// branch sits behind the search interception above, so in search
+			// mode 'n' stays the character the user is typing.
+			if !m.viewSwitchBlocked() && m.hasNPUNodes() {
+				m.currentView = ViewNPU
+				m.scrollOffset = 0
+				m.selectedIndex = 0
+			}
+			return m, nil
+
 		case key.Matches(msg, m.keys.Tab):
 			// Tab key switches views in list mode
 			if !m.viewSwitchBlocked() {
@@ -244,6 +255,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				views := []ViewType{
 					ViewOverview, ViewNodes, ViewPods, ViewWorkloads,
 					ViewNetwork, ViewStorage, ViewEvents, ViewAlerts,
+				}
+				if m.hasNPUNodes() {
+					views = append(views, ViewNPU)
 				}
 				if m.hasVolcanoQueues() {
 					views = append(views, ViewQueues)
@@ -485,6 +499,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.detailMode = true
 						m.detailScrollOffset = 0
 					}
+				case ViewNPU:
+					// NPU view - open the selected node's detail (a node without
+					// chip data has a detail page too: it carries the node's other
+					// NPU information, so Enter is never a dead key).
+					nodes := m.npuNodes()
+					if m.selectedIndex >= 0 && m.selectedIndex < len(nodes) {
+						m.selectedNode = nodes[m.selectedIndex]
+						m.currentView = ViewNodeDetail
+						m.detailMode = true
+						m.detailScrollOffset = 0
+						m.fromNPUView = true
+					}
 				}
 			}
 			return m, nil
@@ -568,6 +594,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.detailMode = false
 					m.detailScrollOffset = 0
 					m.selectedService = nil
+					// Keep m.scrollOffset and m.selectedIndex intact
+					return m, nil
+				}
+
+				// Special handling for navigating back from Node detail to the NPU
+				// view. Returning early skips the main reset block below, so the
+				// detail flag, the scroll offset and the selection are all handled
+				// here: the list the user came from comes back as they left it.
+				if m.currentView == ViewNodeDetail && m.fromNPUView {
+					m.currentView = ViewNPU
+					m.fromNPUView = false
+					m.detailMode = false
+					m.detailScrollOffset = 0
+					m.selectedNode = nil
 					// Keep m.scrollOffset and m.selectedIndex intact
 					return m, nil
 				}
@@ -880,6 +920,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
+			// The NPU view moves a selection across its node rows and keeps the
+			// selected row on screen (the rows are the matrix, so the selection
+			// is what the user navigates).
+			if m.currentView == ViewNPU && m.clusterData != nil && len(m.npuNodes()) > 0 {
+				if m.selectedIndex > 0 {
+					m.selectedIndex--
+					m.npuScrollToSelection()
+				}
+				return m, nil
+			}
 			// Overview and Network views use line-based scrolling
 			if m.scrollLineViewBy(-1) {
 				return m, nil
@@ -983,6 +1033,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
+			// The NPU view moves a selection across its node rows and keeps the
+			// selected row on screen.
+			if m.currentView == ViewNPU && m.clusterData != nil && len(m.npuNodes()) > 0 {
+				if m.selectedIndex < m.getMaxIndex()-1 {
+					m.selectedIndex++
+					m.npuScrollToSelection()
+				}
+				return m, nil
+			}
 			// Overview and Network views use line-based scrolling
 			if m.scrollLineViewBy(1) {
 				return m, nil
@@ -1071,6 +1130,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.scrollOffset = 0
 				}
 			}
+			if m.currentView == ViewNPU {
+				// The NPU view's rows are the matrix rows, which are taller than a
+				// line; the window that keeps the selection visible comes from the
+				// renderer.
+				m.npuScrollToSelection()
+			}
 			return m, nil
 
 		case key.Matches(msg, m.keys.PageDown):
@@ -1150,6 +1215,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.scrollOffset = 0
 					}
 				}
+			}
+			if m.currentView == ViewNPU {
+				// The NPU view's rows are the matrix rows, which are taller than a
+				// line; the window that keeps the selection visible comes from the
+				// renderer.
+				m.npuScrollToSelection()
 			}
 			return m, nil
 

@@ -188,6 +188,13 @@ const (
 // eight. It returns nil when the node carries no per-chip metrics, which is
 // also the case when the NPU-Exporter is unavailable.
 //
+// As a side effect it fills node.NPUChipHealth: the same per-chip checks that
+// raise the alerts also grade every chip, because the chip attribution of an
+// alert otherwise only survives as free text in Value ("chips 0, 3") and the UI
+// cannot recover it reliably. The field stays nil when the node has no chip
+// metrics, which is the same presence rule this function uses to decide whether
+// there is anything to alert on.
+//
 // Deliberately not alerted on here:
 //   - power: no authoritative TDP is published for the 910B family, so any
 //     wattage threshold would be invented.
@@ -209,7 +216,9 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 		errorDetail []string
 	)
 
-	for _, chip := range node.NPUChips {
+	grades := newNPUChipGrades(node.NPUChips)
+
+	for i, chip := range node.NPUChips {
 		id := strconv.Itoa(chip.PhyID)
 
 		if chip.Temp >= npuTempWarningCelsius {
@@ -217,16 +226,26 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 			if chip.Temp > maxTemp {
 				maxTemp = chip.Temp
 			}
+			// Temperature follows the severity split of the alert it produces:
+			// the 90°C line is the critical one, so a chip above it is graded
+			// fault rather than degraded.
+			if chip.Temp >= npuTempCriticalCelsius {
+				grades.hit(i, model.NPUChipGradeFault, fmt.Sprintf("temp %d>=%d", chip.Temp, npuTempCriticalCelsius))
+			} else {
+				grades.hit(i, model.NPUChipGradeDegraded, fmt.Sprintf("temp %d>=%d", chip.Temp, npuTempWarningCelsius))
+			}
 		}
 
 		switch {
 		case chip.HBMEccDoubleErr > 0:
 			eccDouble = append(eccDouble, id)
+			grades.hit(i, model.NPUChipGradeFault, "double-bit ECC")
 		case chip.HBMEccSingleErr > 0:
 			// Single-bit errors are correctable and are only surfaced for chips
 			// that have no double-bit error: those are already covered by the
 			// critical alert above, and repeating them here would add noise.
 			eccSingle = append(eccSingle, id)
+			grades.hit(i, model.NPUChipGradeDegraded, "single-bit ECC")
 		}
 
 		// LinkStatus is only meaningful when the exporter actually reported it:
@@ -234,13 +253,31 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 		// must not be read as "link down".
 		if chip.LinkStatusKnown && chip.LinkStatus == 0 {
 			linkDown = append(linkDown, id)
+			grades.hit(i, model.NPUChipGradeFault, "link down")
 		}
 
 		if chip.ErrorCode != 0 {
 			errorChips = append(errorChips, id)
 			errorDetail = append(errorDetail, fmt.Sprintf("%s (code %d)", id, chip.ErrorCode))
+			grades.hit(i, model.NPUChipGradeFault, fmt.Sprintf("error code %d", chip.ErrorCode))
+		}
+
+		// The exporter-reported health string is a second, independent signal
+		// next to the metrics above; it only ever raises a chip's grade.
+		switch chip.Health {
+		case "Error":
+			grades.hit(i, model.NPUChipGradeFault, "chip health Error")
+		case "Warning":
+			grades.hit(i, model.NPUChipGradeDegraded, "chip health Warning")
 		}
 	}
+
+	// Node-level NPU fault signals grade every chip of the node: neither the
+	// device-plugin bitmask nor the management-plane fault level is attributable
+	// to a single chip from the data at hand.
+	grades.hitNodeWide(node)
+
+	node.NPUChipHealth = grades.results()
 
 	alerts := make([]model.Alert, 0, 5)
 
@@ -363,6 +400,103 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 // plugin chip-fault alert, e.g. "chips 0, 3".
 func npuChipValue(chips []string) string {
 	return "chips " + strings.Join(chips, ", ")
+}
+
+// npuChipGradeRanks orders the chip grades so a chip hit by several checks keeps
+// the most severe one.
+var npuChipGradeRanks = map[string]int{
+	model.NPUChipGradeHealthy:  0,
+	model.NPUChipGradeDegraded: 1,
+	model.NPUChipGradeFault:    2,
+}
+
+// npuChipGrades accumulates one grade per chip while the per-chip checks run.
+// Grades are ranked highest-wins and the reason is the one of the trigger that
+// set that grade, the first one in detection order when several triggers of the
+// same grade fire.
+type npuChipGrades struct {
+	chips  []model.NPUChipData
+	grades []string
+	reason []string
+}
+
+// newNPUChipGrades starts the accumulator with every chip healthy, in the order
+// the node reports its chips (the canonical order of NPUChipHealth).
+func newNPUChipGrades(chips []model.NPUChipData) *npuChipGrades {
+	g := &npuChipGrades{
+		chips:  chips,
+		grades: make([]string, len(chips)),
+		reason: make([]string, len(chips)),
+	}
+	for i := range g.grades {
+		g.grades[i] = model.NPUChipGradeHealthy
+	}
+	return g
+}
+
+// hit raises chip i's grade to grade with the given reason. A lower grade never
+// overwrites a higher one, and an equal grade keeps the reason that fired first
+// so the output does not depend on the order the checks are evaluated in.
+func (g *npuChipGrades) hit(i int, grade, reason string) {
+	if i < 0 || i >= len(g.grades) {
+		return
+	}
+	switch {
+	case npuChipGradeRanks[grade] > npuChipGradeRanks[g.grades[i]]:
+		g.grades[i] = grade
+		g.reason[i] = reason
+	case npuChipGradeRanks[grade] == npuChipGradeRanks[g.grades[i]] && g.reason[i] == "":
+		g.reason[i] = reason
+	}
+}
+
+// hitNodeWide grades every chip of the node with signals that are not
+// attributable to a single chip: the device plugin's per-chip fault bitmask
+// (which does name a chip, see below) and the management-plane device fault
+// level (which does not).
+func (g *npuChipGrades) hitNodeWide(node *model.NodeData) {
+	// The device plugin bitmask does name the chip: bit i is davinci chip i,
+	// which is the chip's PhyID. Chips outside the bitmap's range keep whatever
+	// the exporter metrics said about them.
+	if node.NPUStatusKnown {
+		for i, chip := range g.chips {
+			if node.NPUChipFaulty(chip.PhyID) {
+				g.hit(i, model.NPUChipGradeFault, "device plugin fault bit")
+			}
+		}
+	}
+
+	// A management-plane device fault is reported for the NPU subsystem as a
+	// whole, so it grades every chip of the node. Switch faults are deliberately
+	// left out: a faulty interconnect switch is not a fault of the chips behind
+	// it, and the alert for it still surfaces in the alerts view.
+	if fault := node.NPUFault; fault != nil {
+		severity, report := npuDeviceFaultSeverity(fault.DeviceFaultLevel)
+		if report {
+			grade := model.NPUChipGradeDegraded
+			if severity == model.AlertSeverityCritical {
+				grade = model.NPUChipGradeFault
+			}
+			for i := range g.chips {
+				g.hit(i, grade, "device fault level "+fault.DeviceFaultLevel)
+			}
+		}
+	}
+}
+
+// results returns the accumulated grades as the model slice. The reason of a
+// healthy chip stays empty: there is nothing to report about it.
+func (g *npuChipGrades) results() []model.NPUChipGrade {
+	out := make([]model.NPUChipGrade, len(g.chips))
+	for i, chip := range g.chips {
+		out[i] = model.NPUChipGrade{
+			NPUID:  chip.NPUID,
+			Chip:   chip.Chip,
+			Grade:  g.grades[i],
+			Reason: g.reason[i],
+		}
+	}
+	return out
 }
 
 // npuDeviceFaultSeverity maps a management-plane device fault level to an alert

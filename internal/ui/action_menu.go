@@ -313,6 +313,7 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 		m.fromJobDetail = false
 		m.fromVolcanoJobDetail = false
 		m.fromNetworkView = false
+		m.fromNPUView = false
 		return nil
 	}
 

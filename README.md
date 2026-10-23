@@ -15,7 +15,7 @@ k8s-monitor is a terminal-based monitoring tool for Kubernetes clusters, designe
 
 ### Key Features
 
-- **🎯 Comprehensive Views**: 8 core views plus Volcano Queues and SuperPod Topology when the cluster provides them
+- **🎯 Comprehensive Views**: 8 core views plus an NPU overview, Volcano Queues and SuperPod Topology when the cluster provides them
 - **📊 Resource Monitoring**: Real-time CPU/Memory/Network metrics with visual progress bars
 - **🚀 NPU Monitoring**: Huawei Ascend NPU support with detailed chip metrics
 - **📈 Trend Analysis**: Historical metrics tracking with trend indicators
@@ -94,6 +94,7 @@ k8s-monitor --help
   - Link status
   - RoCE network statistics
   - ECC error tracking
+- Cross-node NPU overview (`n`): per-chip health grades, allocation and monitoring coverage
 - Topology information (SuperPod, HyperNode)
 - Integration with NPU-Exporter for runtime metrics
 
@@ -139,7 +140,7 @@ k8s-monitor --help
 ### Advanced Features
 
 - **Vim-style Navigation**: `j/k` for up/down, `Enter` for details, `Esc` to go back
-- **Fast View Switching**: Number keys `1-8` for the core views, `9` for Queues (requires Volcano), `0` for Topology (requires SuperPod)
+- **Fast View Switching**: Number keys `1-8` for the core views, `n` for the NPU overview (requires NPU nodes), `9` for Queues (requires Volcano), `0` for Topology (requires SuperPod)
 - **Flexible Filtering**: Filter by namespace, status, labels
 - **Full-text Search**: Search resources by name
 - **Data Export**: Export view data to CSV/JSON
@@ -155,6 +156,7 @@ k8s-monitor --help
 | `q` / `Ctrl+C` | Quit application |
 | `r` | Manual refresh |
 | `1-8` | Switch to a core view (1=Overview, 2=Nodes, 3=Pods, 4=Workloads, 5=Network, 6=Storage, 7=Events, 8=Alerts) |
+| `n` | Switch to NPU overview (only when the cluster has NPU nodes) |
 | `9` | Switch to Queues view (only when Volcano Queues are detected) |
 | `0` | Switch to Topology view (only when SuperPod topology is detected) |
 | `Tab` | Cycle through the currently available views |

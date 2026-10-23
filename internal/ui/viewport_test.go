@@ -128,6 +128,7 @@ var listViews = []struct {
 	{"alerts", ViewAlerts},
 	{"queues", ViewQueues},
 	{"topology", ViewTopology},
+	{"npu", ViewNPU},
 }
 
 // newFilledModel returns a model on the given view, filled with enough data for
@@ -144,7 +145,18 @@ func newFilledModel(t *testing.T, view ViewType, height int) *Model {
 	for i, node := range m.clusterData.Nodes {
 		node.SuperPodID = fmt.Sprintf("superpod-%02d", i%20)
 		node.NPUAllocatable = 8
+		node.NPUCapacity = 8
 		node.InternalIP = fmt.Sprintf("10.0.0.%d", i+1)
+		// Two chips per NPU, one chip of every fourth node degraded, so the NPU
+		// view has something to draw at every height.
+		node.NPUChipHealth = make([]model.NPUChipGrade, 8)
+		for chip := range node.NPUChipHealth {
+			grade := model.NPUChipGradeHealthy
+			if i%4 == 0 && chip == 3 {
+				grade = model.NPUChipGradeDegraded
+			}
+			node.NPUChipHealth[chip] = model.NPUChipGrade{NPUID: chip / 2, Chip: chip % 2, Grade: grade}
+		}
 	}
 	return m
 }
@@ -510,6 +522,7 @@ func TestListViewContentFitsContentBudget(t *testing.T) {
 		{"queues", ViewQueues, (*Model).renderQueues},
 		{"alerts", ViewAlerts, (*Model).renderAlerts},
 		{"network", ViewNetwork, (*Model).renderNetwork},
+		{"npu", ViewNPU, (*Model).renderNPUView},
 	}
 
 	for _, h := range []int{50, 35, 30, 25} {

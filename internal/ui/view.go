@@ -85,6 +85,8 @@ func (m *Model) View() string {
 		content = m.renderQueueDetail()
 	case ViewTopology:
 		content = m.renderTopology()
+	case ViewNPU:
+		content = m.renderNPUView()
 	case ViewTopologyDetail:
 		content = m.renderSuperPodDetail()
 	}
@@ -199,6 +201,9 @@ func (m *Model) getMaxIndex() int {
 	case ViewTopology:
 		// Topology view shows SuperPods
 		return len(m.getSuperPodTopology())
+	case ViewNPU:
+		// NPU view shows one row per NPU node
+		return len(m.npuNodes())
 	default:
 		return 0
 	}
@@ -299,35 +304,43 @@ func (m *Model) renderViewTabs() string {
 	}
 
 	type viewTab struct {
-		number  int
+		label   string // the key that switches to the view, as shown in the tab
 		nameKey string
 		view    ViewType
 	}
 
 	tabs := []viewTab{
-		{1, "views.overview.name", ViewOverview},
-		{2, "views.nodes.name", ViewNodes},
-		{3, "views.pods.name", ViewPods},
-		{4, "views.workloads.name", ViewWorkloads},
-		{5, "views.network.name", ViewNetwork},
-		{6, "views.storage.name", ViewStorage},
-		{7, "views.events.name", ViewEvents},
-		{8, "views.alerts.name", ViewAlerts},
+		{"1", "views.overview.name", ViewOverview},
+		{"2", "views.nodes.name", ViewNodes},
+		{"3", "views.pods.name", ViewPods},
+		{"4", "views.workloads.name", ViewWorkloads},
+		{"5", "views.network.name", ViewNetwork},
+		{"6", "views.storage.name", ViewStorage},
+		{"7", "views.events.name", ViewEvents},
+		{"8", "views.alerts.name", ViewAlerts},
+	}
+
+	// Add NPU tab if the cluster has NPU nodes. It sits before the Queues and
+	// Topology tabs: chip health is the primary asset view, the scheduler and
+	// topology views are the AI-specific extras behind it. The Tab cycle in
+	// Update builds the same order.
+	if m.hasNPUNodes() {
+		tabs = append(tabs, viewTab{"n", "views.npu.name", ViewNPU})
 	}
 
 	// Add Queues tab if Volcano is available
 	if m.hasVolcanoQueues() {
-		tabs = append(tabs, viewTab{9, "views.queues.name", ViewQueues})
+		tabs = append(tabs, viewTab{"9", "views.queues.name", ViewQueues})
 	}
 
 	// Add Topology tab if SuperPod info is available
 	if m.hasSuperPodTopology() {
-		tabs = append(tabs, viewTab{0, "views.topology.name", ViewTopology})
+		tabs = append(tabs, viewTab{"0", "views.topology.name", ViewTopology})
 	}
 
 	var tabParts []string
 	for _, tab := range tabs {
-		tabText := fmt.Sprintf("%d:%s", tab.number, m.T(tab.nameKey))
+		tabText := fmt.Sprintf("%s:%s", tab.label, m.T(tab.nameKey))
 
 		if m.currentView == tab.view {
 			// Highlight current view
