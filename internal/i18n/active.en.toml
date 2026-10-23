@@ -293,6 +293,9 @@ other = "Node memory usage high"
 [alert.npu_chip_fault]
 other = "NPU chip(s) {{.Chips}} reported faulty by the device plugin"
 
+[alert.npu_chip_health]
+other = "NPU chip(s) {{.Chips}} unhealthy per NPU-Exporter health status"
+
 [alert.npu_monitor_degraded]
 other = "NPU monitoring degraded: NPU-Exporter unreachable, chip metrics and threshold alerts suspended until it responds"
 
@@ -1725,6 +1728,26 @@ other = "Resource Name"
 [npu.details]
 other = "NPU Details"
 
+# Fault-code class of a chip's error code, classified against the Ascend Device
+# Plugin's faultCode.json (five handling tiers, see npu_errorcodes.go).
+[npu.errorcat.no_action]
+other = "no action needed"
+
+[npu.errorcat.rerun]
+other = "workload rerun"
+
+[npu.errorcat.reset]
+other = "NPU reset required"
+
+[npu.errorcat.isolate]
+other = "chip isolation required"
+
+[npu.errorcat.subhealth]
+other = "sub-health"
+
+[npu.errorcat.unknown]
+other = "unclassified code"
+
 # ============================================================================
 # NPU Overview View (cross-node chip health)
 # ============================================================================
@@ -1757,6 +1780,29 @@ other = "{{.Count}} fault"
 
 [npuview.monitoring_unavailable]
 other = "monitoring unavailable"
+
+[npuview.summary_unknown]
+other = "unknown {{.Count}}"
+
+[npuview.liveness_ok]
+other = "Monitoring OK · last success {{.LastSuccess}}"
+
+[npuview.liveness_backoff]
+other = "Monitoring degraded · last success {{.LastSuccess}}"
+
+[npuview.liveness_never]
+other = "Monitoring unavailable"
+
+# The exporter fetch path state, rendered in the node detail next to the raw
+# failure text (which the view appends itself and truncates to the field width).
+[npu.liveness.ok]
+other = "reachable"
+
+[npu.liveness.backoff]
+other = "unreachable, retrying"
+
+[npu.liveness.never]
+other = "not polled yet"
 
 [npuview.no_nodes]
 other = "No NPU nodes found in the cluster"
@@ -2486,6 +2532,23 @@ other = "(correctable)"
 
 [npudetail.ecc_uncorrectable]
 other = "(uncorrectable)"
+
+# Per-chip HBM ECC cumulative counters and their session-scoped increment. The
+# increment qualifiers are only filled once the client's window holds two
+# samples, so a fresh start renders "chip 1-0: ECC total single 99992 ...".
+[npudetail.ecc_delta]
+other = "    chip {{.NPU}}-{{.Chip}}: ECC total single {{.Single}}{{.SingleDelta}} · double {{.Double}}{{.DoubleDelta}}"
+
+# A chip reporting an error code, with the fault-code class when the code is in
+# the knowledge base.
+[npudetail.error_code_chip]
+other = "    chip {{.NPU}}-{{.Chip}}: {{.Code}} · {{.Category}}"
+
+[npudetail.health_unknown]
+other = "Chips with unknown health"
+
+[npudetail.exporter_liveness]
+other = "NPU-Exporter"
 
 [npudetail.runtime_na]
 other = "NPU Runtime Metrics: Not available"

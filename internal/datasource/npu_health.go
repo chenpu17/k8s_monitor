@@ -214,6 +214,19 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 		linkDown    []string
 		errorChips  []string
 		errorDetail []string
+		// healthFaultChips are the chips NPU-Exporter reports as unhealthy. They
+		// are a second, independent signal next to the device plugin's bitmask,
+		// so they get their own alert: the chips being graded fault without any
+		// alert produced the "1 fault + No alerts" contradiction on the NPU view.
+		healthFaultChips []string
+		// errorCodeActions collects the knowledge-base recommendations of the
+		// known error codes; the alert carries them only when every offending
+		// code is classified (unclassifiedCodes == 0). seenActions keeps the
+		// list one-copy-per-distinct-recommendation: eight chips sharing one
+		// code must not repeat the same advice eight times.
+		errorCodeActions  []string
+		seenActions       map[string]bool
+		unclassifiedCodes int
 	)
 
 	grades := newNPUChipGrades(node.NPUChips)
@@ -230,9 +243,9 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 			// the 90°C line is the critical one, so a chip above it is graded
 			// fault rather than degraded.
 			if chip.Temp >= npuTempCriticalCelsius {
-				grades.hit(i, model.NPUChipGradeFault, fmt.Sprintf("temp %d>=%d", chip.Temp, npuTempCriticalCelsius))
+				grades.hit(i, model.NPUChipGradeFault, fmt.Sprintf("temp %d ge %d", chip.Temp, npuTempCriticalCelsius))
 			} else {
-				grades.hit(i, model.NPUChipGradeDegraded, fmt.Sprintf("temp %d>=%d", chip.Temp, npuTempWarningCelsius))
+				grades.hit(i, model.NPUChipGradeDegraded, fmt.Sprintf("temp %d ge %d", chip.Temp, npuTempWarningCelsius))
 			}
 		}
 
@@ -259,14 +272,39 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 		if chip.ErrorCode != 0 {
 			errorChips = append(errorChips, id)
 			errorDetail = append(errorDetail, fmt.Sprintf("%s (code %d)", id, chip.ErrorCode))
-			grades.hit(i, model.NPUChipGradeFault, fmt.Sprintf("error code %d", chip.ErrorCode))
+			if category, ok := npuErrorCodeInfo(int64(chip.ErrorCode)); ok {
+				grades.hit(i, model.NPUChipGradeFault, npuErrorCodeReason(int64(chip.ErrorCode), category))
+				if !seenActions[category.Action] {
+					if seenActions == nil {
+						seenActions = make(map[string]bool)
+					}
+					seenActions[category.Action] = true
+					errorCodeActions = append(errorCodeActions, category.Action)
+				}
+			} else {
+				grades.hit(i, model.NPUChipGradeFault, fmt.Sprintf("error code %d", chip.ErrorCode))
+				// An unclassified code must keep the generic recommendation:
+				// mixing it with knowledge-base actions would advertise a
+				// handling tier for a code nobody classified. unclassifiedCodes
+				// records that, so a later known code cannot mask it.
+				unclassifiedCodes++
+			}
 		}
 
-		// The exporter-reported health string is a second, independent signal
-		// next to the metrics above; it only ever raises a chip's grade.
+		// The health string is a second, independent signal next to the metrics
+		// above; it only ever raises a chip's grade. Two producers feed it, with
+		// overlapping but different domains: NPU-Exporter yields OK / Error /
+		// Unknown (upstream health_status is 1 / 0 / -1), while the deploy
+		// collector path (deploy/k8s-monitor-npu-collector.yaml) copies the
+		// npu-smi health string verbatim — OK / Warning / Error. Error is a
+		// fault on both paths, Warning a degradation on the collector path, and
+		// Unknown is deliberately not a hit: absence of a signal is not a
+		// signal, so the chip keeps the grade the other checks gave it and the
+		// view reports the unknown count instead.
 		switch chip.Health {
 		case "Error":
 			grades.hit(i, model.NPUChipGradeFault, "chip health Error")
+			healthFaultChips = append(healthFaultChips, id)
 		case "Warning":
 			grades.hit(i, model.NPUChipGradeDegraded, "chip health Warning")
 		}
@@ -279,7 +317,7 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 
 	node.NPUChipHealth = grades.results()
 
-	alerts := make([]model.Alert, 0, 5)
+	alerts := make([]model.Alert, 0, 7)
 
 	if len(hotChips) > 0 {
 		// Severity follows the hottest chip; Value lists every chip above the
@@ -375,7 +413,12 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 		// and the raw code is carried through in the message for whoever does
 		// know it. The value column keeps the plain chip IDs (the message
 		// carries the raw codes), so the en render stays byte-identical to
-		// Value.
+		// Value. When every offending code is in the device plugin's fault-code
+		// knowledge base, its handling recommendation replaces the generic one.
+		recommendedAction := diagnostic.GetRecommendedAction(model.AlertTypeNPUErrorCode, "", node.Name)
+		if unclassifiedCodes == 0 && len(errorCodeActions) > 0 {
+			recommendedAction = strings.Join(errorCodeActions, " • ")
+		}
 		alerts = append(alerts, model.Alert{
 			Severity:          model.AlertSeverityWarning,
 			Category:          "NPU",
@@ -388,7 +431,28 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 			Value:             npuChipValue(errorChips),
 			ValueKey:          "alert.value_chips",
 			ValueArgs:         map[string]interface{}{"Chips": strings.Join(errorChips, ", ")},
-			RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPUErrorCode, "", node.Name),
+			RecommendedAction: recommendedAction,
+			Timestamp:         now,
+		})
+	}
+
+	// NPU-Exporter health status, the second independent chip-fault signal next
+	// to the device plugin bitmask. Both alerts exist side by side by design:
+	// the two sources can disagree, and each one names the chips it saw.
+	if len(healthFaultChips) > 0 {
+		alerts = append(alerts, model.Alert{
+			Severity:          model.AlertSeverityCritical,
+			Category:          "NPU",
+			AlertType:         model.AlertTypeNPUChipFault,
+			ResourceType:      "Node",
+			ResourceName:      node.Name,
+			Message:           fmt.Sprintf("NPU chip(s) %s unhealthy per NPU-Exporter health status", strings.Join(healthFaultChips, ", ")),
+			MessageKey:        "alert.npu_chip_health",
+			MessageArgs:       map[string]interface{}{"Chips": strings.Join(healthFaultChips, ", ")},
+			Value:             npuChipValue(healthFaultChips),
+			ValueKey:          "alert.value_chips",
+			ValueArgs:         map[string]interface{}{"Chips": strings.Join(healthFaultChips, ", ")},
+			RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPUChipFault, "", node.Name),
 			Timestamp:         now,
 		})
 	}
@@ -478,7 +542,7 @@ func (g *npuChipGrades) hitNodeWide(node *model.NodeData) {
 				grade = model.NPUChipGradeFault
 			}
 			for i := range g.chips {
-				g.hit(i, grade, "device fault level "+fault.DeviceFaultLevel)
+				g.hit(i, grade, "device fault level "+npuReasonSafe(fault.DeviceFaultLevel))
 			}
 		}
 	}
@@ -515,6 +579,15 @@ func npuDeviceFaultSeverity(level string) (model.AlertSeverity, bool) {
 	default:
 		return model.AlertSeverityWarning, true
 	}
+}
+
+// npuReasonSafe folds the three characters encoding/json escapes by default
+// (< > &) into safe stand-ins. Grade reasons end up in the JSON export, where
+// an escaped "<" turns a stable phrase into noise; the fault level is the only
+// reason component that comes from the cluster rather than from a literal in
+// this package, so it is the only one that needs folding.
+func npuReasonSafe(text string) string {
+	return strings.NewReplacer("<", "lt", ">", "gt", "&", "and").Replace(text)
 }
 
 // sanitizeNPUText collapses all whitespace (including the newlines some

@@ -291,6 +291,9 @@ other = "节点内存使用率过高"
 [alert.npu_chip_fault]
 other = "NPU 芯片 {{.Chips}} 被设备插件上报故障"
 
+[alert.npu_chip_health]
+other = "NPU 芯片 {{.Chips}} 被 NPU-Exporter 上报健康状态异常"
+
 [alert.npu_monitor_degraded]
 other = "NPU 监控降级：NPU-Exporter 不可达，芯片指标与阈值告警已暂停，直至其恢复响应"
 
@@ -1709,6 +1712,26 @@ other = "资源名称"
 [npu.details]
 other = "NPU 详情"
 
+# 芯片错误码的故障档位，按昇腾设备插件 faultCode.json 的五档分类
+# （见 npu_errorcodes.go）。
+[npu.errorcat.no_action]
+other = "无需处理"
+
+[npu.errorcat.rerun]
+other = "重跑业务"
+
+[npu.errorcat.reset]
+other = "需复位芯片"
+
+[npu.errorcat.isolate]
+other = "需隔离芯片（评估更换）"
+
+[npu.errorcat.subhealth]
+other = "亚健康"
+
+[npu.errorcat.unknown]
+other = "未收录码"
+
 # ============================================================================
 # NPU 总览视图（跨节点芯片健康）
 # ============================================================================
@@ -1741,6 +1764,28 @@ other = "{{.Count}} 故障"
 
 [npuview.monitoring_unavailable]
 other = "监控不可用"
+
+[npuview.summary_unknown]
+other = "{{.Count}} 未知"
+
+[npuview.liveness_ok]
+other = "监控 正常 · 上次成功 {{.LastSuccess}}"
+
+[npuview.liveness_backoff]
+other = "监控 降级 · 上次成功 {{.LastSuccess}}"
+
+[npuview.liveness_never]
+other = "监控 不可用"
+
+# 采集通道状态，在节点详情中渲染（原始失败文本由视图自行追加并按字段宽截断）。
+[npu.liveness.ok]
+other = "可达"
+
+[npu.liveness.backoff]
+other = "不可达，退避重试中"
+
+[npu.liveness.never]
+other = "尚未采集"
 
 [npuview.no_nodes]
 other = "集群中未发现 NPU 节点"
@@ -2468,6 +2513,20 @@ other = "(可纠正)"
 
 [npudetail.ecc_uncorrectable]
 other = "(不可纠正)"
+
+# 每芯片 HBM ECC 累计值与会话内增量；增量仅在采集窗内满 2 个样本时出现。
+[npudetail.ecc_delta]
+other = "    芯片 {{.NPU}}-{{.Chip}}：ECC 累计 单比特 {{.Single}}{{.SingleDelta}} · 双比特 {{.Double}}{{.DoubleDelta}}"
+
+# 上报错误码的芯片，错误码在知识库中时附故障档位。
+[npudetail.error_code_chip]
+other = "    芯片 {{.NPU}}-{{.Chip}}：{{.Code}} · {{.Category}}"
+
+[npudetail.health_unknown]
+other = "健康状态未知的芯片"
+
+[npudetail.exporter_liveness]
+other = "NPU-Exporter"
 
 [npudetail.runtime_na]
 other = "NPU 运行时指标: 不可用"

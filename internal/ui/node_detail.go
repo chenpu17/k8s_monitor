@@ -241,10 +241,19 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 
 			// Overall status
 			healthStyle := StyleStatusReady
-			if node.NPUHealthStatus == "Warning" {
+			switch node.NPUHealthStatus {
+			case "Warning":
 				healthStyle = StyleWarning
-			} else if node.NPUHealthStatus == "Unhealthy" {
+			case "Unhealthy":
+				// The worst aggregate the collector produces (no chip reports
+				// OK): it stays red, distinct from the yellow of a merely
+				// degraded node.
 				healthStyle = StyleStatusNotReady
+			case "Unknown":
+				// Unknown is the aggregate of chips whose health_status was
+				// missing or -1 (DCMI failure): not a fault, so it must not be
+				// painted as one.
+				healthStyle = StyleTextMuted
 			}
 			// The runtime metrics (including this health status) come from
 			// npu-exporter, unlike the per-chip bitmap block below which comes
@@ -253,6 +262,23 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 			info = append(info, fmt.Sprintf("    %s: %s",
 				StyleTextMuted.Render(fmt.Sprintf("%s (%s)", m.T("npudetail.health_status"), m.T("npudetail.health_exporter"))),
 				healthStyle.Render(node.NPUHealthStatus)))
+
+			// Chips the exporter said nothing about. They keep a healthy grade
+			// in the matrix (an absent signal is not a fault), so this line is
+			// where their existence stays visible.
+			if unknown := countNPUChipsByHealth(node.NPUChips, "Unknown"); unknown > 0 {
+				info = append(info, fmt.Sprintf("    %s: %d",
+					StyleTextMuted.Render(m.T("npudetail.health_unknown")),
+					unknown))
+			}
+
+			// NPU-Exporter liveness: whether the fetch path behind the metrics
+			// above is currently answering. The state comes from the cluster
+			// summary (one exporter feeds the whole cluster), so it is rendered
+			// only when the data carries it.
+			if line := m.npuExporterLivenessLine(); line != "" {
+				info = append(info, line)
+			}
 
 			// Average utilization
 			info = append(info, fmt.Sprintf("    %s: %s",
@@ -405,9 +431,15 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 					// the column width was measured from.
 					hbmStr := hbmCells[i]
 
-					// Health indicator in ID column
+					// Health indicator in ID column. Only a chip the exporter
+					// reported unhealthy is called out; "Unknown" (health_status
+					// missing or -1) is not a fault and keeps the plain cell.
 					idStr := fmt.Sprintf("%d", chip.PhyID)
-					if chip.Health != "OK" && chip.Health != "" {
+					switch chip.Health {
+					case "OK", "":
+					case "Unknown":
+						idStr = StyleTextMuted.Render(idStr)
+					default:
 						idStr = StyleWarning.Render(idStr)
 					}
 
@@ -466,15 +498,22 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 						hbmStr = fmt.Sprintf("%d/%dMB (%.0f%%)", chip.HBMUsed, chip.HBMTotal, hbmPercent)
 					}
 
-					// Color coding for health
+					// Color coding for health. Two producers feed the field:
+					// NPU-Exporter yields OK / Error / Unknown, the deploy
+					// collector copies the npu-smi string (adds Warning). Only
+					// Error is a fault; Warning renders yellow, and Unknown
+					// ("health_status" missing or -1) is muted rather than
+					// painted as a failure.
 					healthStr := chip.Health
 					switch chip.Health {
 					case "OK":
 						healthStr = StyleStatusReady.Render(chip.Health)
 					case "Warning":
 						healthStr = StyleWarning.Render(chip.Health)
-					default:
+					case "Error":
 						healthStr = StyleStatusNotReady.Render(chip.Health)
+					case "Unknown":
+						healthStr = StyleTextMuted.Render(chip.Health)
 					}
 
 					// Color coding for temperature
@@ -493,6 +532,17 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 						padRight(healthStr, bColHealth),
 						padRight(hbmStr, bColHBM)))
 				}
+			}
+
+			// Sparse per-chip rows: only the chips that carry something the
+			// table columns cannot show. They are appended after the table
+			// rather than as extra columns, because the table's column widths
+			// (including the 61-column tier boundary) are byte-anchored, and a
+			// blank line keeps the table block itself unchanged for the readers
+			// that count its lines.
+			if sparse := m.npuChipSparseLines(node); len(sparse) > 0 {
+				info = append(info, "")
+				info = append(info, sparse...)
 			}
 
 			// RoCE and ECC Statistics (only if extended metrics available)
@@ -578,6 +628,12 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 			info = append(info, StyleTextMuted.Render("    "+m.T("npudetail.runtime_na_hint_unreachable")))
 			info = append(info, StyleTextMuted.Render("    "+m.T("npudetail.runtime_na_hint_not_deployed")))
 			info = append(info, StyleTextMuted.Render("    "+m.T("npudetail.runtime_na_flag")))
+			// The hint above names the two usual causes; the liveness row says
+			// which state the fetch path is actually in and why it last failed,
+			// which is what turns "unreachable" into something actionable.
+			if line := m.npuExporterLivenessLine(); line != "" {
+				info = append(info, line)
+			}
 		}
 
 		// Chip health bitmask (per-chip, reported by the NPU device plugin)
@@ -963,6 +1019,113 @@ func (m *Model) renderNodePodsInfo(node *model.NodeData) string {
 	}
 
 	return strings.Join(info, "\n")
+}
+
+// countNPUChipsByHealth counts the chips whose exported health string equals
+// state. It is how the node detail counts the chips the exporter said nothing
+// about ("Unknown").
+func countNPUChipsByHealth(chips []model.NPUChipData, state string) int {
+	count := 0
+	for _, chip := range chips {
+		if chip.Health == state {
+			count++
+		}
+	}
+	return count
+}
+
+// npuExporterLivenessLine renders the NPU-Exporter liveness row of the node
+// detail's runtime section, or "" when the data carries no liveness state (no
+// exporter client, or no NPU node so the exporter is never polled). The state
+// is localized through its key, with the raw error text appended for the
+// degraded states, truncated to the field width like every other value.
+func (m *Model) npuExporterLivenessLine() string {
+	if m.clusterData == nil || m.clusterData.Summary == nil || m.clusterData.Summary.NPUExporterLiveness == nil {
+		return ""
+	}
+	liveness := m.clusterData.Summary.NPUExporterLiveness
+
+	label := m.T("npudetail.exporter_liveness")
+	state := liveness.Status
+	if liveness.MessageKey != "" {
+		state = m.TF(liveness.MessageKey, liveness.MessageArgs)
+	} else if state == "" {
+		// A status nobody set must not read as healthy: fall back to the
+		// "not polled yet" wording instead of rendering an empty green value.
+		state = m.T("npu.liveness.never")
+	}
+
+	style := StyleStatusReady
+	switch liveness.Status {
+	case "backoff":
+		style = StyleWarning
+	case "never":
+		style = StyleTextMuted
+	default:
+		if liveness.Status != "ok" {
+			style = StyleTextMuted
+		}
+	}
+
+	value := style.Render(state)
+	if liveness.LastError != "" && liveness.Status != "ok" {
+		value += " " + StyleTextMuted.Render(truncate(collapseWhitespace(liveness.LastError), m.detailValueWidth(label, 60)))
+	}
+	return fmt.Sprintf("    %s: %s", StyleTextMuted.Render(label), value)
+}
+
+// npuChipSparseLines renders the per-chip lines that follow the chip table: one
+// for chips reporting an error code (with the fault-code knowledge base class
+// when the code is known) and one for chips with HBM ECC history. Both are
+// sparse — a healthy node renders nothing here — and both stay outside the
+// table so its column geometry cannot move.
+func (m *Model) npuChipSparseLines(node *model.NodeData) []string {
+	var lines []string
+
+	for _, chip := range node.NPUChips {
+		if chip.ErrorCode == 0 {
+			continue
+		}
+		family := chip.ErrorCodeFamily
+		if family == "" {
+			family = "unknown"
+		}
+		lines = append(lines, m.TF("npudetail.error_code_chip", map[string]interface{}{
+			"NPU":      chip.NPUID,
+			"Chip":     chip.Chip,
+			"Code":     fmt.Sprintf("%08X", chip.ErrorCode),
+			"Category": StyleWarning.Render(m.T("npu.errorcat." + family)),
+		}))
+	}
+
+	for _, chip := range node.NPUChips {
+		single, double := chip.HBMEccSingleErrTotal, chip.HBMEccDoubleErrTotal
+		if single == 0 && double == 0 && chip.HBMEccSingleErrDelta == 0 && chip.HBMEccDoubleErrDelta == 0 {
+			continue
+		}
+		// The delta is only shown once the window holds two samples: with one
+		// sample there is no increment to report, and printing Δ+0 would read
+		// as "nothing happened since monitoring started".
+		lines = append(lines, m.TF("npudetail.ecc_delta", map[string]interface{}{
+			"NPU":         chip.NPUID,
+			"Chip":        chip.Chip,
+			"Single":      single,
+			"SingleDelta": npuDeltaSuffix(chip.HBMEccDeltaSamples, chip.HBMEccSingleErrDelta),
+			"Double":      double,
+			"DoubleDelta": npuDeltaSuffix(chip.HBMEccDeltaSamples, chip.HBMEccDoubleErrDelta),
+		}))
+	}
+
+	return lines
+}
+
+// npuDeltaSuffix renders the " (Δ+n)" qualifier of the ECC delta line, or ""
+// while the window is too short to have a delta.
+func npuDeltaSuffix(samples int, delta int64) string {
+	if samples < 2 {
+		return ""
+	}
+	return fmt.Sprintf(" (Δ+%d)", delta)
 }
 
 // detailValueWidth returns how wide the value of a "    <label>: <value>" line

@@ -70,7 +70,7 @@ func TestNPUChipHealthGrades(t *testing.T) {
 			},
 			wantChip:   1,
 			wantGrade:  model.NPUChipGradeDegraded,
-			wantReason: "temp 80>=80",
+			wantReason: "temp 80 ge 80",
 		},
 		{
 			name: "temperature above the critical threshold faults",
@@ -79,7 +79,7 @@ func TestNPUChipHealthGrades(t *testing.T) {
 			},
 			wantChip:   1,
 			wantGrade:  model.NPUChipGradeFault,
-			wantReason: "temp 91>=90",
+			wantReason: "temp 91 ge 90",
 		},
 		{
 			name: "single-bit ECC degrades",
@@ -128,13 +128,16 @@ func TestNPUChipHealthGrades(t *testing.T) {
 			wantReason: "error code 42",
 		},
 		{
-			name: "the exporter health Warning degrades",
+			// Batch 24: the exporter's health_status is three-valued upstream
+			// (1 healthy, 0 unhealthy, -1 DCMI failure), so the converted chip
+			// never carries "Warning". A chip whose health is not known must not
+			// be graded on it: absence of a signal is not a signal.
+			name: "the exporter health Unknown says nothing",
 			mutate: func(chips []model.NPUChipData) {
-				chips[5].Health = "Warning"
+				chips[5].Health = "Unknown"
 			},
-			wantChip:   5,
-			wantGrade:  model.NPUChipGradeDegraded,
-			wantReason: "chip health Warning",
+			wantChip:  5,
+			wantGrade: model.NPUChipGradeHealthy,
 		},
 		{
 			name: "the exporter health Error faults",
@@ -197,7 +200,7 @@ func TestNPUChipHealthTakesHighestGrade(t *testing.T) {
 			},
 			wantGrade: model.NPUChipGradeDegraded,
 			// Temperature is evaluated first, so it is the reason that survives.
-			wantReason: "temp 80>=80",
+			wantReason: "temp 80 ge 80",
 		},
 		{
 			name: "a faulting signal outranks the degrading ones",
@@ -213,7 +216,7 @@ func TestNPUChipHealthTakesHighestGrade(t *testing.T) {
 			name: "a faulting signal cannot be lowered by a later degrading one",
 			mutate: func(chip *model.NPUChipData) {
 				chip.HBMEccDoubleErr = 1
-				chip.Health = "Warning"
+				chip.Health = "Unknown"
 			},
 			wantGrade:  model.NPUChipGradeFault,
 			wantReason: "double-bit ECC",

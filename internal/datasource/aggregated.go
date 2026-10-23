@@ -733,6 +733,17 @@ func (a *AggregatedDataSource) buildClusterSummary(nodes []*model.NodeData, pods
 	summary.HyperNodeCount = len(hyperNodeIDs)
 	summary.SuperPodCount = len(superPodIDs)
 
+	// NPU-Exporter liveness. It is stamped only when the client exists and the
+	// cluster is the single-NPU-node shape the client actually polls:
+	// EnrichNodeData skips multi-NPU-node clusters (one exporter answer cannot
+	// be attributed per node), so there a never-polled client would report
+	// "never" and the view would read "monitoring unavailable" while the
+	// exporter is fine. The claim is only made where the walk happens.
+	if a.npuExporterClient != nil && summary.NPUNodesCount == 1 {
+		liveness := a.npuExporterClient.Liveness()
+		summary.NPUExporterLiveness = &liveness
+	}
+
 	// Collect alerts based on thresholds
 	summary.Alerts = a.collectAlerts(nodes, pods, services, pvcs, summary)
 

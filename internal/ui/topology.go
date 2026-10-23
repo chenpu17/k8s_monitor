@@ -267,15 +267,19 @@ func (m *Model) renderSuperPodDetail() string {
 				}
 			}
 
-			// Health status
+			// Health status. Unknown (nothing reported by the exporter) is not a
+			// fault, so it is muted instead of painted as one.
 			healthStr := node.NPUHealthStatus
-			if healthStr == "" {
+			switch {
+			case healthStr == "":
 				healthStr = "-"
-			} else if healthStr == "Healthy" {
+			case healthStr == "Healthy":
 				healthStr = StyleStatusReady.Render(healthStr)
-			} else if healthStr == "Warning" {
+			case healthStr == "Warning":
 				healthStr = StyleWarning.Render(healthStr)
-			} else {
+			case healthStr == "Unknown":
+				healthStr = StyleTextMuted.Render(healthStr)
+			default:
 				healthStr = StyleDanger.Render(healthStr)
 			}
 

@@ -267,6 +267,19 @@ func npuChipTally(nodes []*model.NodeData) (healthy, degraded, fault int) {
 	return healthy, degraded, fault
 }
 
+// npuUnknownHealthTally counts the chips whose exporter health status is
+// unknown, across the nodes that carry chip data. Unknown chips stay healthy in
+// the matrix (an absent signal is not a fault), so this count is the only place
+// the matrix diff reports them: the 1 fault + no alerts contradiction is fixed
+// by alerting on reported faults, not by inventing a fourth grade.
+func npuUnknownHealthTally(nodes []*model.NodeData) int {
+	unknown := 0
+	for _, node := range nodes {
+		unknown += countNPUChipsByHealth(node.NPUChips, "Unknown")
+	}
+	return unknown
+}
+
 // npuNodesWithData counts the NPU nodes whose chip data is present. A node
 // without chip data is an NPU node whose metrics are missing (no exporter
 // answer), which the summary bar reports as uncovered monitoring.
@@ -394,7 +407,67 @@ func (m *Model) npuSummarySegments(nodes []*model.NodeData) []string {
 		"Total": len(nodes),
 	}))
 
+	// Chips the exporter said nothing about. The segment is conditional: a
+	// cluster whose chips all report a health status keeps the summary bar
+	// byte-identical to before this segment existed.
+	if unknown := npuUnknownHealthTally(nodes); unknown > 0 {
+		segments = append(segments, m.TF("npuview.summary_unknown", map[string]interface{}{
+			"Count": StyleTextMuted.Render(fmt.Sprintf("%d", unknown)),
+		}))
+	}
+
+	// NPU-Exporter liveness: is the fetch path behind the chip data above
+	// answering right now. The coverage count cannot answer that — it keeps its
+	// last successful value while the exporter is down. The wording is kept
+	// short on purpose: the bar has to survive a 38-column terminal where every
+	// segment must still render in full.
+	if liveness := m.npuExporterLiveness(); liveness != nil {
+		segments = append(segments, m.npuLivenessSegment(liveness))
+	}
+
 	return segments
+}
+
+// npuExporterLiveness returns the summary's exporter liveness state, or nil when
+// the data carries none (no exporter client, or no NPU node so the exporter is
+// never polled).
+func (m *Model) npuExporterLiveness() *model.NPUExporterLiveness {
+	if m.clusterData == nil || m.clusterData.Summary == nil {
+		return nil
+	}
+	return m.clusterData.Summary.NPUExporterLiveness
+}
+
+// npuLivenessSegment renders the liveness segment of the summary bar:
+// "Monitoring OK · last success 10:11:12", "Monitoring degraded · ..." or
+// "Monitoring unavailable". The raw error text is deliberately left out — it is
+// unbounded, the node detail carries it, and the bar has to survive a narrow
+// terminal.
+func (m *Model) npuLivenessSegment(liveness *model.NPUExporterLiveness) string {
+	style := StyleStatusReady
+	key := "npuview.liveness_ok"
+	switch liveness.Status {
+	case "backoff":
+		style, key = StyleWarning, "npuview.liveness_backoff"
+	case "never":
+		style, key = StyleTextMuted, "npuview.liveness_never"
+	default:
+		// A status nobody set (empty struct from a cached payload, or a value
+		// from a future producer) must not read as healthy: render the muted
+		// unavailable wording, same as "never".
+		if liveness.Status != "ok" {
+			style, key = StyleTextMuted, "npuview.liveness_never"
+		}
+	}
+
+	if key == "npuview.liveness_never" {
+		return style.Render(m.T(key))
+	}
+	lastSuccess := "-"
+	if !liveness.LastSuccess.IsZero() {
+		lastSuccess = liveness.LastSuccess.Local().Format("15:04:05")
+	}
+	return style.Render(m.TF(key, map[string]interface{}{"LastSuccess": lastSuccess}))
 }
 
 // wrapSummarySegments joins the summary segments with sep, wrapping onto a new

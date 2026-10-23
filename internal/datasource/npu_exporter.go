@@ -50,6 +50,25 @@ type NPUExporterClient struct {
 	useProxy        bool      // Whether to use K8s API proxy (default true)
 	available       bool      // Whether the last request to NPU-Exporter succeeded
 	lastFailure     time.Time // Time of last failure, used for retry backoff
+	lastSuccess     time.Time // Time of last success, reported by Liveness
+	lastError       string    // Raw text of the last failure, reported by Liveness
+	everSucceeded   bool      // Whether any request has ever succeeded
+	// eccSamples is the per-chip sliding window of cumulative ECC counters the
+	// enrichment path keeps (last eccSampleWindow refreshes), used to derive the
+	// session-scoped delta. Guarded by mu like the fields above.
+	eccSamples map[int][]eccSample
+}
+
+// eccSampleWindow is how many cumulative ECC counter samples the client keeps
+// per chip: the same depth the UI keeps for its metric trends. The oldest
+// sample of the window is the baseline the delta is measured against.
+const eccSampleWindow = 10
+
+// eccSample is one refresh's cumulative ECC counters for a chip.
+type eccSample struct {
+	at     time.Time
+	single int64
+	double int64
 }
 
 // NPUChipMetrics represents detailed NPU chip metrics from NPU-Exporter
@@ -67,7 +86,8 @@ type NPUChipMetrics struct {
 	HBMUsedMemory      int64   // bytes
 	Temperature        int     // Celsius
 	Power              float64 // Watts
-	HealthStatus       int     // 1 = healthy, 0 = unhealthy
+	HealthStatus       int     // 1 = healthy, 0 = unhealthy, -1 = unknown (DCMI failure); Known=false when the metric is absent
+	HealthStatusKnown  bool    // False when the exporter did not report health status
 	AICoreCurrentFreq  int     // MHz
 	BandwidthRx        float64 // MB/s
 	BandwidthTx        float64 // MB/s
@@ -134,11 +154,17 @@ func (c *NPUExporterClient) SetEndpoint(endpoint string) {
 	c.logger.Info("NPU-Exporter using custom endpoint", zap.String("endpoint", endpoint))
 }
 
+// inBackoffLocked reports whether a recent failure should suppress new
+// requests. The caller must hold mu.
+func (c *NPUExporterClient) inBackoffLocked() bool {
+	return !c.lastFailure.IsZero() && time.Since(c.lastFailure) < npuExporterRetryDelay
+}
+
 // inBackoff reports whether a recent failure should suppress new requests
 func (c *NPUExporterClient) inBackoff() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return !c.lastFailure.IsZero() && time.Since(c.lastFailure) < npuExporterRetryDelay
+	return c.inBackoffLocked()
 }
 
 // isAvailable reports whether the last request to NPU-Exporter succeeded
@@ -154,14 +180,22 @@ func (c *NPUExporterClient) recordSuccess() {
 	defer c.mu.Unlock()
 	c.available = true
 	c.lastFailure = time.Time{}
+	c.lastSuccess = time.Now()
+	c.lastError = ""
+	c.everSucceeded = true
 }
 
-// recordFailure marks NPU-Exporter as unreachable and arms the retry backoff
-func (c *NPUExporterClient) recordFailure() {
+// recordFailure marks NPU-Exporter as unreachable and arms the retry backoff.
+// The optional cause is kept as the raw failure text Liveness reports; callers
+// that only flip the state (tests, probes) may omit it.
+func (c *NPUExporterClient) recordFailure(cause ...error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.available = false
 	c.lastFailure = time.Now()
+	if len(cause) > 0 && cause[0] != nil {
+		c.lastError = cause[0].Error()
+	}
 }
 
 // endpointConfig returns the endpoint settings to use for the next request
@@ -205,6 +239,32 @@ func (c *NPUExporterClient) IsAvailable() bool {
 // successful request.
 func (c *NPUExporterClient) Degraded() bool {
 	return c.inBackoff()
+}
+
+// Liveness reports the current state of the exporter fetch path. Unlike
+// IsAvailable it distinguishes "never attempted" from "failed", so the UI can
+// say "not polled yet" instead of claiming a failure that never happened. The
+// returned value is a copy taken under mu; the raw failure text is included for
+// the export and log paths, and MessageKey is what the UI localizes.
+func (c *NPUExporterClient) Liveness() model.NPUExporterLiveness {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	liveness := model.NPUExporterLiveness{LastSuccess: c.lastSuccess}
+	switch {
+	case c.inBackoffLocked():
+		liveness.Status = "backoff"
+		liveness.LastError = c.lastError
+		liveness.MessageKey = "npu.liveness.backoff"
+		liveness.MessageArgs = map[string]interface{}{"Error": c.lastError}
+	case !c.everSucceeded:
+		liveness.Status = "never"
+		liveness.MessageKey = "npu.liveness.never"
+	default:
+		liveness.Status = "ok"
+		liveness.MessageKey = "npu.liveness.ok"
+	}
+	return liveness
 }
 
 // fetchMetricsViaProxy fetches metrics using Kubernetes API server proxy
@@ -268,7 +328,7 @@ func (c *NPUExporterClient) GetMetrics(ctx context.Context) (map[int]*NPUChipMet
 	}
 
 	if err != nil {
-		c.recordFailure()
+		c.recordFailure(err)
 		return nil, 0, err
 	}
 	defer body.Close()
@@ -370,6 +430,7 @@ func (c *NPUExporterClient) parseMetrics(body io.Reader) (map[int]*NPUChipMetric
 			chip.Power = value
 		case "npu_chip_info_health_status":
 			chip.HealthStatus = int(value)
+			chip.HealthStatusKnown = true
 		case "npu_chip_info_aicore_current_freq":
 			chip.AICoreCurrentFreq = int(value)
 		case "npu_chip_info_bandwidth_rx":
@@ -491,6 +552,55 @@ func (c *NPUExporterClient) EnrichNodeData(ctx context.Context, nodes []*model.N
 	return nil
 }
 
+// recordECCSamples appends this refresh's cumulative ECC counters to each
+// chip's sliding window and returns the session delta per chip: newest sample
+// minus oldest sample of the window, zero while fewer than two samples exist.
+// A counter that went backwards (chip reset, driver reload, exporter restart)
+// clears the window first and keeps only the new sample, the same reset
+// handling the UI's rate trends use, so the delta never goes negative.
+func (c *NPUExporterClient) recordECCSamples(chips []*NPUChipMetrics, now time.Time) map[int]eccSampleDelta {
+	deltas := make(map[int]eccSampleDelta, len(chips))
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.eccSamples == nil {
+		c.eccSamples = make(map[int][]eccSample, len(chips))
+	}
+
+	for _, chip := range chips {
+		sample := eccSample{at: now, single: chip.HBMEccSingleBitErrTotal, double: chip.HBMEccDoubleBitErrTotal}
+		window := c.eccSamples[chip.ID]
+		if n := len(window); n > 0 {
+			last := window[n-1]
+			if sample.single < last.single || sample.double < last.double {
+				window = nil
+			}
+		}
+		window = append(window, sample)
+		if len(window) > eccSampleWindow {
+			window = window[len(window)-eccSampleWindow:]
+		}
+		c.eccSamples[chip.ID] = window
+
+		delta := eccSampleDelta{samples: len(window)}
+		if len(window) >= 2 {
+			delta.single = window[len(window)-1].single - window[0].single
+			delta.double = window[len(window)-1].double - window[0].double
+		}
+		deltas[chip.ID] = delta
+	}
+
+	return deltas
+}
+
+// eccSampleDelta is the session increment derived from one chip's window.
+type eccSampleDelta struct {
+	single  int64
+	double  int64
+	samples int
+}
+
 // enrichSingleNode assigns all chip metrics to a single node
 func (c *NPUExporterClient) enrichSingleNode(node *model.NodeData, chips []*NPUChipMetrics) {
 	if len(chips) == 0 {
@@ -501,14 +611,26 @@ func (c *NPUExporterClient) enrichSingleNode(node *model.NodeData, chips []*NPUC
 	var totalHBMUsed, totalHBMTotal int64
 	var healthyCount, unhealthyCount int
 
+	deltas := c.recordECCSamples(chips, time.Now())
+
 	nodeChips := make([]model.NPUChipData, 0, len(chips))
 	for _, chip := range chips {
 		chipData := c.convertChipMetrics(chip)
+		if delta, ok := deltas[chip.ID]; ok {
+			chipData.HBMEccSingleErrDelta = delta.single
+			chipData.HBMEccDoubleErrDelta = delta.double
+			chipData.HBMEccDeltaSamples = delta.samples
+		}
 		nodeChips = append(nodeChips, chipData)
 
-		if chip.HealthStatus == 1 {
+		// Only a chip the exporter explicitly reported as unhealthy (0) counts
+		// against the node's health here. A missing metric or -1 (DCMI failure)
+		// is unknown, and unknown is not evidence of a fault: those chips are
+		// surfaced by the UI's "unknown health" row instead of being painted
+		// red.
+		if chip.HealthStatusKnown && chip.HealthStatus == 1 {
 			healthyCount++
-		} else {
+		} else if chip.HealthStatusKnown && chip.HealthStatus == 0 {
 			unhealthyCount++
 		}
 
@@ -534,6 +656,10 @@ func (c *NPUExporterClient) enrichSingleNode(node *model.NodeData, chips []*NPUC
 	if unhealthyCount > 0 {
 		node.NPUHealthStatus = "Warning"
 		node.NPUErrorCount = unhealthyCount
+	} else if healthyCount == 0 {
+		// Every chip's health_status was missing or -1: the node aggregate is
+		// "Unknown" rather than a healthy claim nobody made.
+		node.NPUHealthStatus = "Unknown"
 	} else {
 		node.NPUHealthStatus = "Healthy"
 	}
@@ -580,10 +706,21 @@ func (c *NPUExporterClient) convertChipMetrics(chip *NPUChipMetrics) model.NPUCh
 		BandwidthTx:          chip.BandwidthTx,
 	}
 
-	if chip.HealthStatus == 1 {
+	// health_status is three-valued upstream (1 healthy, 0 unhealthy, -1 DCMI
+	// call failed) and absent from some exporter versions; only a reported 1 or
+	// 0 says anything about the chip. A missing metric and -1 both mean "not
+	// known", which must not paint the chip as faulty.
+	switch {
+	case chip.HealthStatusKnown && chip.HealthStatus == 1:
 		chipData.Health = "OK"
-	} else {
+	case chip.HealthStatusKnown && chip.HealthStatus == 0:
 		chipData.Health = "Error"
+	default:
+		chipData.Health = "Unknown"
+	}
+
+	if category, ok := npuErrorCodeInfo(int64(chip.ErrorCode)); ok {
+		chipData.ErrorCodeFamily = category.Family
 	}
 
 	return chipData

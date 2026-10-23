@@ -401,8 +401,13 @@ func TestZhCopyFixes(t *testing.T) {
 // TestBundleKeyCount pins the bundle at the size this batch leaves it in, so a
 // key added without the other locale (or removed by accident) is caught even
 // when both remaining key sets still agree.
+//
+// Batch 24 added 18 keys: alert.npu_chip_health, npudetail.{health_unknown,
+// exporter_liveness,ecc_delta,error_code_chip}, npu.errorcat.* x6,
+// npuview.{summary_unknown,liveness_ok,liveness_backoff,liveness_never} and
+// npu.liveness.{ok,backoff,never} — 784 + 18 = 802.
 func TestBundleKeyCount(t *testing.T) {
-	const want = 784
+	const want = 802
 
 	en := readBundleMessages(t, "../../internal/i18n/active.en.toml")
 	zh := readBundleMessages(t, "../../internal/i18n/active.zh.toml")

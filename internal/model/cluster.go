@@ -149,6 +149,12 @@ type ClusterSummary struct {
 	NPUResourceName string // e.g., "huawei.com/ascend-1980"
 	NPUChipType     string // e.g., "Ascend910", "Ascend310"
 
+	// NPUExporterLiveness reports the health of the NPU-Exporter fetch path.
+	// It is summary-scoped rather than per-node: one ClusterIP service feeds a
+	// single-NPU-node cluster, and multi-NPU-node clusters are never enriched.
+	// nil means no exporter client is attached or the cluster has no NPU node.
+	NPUExporterLiveness *NPUExporterLiveness `json:"npu_exporter_liveness,omitempty"`
+
 	// Topology information (Volcano HyperNode)
 	HyperClusterID string // volcano.sh/hypercluster
 	HyperNodeCount int    // Number of HyperNodes (Tier 1)
@@ -273,13 +279,31 @@ type PodRestartInfo struct {
 	Reason       string // Last container termination reason
 }
 
+// NPUExporterLiveness reports the health of the NPU-Exporter fetch path,
+// summary-scoped: one ClusterIP service feeds a single-NPU-node cluster and
+// multi-NPU-node clusters are not enriched at all.
+//
+// Status distinguishes the three states the client can be in: "ok" (the last
+// request succeeded), "backoff" (a recent request failed and enrichment is
+// suspended until the retry window expires) and "never" (no request has been
+// attempted yet, which reads as unknown rather than as a failure).
+type NPUExporterLiveness struct {
+	Status      string    `json:"status"` // "ok" | "backoff" | "never"
+	LastSuccess time.Time `json:"last_success,omitempty"`
+	// LastError is the raw failure text for export/log paths; the UI renders
+	// MessageKey through the localizer and falls back to LastError.
+	LastError   string                 `json:"last_error,omitempty"`
+	MessageKey  string                 `json:"message_key,omitempty"`
+	MessageArgs map[string]interface{} `json:"message_args,omitempty"`
+}
+
 // NPUChipData represents detailed metrics for a single NPU chip
 type NPUChipData struct {
 	NPUID    int     `json:"npu"`       // NPU ID (0-7)
 	Chip     int     `json:"chip"`      // Chip number within NPU (0-1)
 	PhyID    int     `json:"phy_id"`    // Physical ID
 	BusID    string  `json:"bus_id"`    // PCIe Bus ID
-	Health   string  `json:"health"`    // Health status (OK, Warning, Error)
+	Health   string  `json:"health"`    // Health status (OK, Error, Unknown)
 	Power    float64 `json:"power"`     // Power consumption in Watts
 	Temp     int     `json:"temp"`      // Temperature in Celsius
 	AICore   int     `json:"aicore"`    // AI Core utilization percentage
@@ -296,19 +320,63 @@ type NPUChipData struct {
 	LinkUpNum       int     `json:"link_up_num"`       // Number of links up
 	NetworkStatus   int     `json:"network_status"`    // Network status
 	ErrorCode       int     `json:"error_code"`        // Error code
-	HBMEccSingleErr int64   `json:"hbm_ecc_single"`    // HBM ECC single-bit errors (recent window)
-	HBMEccDoubleErr int64   `json:"hbm_ecc_double"`    // HBM ECC double-bit errors (recent window)
+	// ErrorCodeFamily is the handling tier the exporter's error code maps to in
+	// the device plugin fault-code knowledge base (one of the NPUErrorCat*
+	// constants), empty when the code is 0 or not in the knowledge base. It is
+	// the localisation anchor for the node detail's chip line.
+	ErrorCodeFamily string `json:"error_code_family,omitempty"`
+	HBMEccSingleErr int64  `json:"hbm_ecc_single"` // HBM ECC single-bit errors (recent window)
+	HBMEccDoubleErr int64  `json:"hbm_ecc_double"` // HBM ECC double-bit errors (recent window)
 	// Cumulative counters since boot. Deliberately not used for alerts (a chip
 	// with historical corrections but no new ones is not an ongoing fault);
 	// parsed so the UI can surface long-term HBM degradation.
-	HBMEccSingleErrTotal int64   `json:"hbm_ecc_single_total"`
-	HBMEccDoubleErrTotal int64   `json:"hbm_ecc_double_total"`
-	RoCETxPkts           int64   `json:"roce_tx_pkts"`     // RoCE TX packets
-	RoCERxPkts           int64   `json:"roce_rx_pkts"`     // RoCE RX packets
-	RoCETxErrPkts        int64   `json:"roce_tx_err_pkts"` // RoCE TX error packets
-	RoCERxErrPkts        int64   `json:"roce_rx_err_pkts"` // RoCE RX error packets
-	BandwidthRx          float64 `json:"bandwidth_rx"`     // Bandwidth RX in MB/s
-	BandwidthTx          float64 `json:"bandwidth_tx"`     // Bandwidth TX in MB/s
+	HBMEccSingleErrTotal int64 `json:"hbm_ecc_single_total"`
+	HBMEccDoubleErrTotal int64 `json:"hbm_ecc_double_total"`
+	// Session-scoped sliding-window increment of the cumulative counters: the
+	// difference between the newest and the oldest sample the exporter client
+	// kept (last 10 refreshes for this chip). It answers "the total grew since
+	// monitoring started" next to the per-window counters, which answer "is it
+	// still growing". Client restarts reset it to zero; it is never alerted on.
+	HBMEccSingleErrDelta int64 `json:"hbm_ecc_single_err_delta,omitempty"`
+	HBMEccDoubleErrDelta int64 `json:"hbm_ecc_double_err_delta,omitempty"`
+	// HBMEccDeltaSamples is how many cumulative samples the delta above was
+	// computed from (at most the client's window depth). It decides whether the
+	// UI shows the delta at all — one sample has no increment to report — and
+	// stays out of the export: it describes the collector's window, not the
+	// chip.
+	HBMEccDeltaSamples int     `json:"-"`
+	RoCETxPkts         int64   `json:"roce_tx_pkts"`     // RoCE TX packets
+	RoCERxPkts         int64   `json:"roce_rx_pkts"`     // RoCE RX packets
+	RoCETxErrPkts      int64   `json:"roce_tx_err_pkts"` // RoCE TX error packets
+	RoCERxErrPkts      int64   `json:"roce_rx_err_pkts"` // RoCE RX error packets
+	BandwidthRx        float64 `json:"bandwidth_rx"`     // Bandwidth RX in MB/s
+	BandwidthTx        float64 `json:"bandwidth_tx"`     // Bandwidth TX in MB/s
+}
+
+// NPU fault-code handling families, one per coarse tier of the device plugin's
+// faultCode.json levels. They are plain strings so the JSON export carries a
+// stable, locale-independent value and double as the npu.errorcat.* i18n key
+// suffix the UI localises.
+const (
+	NPUErrorCatNoAction  = "no_action" // NotHandleFault
+	NPUErrorCatRerun     = "rerun"     // RestartRequest / RestartBusiness
+	NPUErrorCatReset     = "reset"     // FreeRestartNPU / RestartNPU
+	NPUErrorCatIsolate   = "isolate"   // SeparateNPU / PreSeparateNPU
+	NPUErrorCatSubHealth = "subhealth" // SubHealthFault
+)
+
+// NPUErrorCodeCategory is one fault-code class of the device plugin's
+// faultCode.json. Family is the coarse handling tier (one of the NPUErrorCat*
+// constants) and doubles as the npu.errorcat.* bundle key suffix the node
+// detail localizes. Category and Action are the stable English phrases the data
+// layer embeds in chip grades and alert actions; they must stay free of the
+// characters encoding/json escapes (< > &) so an exported grade reason keeps
+// them verbatim. Level is the upstream fault level, e.g. "SeparateNPU".
+type NPUErrorCodeCategory struct {
+	Family   string // npu.errorcat.* key suffix
+	Category string // stable English phrase, e.g. "chip isolation required"
+	Action   string // stable English recommendation for the alert action column
+	Level    string // upstream fault level, e.g. "SeparateNPU"
 }
 
 // NPU chip health grades, produced per chip by the datasource's per-chip
@@ -414,13 +482,17 @@ type NodeData struct {
 	NPUDriverVersion string // e.g., "7.7.0.9.220-25.2.1" from os.modelarts.node/npu.firmware.driver.version
 
 	// NPU runtime metrics (from annotations or external metrics)
-	NPUUtilization  float64       // AI Core utilization percentage (0-100)
-	NPUMemoryTotal  int64         // HBM total in bytes
-	NPUMemoryUsed   int64         // HBM used in bytes
-	NPUMemoryUtil   float64       // HBM utilization percentage (0-100)
-	NPUTemperature  int           // NPU temperature in Celsius
-	NPUPower        int           // NPU power consumption in Watts
-	NPUHealthStatus string        // Health status: "Healthy", "Warning", "Unhealthy"
+	NPUUtilization float64 // AI Core utilization percentage (0-100)
+	NPUMemoryTotal int64   // HBM total in bytes
+	NPUMemoryUsed  int64   // HBM used in bytes
+	NPUMemoryUtil  float64 // HBM utilization percentage (0-100)
+	NPUTemperature int     // NPU temperature in Celsius
+	NPUPower       int     // NPU power consumption in Watts
+	// NPUHealthStatus is the node aggregate of the exporter's per-chip
+	// health_status: "Healthy" (every reported chip healthy), "Warning" (at least
+	// one reported unhealthy), "Unhealthy" (the annotation-sourced collector
+	// path) or "Unknown" (nothing reported, so no claim is made).
+	NPUHealthStatus string        // Health status: "Healthy", "Warning", "Unhealthy", "Unknown"
 	NPUErrorCount   int           // Number of NPU errors detected
 	NPUAICoreCount  int           // Number of AI cores per NPU
 	NPUMetricsTime  time.Time     // Timestamp of last metrics update

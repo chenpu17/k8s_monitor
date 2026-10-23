@@ -336,9 +336,18 @@ func (m *Model) renderAlertRow(alert model.Alert) string {
 		parts = append(parts, fmt.Sprintf("    %s", StyleTextMuted.Render(valueStr)))
 	}
 
-	// Generate locale-aware recommended action
+	// Generate locale-aware recommended action. An alert may carry its own
+	// specific recommendation from the data layer — the NPU error-code alert
+	// attaches the fault-code knowledge base's handling tier. That stored field
+	// is English-only data, so it only wins when it is actually specific, i.e.
+	// different from the alert type's generic English action; otherwise it
+	// would shadow the locale-aware lookup below and flip every non-English
+	// view of an ordinary alert back to English.
 	var recommendedAction string
-	if alert.AlertType != "" {
+	if alert.RecommendedAction != "" &&
+		alert.RecommendedAction != diagnostic.GetRecommendedAction(alert.AlertType, alert.Namespace, alert.ResourceName) {
+		recommendedAction = alert.RecommendedAction
+	} else if alert.AlertType != "" {
 		if m.isChinese() {
 			recommendedAction = diagnostic.GetRecommendedActionChinese(alert.AlertType, alert.Namespace, alert.ResourceName)
 		} else {
