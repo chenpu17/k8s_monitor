@@ -264,6 +264,8 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 			MessageKey:        "alert.npu_temp_high",
 			MessageArgs:       map[string]interface{}{"Chips": strings.Join(hotChips, ", "), "Max": maxTemp},
 			Value:             npuChipValue(hotChips),
+			ValueKey:          "alert.value_chips",
+			ValueArgs:         map[string]interface{}{"Chips": strings.Join(hotChips, ", ")},
 			Threshold:         fmt.Sprintf("%d°C", reportedThreshold),
 			RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPUTempHigh, "", node.Name),
 			Timestamp:         now,
@@ -288,6 +290,8 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 			MessageKey:        "alert.npu_ecc_double_bit",
 			MessageArgs:       map[string]interface{}{"Chips": strings.Join(eccDouble, ", ")},
 			Value:             npuChipValue(eccDouble),
+			ValueKey:          "alert.value_chips",
+			ValueArgs:         map[string]interface{}{"Chips": strings.Join(eccDouble, ", ")},
 			RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPUEccDouble, "", node.Name),
 			Timestamp:         now,
 		})
@@ -304,6 +308,8 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 			MessageKey:        "alert.npu_ecc_single_bit",
 			MessageArgs:       map[string]interface{}{"Chips": strings.Join(eccSingle, ", ")},
 			Value:             npuChipValue(eccSingle),
+			ValueKey:          "alert.value_chips",
+			ValueArgs:         map[string]interface{}{"Chips": strings.Join(eccSingle, ", ")},
 			RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPUEccSingle, "", node.Name),
 			Timestamp:         now,
 		})
@@ -320,6 +326,8 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 			MessageKey:        "alert.npu_link_down",
 			MessageArgs:       map[string]interface{}{"Chips": strings.Join(linkDown, ", ")},
 			Value:             npuChipValue(linkDown),
+			ValueKey:          "alert.value_chips",
+			ValueArgs:         map[string]interface{}{"Chips": strings.Join(linkDown, ", ")},
 			RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPULinkDown, "", node.Name),
 			Timestamp:         now,
 		})
@@ -328,7 +336,9 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 	if len(errorChips) > 0 {
 		// The error code semantics are not documented, so this stays a warning
 		// and the raw code is carried through in the message for whoever does
-		// know it.
+		// know it. The value column keeps the plain chip IDs (the message
+		// carries the raw codes), so the en render stays byte-identical to
+		// Value.
 		alerts = append(alerts, model.Alert{
 			Severity:          model.AlertSeverityWarning,
 			Category:          "NPU",
@@ -339,6 +349,8 @@ func npuThresholdAlerts(node *model.NodeData, now time.Time) []model.Alert {
 			MessageKey:        "alert.npu_error_code",
 			MessageArgs:       map[string]interface{}{"Chips": strings.Join(errorDetail, ", ")},
 			Value:             npuChipValue(errorChips),
+			ValueKey:          "alert.value_chips",
+			ValueArgs:         map[string]interface{}{"Chips": strings.Join(errorChips, ", ")},
 			RecommendedAction: diagnostic.GetRecommendedAction(model.AlertTypeNPUErrorCode, "", node.Name),
 			Timestamp:         now,
 		})

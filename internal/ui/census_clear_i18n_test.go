@@ -267,12 +267,12 @@ func TestCensusClearPanelsEnGolden(t *testing.T) {
 	}
 	en.commandOutputContent = strings.Join(lines, "\n")
 	en.commandOutputScroll = 0
-	wantScroll0 := " Describe Pod: default/web-0 \n\n   1│ content line 00\n   2│ content line 01\n   3│ content line 02\n   4│ content line 03\n   5│ content line 04\n   6│ content line 05\n   7│ content line 06\n   8│ content line 07\n   9│ content line 08\n  10│ content line 09\n  11│ content line 10\n  12│ content line 11\n  13│ content line 12\n  14│ content line 13\n\nLines 1-14 of 30"
+	wantScroll0 := " Describe Pod: default/web-0 \n\n   1│ content line 00\n   2│ content line 01\n   3│ content line 02\n   4│ content line 03\n   5│ content line 04\n   6│ content line 05\n   7│ content line 06\n   8│ content line 07\n   9│ content line 08\n  10│ content line 09\n\nLines 1-10 of 30"
 	if got := en.renderCommandOutput(); got != wantScroll0 {
 		t.Errorf("en command output scroll=0:\n got %q\nwant %q", got, wantScroll0)
 	}
 	en.commandOutputScroll = 5
-	wantScroll5 := " Describe Pod: default/web-0 \n\n   6│ content line 05\n   7│ content line 06\n   8│ content line 07\n   9│ content line 08\n  10│ content line 09\n  11│ content line 10\n  12│ content line 11\n  13│ content line 12\n  14│ content line 13\n  15│ content line 14\n  16│ content line 15\n  17│ content line 16\n  18│ content line 17\n  19│ content line 18\n\nLines 6-19 of 30"
+	wantScroll5 := " Describe Pod: default/web-0 \n\n   6│ content line 05\n   7│ content line 06\n   8│ content line 07\n   9│ content line 08\n  10│ content line 09\n  11│ content line 10\n  12│ content line 11\n  13│ content line 12\n  14│ content line 13\n  15│ content line 14\n\nLines 6-15 of 30"
 	if got := en.renderCommandOutput(); got != wantScroll5 {
 		t.Errorf("en command output scroll=5:\n got %q\nwant %q", got, wantScroll5)
 	}
@@ -291,7 +291,7 @@ func TestCensusClearLogsFooterEnGolden(t *testing.T) {
 	m := censusLogsFixture(t, "en")
 
 	m.logsSearchMode = true
-	if got := m.renderLogs(); !strings.HasSuffix(got, "\n[Lines 1-12 of 15] • ⏸ Paused • Loading logs... Type to search • ESC to exit search") {
+	if got := m.renderLogs(); !strings.HasSuffix(got, "\n[Lines 1-8 of 15] • ⏸ Paused • Loading logs... Type to search • ESC to exit search") {
 		t.Errorf("en logs search-hint footer:\n%s", got)
 	}
 	m.logsSearchText = "alpha"
@@ -300,7 +300,7 @@ func TestCensusClearLogsFooterEnGolden(t *testing.T) {
 	}
 	m.logsSearchMode = false
 	m.logsSearchText = ""
-	if got := m.renderLogs(); !strings.HasSuffix(got, "\n[Lines 1-12 of 15] • ⏸ Paused • Loading logs... ↑/↓ scroll • PgUp/PgDn page • Esc back • / to search") {
+	if got := m.renderLogs(); !strings.HasSuffix(got, "\n[Lines 1-9 of 15] • ⏸ Paused • Loading logs... ↑/↓ scroll • PgUp/PgDn page • Esc back • / to search") {
 		t.Errorf("en logs scroll footer:\n%s", got)
 	}
 	m.containerLogs = "only one line"
@@ -593,7 +593,7 @@ func TestCensusClearZhSwitch(t *testing.T) {
 		zhLines = append(zhLines, fmt.Sprintf("内容 %02d", i))
 	}
 	m.commandOutputContent = strings.Join(zhLines, "\n")
-	if got := m.renderCommandOutput(); !strings.Contains(got, "第 1-14 行，共 30 行") {
+	if got := m.renderCommandOutput(); !strings.Contains(got, "第 1-10 行，共 30 行") {
 		t.Errorf("zh command output scroll indicator:\n%s", got)
 	}
 

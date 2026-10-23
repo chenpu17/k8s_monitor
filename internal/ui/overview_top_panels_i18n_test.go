@@ -382,7 +382,7 @@ func TestOverviewTopPanelsZhSwitch(t *testing.T) {
 		"[📦 Pod]", "[💻 节点]", "[📋 事件]", "🧮 NPU", "🌋 Volcano",
 		"总数：", "未就绪：", "警告：", "错误：",
 		"已分配：", "使用率：", "效率：", "调度：", "趋势：", "芯片：",
-		"Pods: 8 节点", "部署采集器", "以获取芯片指标", "无 NPU 节点",
+		"Pod 数：8 节点", "部署采集器", "以获取芯片指标", "无 NPU 节点",
 		"任务：", "等待：", "失败：", "NPU 请求：", "NPU 运行：", "队列：",
 		"暂无数据",
 	} {
@@ -519,7 +519,9 @@ func TestOverviewTopPanelsZhColumnAlignment(t *testing.T) {
 		{"npu eff", en.npuPanelLines(zhSummary)[6], zh.npuPanelLines(zhSummary)[6], 0},
 		{"npu sched", en.npuPanelLines(zhSummary)[7], zh.npuPanelLines(zhSummary)[7], 0},
 		{"npu chip", en.npuPanelLines(zhSummary)[10], zh.npuPanelLines(zhSummary)[10], 0},
-		{"npu superpod nodes", en.npuPanelLines(zhSummary)[11], zh.npuPanelLines(zhSummary)[11], 0},
+		// The zh label "Pod 数：" (product term, full-width colon) is two
+		// columns wider than "Pods: ", so its value sits two columns right.
+		{"npu superpod nodes", en.npuPanelLines(zhSummary)[11], zh.npuPanelLines(zhSummary)[11], 2},
 		{"volcano jobs", en.volcanoPanelLines(volcanoSummary())[2], zh.volcanoPanelLines(volcanoSummary())[2], 0},
 		{"volcano running", en.volcanoPanelLines(volcanoSummary())[3], zh.volcanoPanelLines(volcanoSummary())[3], 0},
 		{"volcano pending", en.volcanoPanelLines(volcanoSummary())[4], zh.volcanoPanelLines(volcanoSummary())[4], 0},

@@ -198,10 +198,12 @@ func TestAlertMessageArgsValues(t *testing.T) {
 	}
 }
 
-// Value-column lockdown, mirroring the message checks above: the 4 value
-// sites (NPUChipFault, PodOOMKilled, PodHighRestarts, ServiceNoEndpoints)
-// carry a ValueKey whose en render must stay byte-identical to the stored
-// Value, and every other site keeps its raw Value with no key.
+// Value-column lockdown, mirroring the message checks above: every chip-value
+// site (NPUChipFault plus the five npu_health threshold sites — temperature,
+// both ECC counters, link down and error code) carries alert.value_chips, and
+// the two pod/service count sites carry their own key. Each en render must stay
+// byte-identical to the stored Value, and every other site keeps its raw Value
+// with no key.
 func TestAlertValuesEnIdentity(t *testing.T) {
 	agg := &AggregatedDataSource{}
 
@@ -217,6 +219,11 @@ func TestAlertValuesEnIdentity(t *testing.T) {
 
 	valueKeys := map[model.AlertType]string{
 		model.AlertTypeNPUChipFault:       "alert.value_chips",
+		model.AlertTypeNPUTempHigh:        "alert.value_chips",
+		model.AlertTypeNPUEccDouble:       "alert.value_chips",
+		model.AlertTypeNPUEccSingle:       "alert.value_chips",
+		model.AlertTypeNPULinkDown:        "alert.value_chips",
+		model.AlertTypeNPUErrorCode:       "alert.value_chips",
 		model.AlertTypePodOOMKilled:       "alert.value_restarts",
 		model.AlertTypePodHighRestarts:    "alert.value_restarts",
 		model.AlertTypeServiceNoEndpoints: "alert.value_endpoints",
@@ -236,7 +243,7 @@ func TestAlertValuesEnIdentity(t *testing.T) {
 					a.AlertType, a.ValueKey, a.ValueArgs, got, a.Value)
 			}
 		} else if a.ValueKey != "" {
-			t.Errorf("%s: ValueKey = %q, want empty — only the 4 value sites are keyed", a.AlertType, a.ValueKey)
+			t.Errorf("%s: ValueKey = %q, want empty — only the chip-value and count value sites are keyed", a.AlertType, a.ValueKey)
 		}
 	}
 

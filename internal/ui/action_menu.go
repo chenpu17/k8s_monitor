@@ -302,10 +302,17 @@ func (m *Model) executeAction(action ActionType) tea.Cmd {
 		}
 
 	case ActionShowEvents:
-		// Switch to events view filtered for this resource
+		// Switch to the events view (the listing is unfiltered). The events
+		// view is a plain list, so every origin flag the detail set on the way
+		// in is dropped here: leaving them set made a later pod detail opened
+		// from the pods list believe it came from a job, and Esc jumped to the
+		// job detail instead of back to the list.
 		m.currentView = ViewEvents
 		m.detailMode = false
 		m.actionMenuMode = false
+		m.fromJobDetail = false
+		m.fromVolcanoJobDetail = false
+		m.fromNetworkView = false
 		return nil
 	}
 

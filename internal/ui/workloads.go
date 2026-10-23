@@ -18,8 +18,12 @@ func (m *Model) renderWorkloads() string {
 	// Build all content lines
 	var allLines []string
 
-	// Header
+	// Header. The header is one element in allLines but two physical lines
+	// whenever the job performance summary is rendered, so the budget below
+	// counts its physical lines explicitly (counted here, before any line is
+	// appended) instead of assuming one per element.
 	header := m.renderWorkloadsHeader()
+	headerLines := lineCount(header)
 	allLines = append(allLines, header, "")
 
 	// Clear workload sections map
@@ -137,9 +141,13 @@ func (m *Model) renderWorkloads() string {
 		return header + "\n\n" + m.T("msg.no_workloads")
 	}
 
-	// Apply scroll with bounds checking. The list appends the scroll indicator
-	// below its content, so those lines come out of the window budget.
-	maxVisible := max(1, m.contentBudget()-scrollIndicatorLines)
+	// Apply scroll with bounds checking. allLines holds one element per section
+	// header, table row and separator, but the workloads header element is
+	// headerLines physical lines tall; the window is measured in physical lines
+	// so the scroll indicator appended below it is not trimmed away by
+	// fitFrame. The list appends the scroll indicator below its content, so
+	// those lines come out of the window budget too.
+	maxVisible := max(1, m.contentBudget()-scrollIndicatorLines-(headerLines-1))
 
 	totalLines := len(allLines)
 

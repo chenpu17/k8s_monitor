@@ -64,7 +64,9 @@ func (m *Model) renderLogs() string {
 		searchBar := StyleKey.Render(m.T("logs.search_label")) + m.logsSearchText + StyleTextMuted.Render("_")
 		sections = append(sections, searchBar)
 	}
-	sections = append(sections, "")
+	if headerLines, _ := m.logsChrome(); headerLines > 1 {
+		sections = append(sections, "")
+	}
 
 	// Show error if any
 	if m.logsError != "" {
@@ -144,11 +146,12 @@ func (m *Model) renderLogs() string {
 		}
 	}
 
-	// Apply scroll offset with proper bounds checking
-	maxVisible := m.height - 8
-	if maxVisible < 1 {
-		maxVisible = 1
-	}
+	// Apply scroll offset with proper bounds checking. The window is the
+	// content area minus the lines this view spends on its title, its
+	// separators and the two-line status tail; a fixed height-8 made the
+	// renderer two lines taller than the content area, so fitFrame trimmed the
+	// status tail (position / auto-follow) off the bottom.
+	maxVisible := m.logsRows()
 
 	totalLines := len(logLines)
 	totalDisplayLines := len(allWrappedLines)
@@ -242,9 +245,12 @@ func (m *Model) renderLogs() string {
 		helpText = m.T("logs.help.back") + m.T("logs.search_hint_slash")
 	}
 
-	scrollInfo := StyleTextMuted.Render(fmt.Sprintf("\n%s %s",
+	statusText := StyleTextMuted.Render(fmt.Sprintf("%s %s",
 		strings.Join(statusParts, " • "), helpText))
-	sections = append(sections, scrollInfo)
+	if _, statusLines := m.logsChrome(); statusLines > 1 {
+		sections = append(sections, "")
+	}
+	sections = append(sections, statusText)
 
 	return strings.Join(sections, "\n")
 }

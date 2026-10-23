@@ -225,7 +225,7 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 			if node.HyperNodeID != "" {
 				info = append(info, fmt.Sprintf("    %s: %s",
 					StyleTextMuted.Render(m.T("npudetail.hypernode_id")),
-					truncate(node.HyperNodeID, 36)))
+					truncate(node.HyperNodeID, m.detailValueWidth(m.T("npudetail.hypernode_id"), 36))))
 			}
 			if node.CabinetInfo != "" {
 				info = append(info, fmt.Sprintf("    %s: %s",
@@ -963,6 +963,19 @@ func (m *Model) renderNodePodsInfo(node *model.NodeData) string {
 	}
 
 	return strings.Join(info, "\n")
+}
+
+// detailValueWidth returns how wide the value of a "    <label>: <value>" line
+// may be so the line fits the terminal. The label is measured as rendered
+// (localized) and stripped of ANSI, the indent is the four cells those lines
+// use and one column is left free for the separator. Fallback caps the width on
+// a terminal that reports no width yet (tests, before the first resize).
+func (m *Model) detailValueWidth(label string, fallback int) int {
+	if m.width <= 0 {
+		return fallback
+	}
+	width := m.width - 4 - visualLength(label) - 2
+	return max(1, min(fallback, width))
 }
 
 // extendedHBMCell renders the HBM cell of the extended chip table for one

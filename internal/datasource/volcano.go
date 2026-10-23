@@ -358,9 +358,17 @@ func (c *VolcanoClient) convertQueue(obj *unstructured.Unstructured) *model.Queu
 			q.CPUDeserved, q.MemoryDeserved, q.NPUDeserved, q.PodDeserved, q.NPUResourceName = c.parseQueueResources(deserved)
 		}
 
-		// Parse guarantee resources
+		// Parse guarantee resources. Unlike deserved and allocated (which are
+		// plain ResourceLists in the Queue spec), the upstream guarantee is a
+		// struct wrapping the list: spec.guarantee.resource. Parse the nested
+		// form when present and fall back to the flat one, so a non-standard
+		// CRD that puts the resources directly under guarantee still works.
 		if guarantee, ok, _ := unstructured.NestedMap(spec, "guarantee"); ok {
-			q.CPUGuarantee, q.MemoryGuarantee, q.NPUGuarantee, _, _ = c.parseQueueResources(guarantee)
+			res := guarantee
+			if inner, ok2, _ := unstructured.NestedMap(guarantee, "resource"); ok2 {
+				res = inner
+			}
+			q.CPUGuarantee, q.MemoryGuarantee, q.NPUGuarantee, _, _ = c.parseQueueResources(res)
 		}
 	}
 

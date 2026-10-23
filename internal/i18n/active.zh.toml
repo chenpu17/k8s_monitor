@@ -115,6 +115,9 @@ other = "年龄"
 [columns.cluster_ip]
 other = "集群 IP"
 
+[columns.external_ip]
+other = "外部 IP"
+
 [columns.ports]
 other = "端口"
 
@@ -235,6 +238,26 @@ other = "（显示 {{.Start}}-{{.End}}，共 {{.Total}}）"
 # 告警视图的完整消息
 [alerts.threshold]
 other = "阈值"
+
+# 告警视图页脚的分类统计。en 值为数据层存储的分类字面量（英文页脚不变），
+# zh 译名按 bundle 现有术语（节点/服务/存储/资源、Pod 与 NPU 保留产品名）。
+[alerts.category.node]
+other = "节点"
+
+[alerts.category.pod]
+other = "Pod"
+
+[alerts.category.npu]
+other = "NPU"
+
+[alerts.category.service]
+other = "服务"
+
+[alerts.category.storage]
+other = "存储"
+
+[alerts.category.resource]
+other = "资源"
 
 # ============================================================================
 # 告警消息
@@ -708,7 +731,7 @@ other = "趋势："
 other = "芯片："
 
 [overview.npu_superpod_nodes]
-other = "Pods: {{.Count}} 节点"
+other = "Pod 数：{{.Count}} 节点"
 
 [overview.npu_deploy_collector]
 other = "部署采集器"
@@ -1825,16 +1848,16 @@ other = "个节点"
 other = "Volcano 任务"
 
 [workloads.volcanojobs.stats]
-other = "总计: {{.Total}} • {{.Running}} • {{.Pending}} • {{.Completed}}"
+other = "总计：{{.Total}} • {{.Running}} • {{.Pending}} • {{.Completed}}"
 
 [workloads.volcanojobs.stats_running]
-other = "运行中: {{.Count}}"
+other = "运行中：{{.Count}}"
 
 [workloads.volcanojobs.stats_pending]
-other = "等待中: {{.Count}}"
+other = "等待中：{{.Count}}"
 
 [workloads.volcanojobs.stats_completed]
-other = "已完成: {{.Count}}"
+other = "已完成：{{.Count}}"
 
 [workloads.no_volcanojobs]
 other = "未发现 Volcano 任务"

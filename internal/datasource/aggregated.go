@@ -303,6 +303,15 @@ func (a *AggregatedDataSource) enrichWithKubeletMetrics(ctx context.Context, nod
 				n.NetworkRxBytes = 0
 				n.NetworkTxBytes = 0
 				n.NetworkTimestamp = time.Time{}
+				// The pod count comes from the API Server pod list (podsByNode
+				// is built before the goroutines start and only read here), so
+				// an unreachable kubelet must not zero it: the pods view keeps
+				// listing those pods, and a node reporting 0 of them reads as
+				// an empty node.
+				n.PodCount = len(podsByNode[n.Name])
+				if n.PodAllocatable > 0 {
+					n.PodUsagePercent = float64(n.PodCount) / float64(n.PodAllocatable) * 100
+				}
 				a.mu.Unlock()
 
 				a.logger.Debug("Failed to get kubelet metrics",

@@ -1,7 +1,9 @@
 package app
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -42,6 +44,42 @@ type Config struct {
 	// Logging configuration
 	LogLevel string `mapstructure:"log_level"`
 	LogFile  string `mapstructure:"log_file"`
+}
+
+// LocaleFromConfig returns the ui.locale setting of the configuration the
+// console will load: the file at configFile when it is set, otherwise the first
+// one the default search path finds (./config, $HOME/.k8s-monitor,
+// /etc/k8s-monitor) — the same paths LoadConfig uses, so the CLI texts and the
+// TUI agree on the language.
+//
+// It is meant for the CLI help path, which must not fail on a broken
+// configuration: a missing file, an unparsable one or a missing key all return
+// ("", nil). The caller decides whether the value is a supported locale.
+func LocaleFromConfig(configFile string) (string, error) {
+	// A fresh Viper instance keeps this read out of the global state LoadConfig
+	// populates, so probing for the help language cannot leak a config file
+	// into the console's own load later in the same process.
+	v := viper.New()
+	if configFile != "" {
+		// Like LoadConfig, let Viper infer the type from the file extension:
+		// forcing yaml here would reject e.g. a TOML config the console itself
+		// reads fine, and split the help language from the TUI language again.
+		v.SetConfigFile(configFile)
+	} else {
+		v.SetConfigType("yaml")
+		v.SetConfigName("config")
+		v.AddConfigPath("./config")
+		v.AddConfigPath("$HOME/.k8s-monitor")
+		v.AddConfigPath("/etc/k8s-monitor")
+	}
+
+	if err := v.ReadInConfig(); err != nil {
+		if _, notFound := err.(viper.ConfigFileNotFoundError); notFound || errors.Is(err, fs.ErrNotExist) {
+			return "", nil
+		}
+		return "", err
+	}
+	return v.GetString("ui.locale"), nil
 }
 
 // LoadConfig loads configuration from file and environment

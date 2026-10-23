@@ -164,7 +164,6 @@ func (m *Model) exportNodesCSV(data *model.ClusterData, exportDir, filename stri
 	defer file.Close()
 
 	writer := csv.NewWriter(file)
-	defer writer.Flush()
 
 	// Write header
 	header := []string{
@@ -200,6 +199,14 @@ func (m *Model) exportNodesCSV(data *model.ClusterData, exportDir, filename stri
 		if err := writer.Write(record); err != nil {
 			return err
 		}
+	}
+
+	// The writer buffers 4 KiB: the last chunk of the file — and any
+	// error writing it — only surfaces in Flush, so the error must be
+	// returned here instead of being dropped by a deferred Flush.
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return err
 	}
 
 	return nil
@@ -241,7 +248,6 @@ func (m *Model) exportPodsCSV(data *model.ClusterData, exportDir, filename strin
 	defer file.Close()
 
 	writer := csv.NewWriter(file)
-	defer writer.Flush()
 
 	// Write header
 	header := []string{
@@ -275,6 +281,14 @@ func (m *Model) exportPodsCSV(data *model.ClusterData, exportDir, filename strin
 		if err := writer.Write(record); err != nil {
 			return err
 		}
+	}
+
+	// The writer buffers 4 KiB: the last chunk of the file — and any
+	// error writing it — only surfaces in Flush, so the error must be
+	// returned here instead of being dropped by a deferred Flush.
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return err
 	}
 
 	return nil
@@ -316,10 +330,16 @@ func (m *Model) exportEventsCSV(data *model.ClusterData, exportDir, filename str
 	defer file.Close()
 
 	writer := csv.NewWriter(file)
-	defer writer.Flush()
 
 	// Write header
-	header := []string{"Type", "Reason", "Object", "Message", "Count", "Age"}
+	header := []string{
+		m.T("columns.type"),
+		m.T("columns.reason"),
+		m.T("columns.object"),
+		m.T("columns.message"),
+		m.T("columns.count"),
+		m.T("columns.age"),
+	}
 	if err := writer.Write(header); err != nil {
 		return err
 	}
@@ -339,6 +359,14 @@ func (m *Model) exportEventsCSV(data *model.ClusterData, exportDir, filename str
 		if err := writer.Write(record); err != nil {
 			return err
 		}
+	}
+
+	// The writer buffers 4 KiB: the last chunk of the file — and any
+	// error writing it — only surfaces in Flush, so the error must be
+	// returned here instead of being dropped by a deferred Flush.
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return err
 	}
 
 	return nil
@@ -380,10 +408,17 @@ func (m *Model) exportServicesCSV(data *model.ClusterData, exportDir, filename s
 	defer file.Close()
 
 	writer := csv.NewWriter(file)
-	defer writer.Flush()
 
 	// Write header
-	header := []string{"Namespace", "Name", "Type", "ClusterIP", "ExternalIP", "Ports", "Age"}
+	header := []string{
+		m.T("columns.namespace"),
+		m.T("columns.name"),
+		m.T("columns.type"),
+		m.T("columns.cluster_ip"),
+		m.T("columns.external_ip"),
+		m.T("columns.ports"),
+		m.T("columns.age"),
+	}
 	if err := writer.Write(header); err != nil {
 		return err
 	}
@@ -420,6 +455,14 @@ func (m *Model) exportServicesCSV(data *model.ClusterData, exportDir, filename s
 		if err := writer.Write(record); err != nil {
 			return err
 		}
+	}
+
+	// The writer buffers 4 KiB: the last chunk of the file — and any
+	// error writing it — only surfaces in Flush, so the error must be
+	// returned here instead of being dropped by a deferred Flush.
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return err
 	}
 
 	return nil

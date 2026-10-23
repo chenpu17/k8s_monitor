@@ -150,11 +150,17 @@ func isSupportedLocale(locale string) bool {
 // resolveLocale determines the language for CLI texts before cobra parses
 // flags, by scanning args (pflag allows flags after subcommands) in order:
 //  1. an explicit --locale/-l flag with a supported value (en, zh);
-//  2. the ui.locale setting of the config file given via --config
-//     (loading failures are silent here; runConsole reports real errors);
+//  2. the ui.locale setting of the config file given via --config, or — when
+//     --config is absent — of the first config file the default search path
+//     finds (the TUI loads the config the same way, so --help uses the same
+//     language the console will);
 //  3. "en".
+//
+// The config lookup is fail-soft: a missing file, an unparsable one or a
+// missing key all leave the English help in place. Nothing is printed here —
+// cobra renders the help afterwards, and a broken config must never keep
+// --help from working.
 func resolveLocale(args []string) string {
-	configSeen := false
 	configPath := ""
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -176,16 +182,13 @@ func resolveLocale(args []string) string {
 				return value
 			}
 		case "config":
-			configSeen = true
 			if hasValue {
 				configPath = value
 			}
 		}
 	}
-	if configSeen {
-		if cfg, err := app.LoadConfig(configPath); err == nil && isSupportedLocale(cfg.Locale) {
-			return cfg.Locale
-		}
+	if locale, err := app.LocaleFromConfig(configPath); err == nil && isSupportedLocale(locale) {
+		return locale
 	}
 	return "en"
 }

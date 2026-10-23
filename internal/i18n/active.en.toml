@@ -115,6 +115,9 @@ other = "AGE"
 [columns.cluster_ip]
 other = "CLUSTER-IP"
 
+[columns.external_ip]
+other = "EXTERNAL IP"
+
 [columns.ports]
 other = "PORT(S)"
 
@@ -235,6 +238,27 @@ other = "(showing {{.Start}}-{{.End}} of {{.Total}})"
 # Full alert messages for alert view
 [alerts.threshold]
 other = "threshold"
+
+# Alert categories shown in the alerts view footer. The en values are the
+# category literals the data layer stores, so the English footer does not
+# change; zh translates them.
+[alerts.category.node]
+other = "Node"
+
+[alerts.category.pod]
+other = "Pod"
+
+[alerts.category.npu]
+other = "NPU"
+
+[alerts.category.service]
+other = "Service"
+
+[alerts.category.storage]
+other = "Storage"
+
+[alerts.category.resource]
+other = "Resource"
 
 # ============================================================================
 # Alert Messages

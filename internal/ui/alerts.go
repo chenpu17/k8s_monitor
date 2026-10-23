@@ -354,6 +354,19 @@ func (m *Model) renderAlertRow(alert model.Alert) string {
 	return strings.Join(parts, "\n")
 }
 
+// alertCategoryKeys maps the category literals the data layer stores to the
+// bundle keys the footer renders. The categories are product literals, not
+// cluster-provided text, so a localized UI must translate them; a category
+// without a mapping keeps its raw value rather than disappearing.
+var alertCategoryKeys = map[string]string{
+	"Node":     "alerts.category.node",
+	"Pod":      "alerts.category.pod",
+	"NPU":      "alerts.category.npu",
+	"Service":  "alerts.category.service",
+	"Storage":  "alerts.category.storage",
+	"Resource": "alerts.category.resource",
+}
+
 // renderAlertsFooter renders the alerts view footer, including the position of
 // the alert window that is on screen (alerts first..end-1 of totalAlerts).
 func (m *Model) renderAlertsFooter(alerts []model.Alert, first, end, totalAlerts int) string {
@@ -371,7 +384,11 @@ func (m *Model) renderAlertsFooter(alerts []model.Alert, first, end, totalAlerts
 
 	var categoryStats []string
 	for _, category := range categoryNames {
-		categoryStats = append(categoryStats, fmt.Sprintf("%s: %d", category, categories[category]))
+		name := category
+		if key, ok := alertCategoryKeys[category]; ok {
+			name = m.T(key)
+		}
+		categoryStats = append(categoryStats, fmt.Sprintf("%s: %d", name, categories[category]))
 	}
 
 	stats := m.TF("stats.total_alerts", map[string]interface{}{

@@ -55,6 +55,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		)
 
 	case tea.KeyMsg:
+		// Ctrl+C quits from every mode. It is handled ahead of the search
+		// interception block below (and every other mode block) because that
+		// block treats every non-navigation key as text input, which swallowed
+		// Ctrl+C in search mode. `q` keeps its per-mode meaning: in search mode
+		// it is a character the user is typing.
+		if msg.Type == tea.KeyCtrlC {
+			m.quitting = true
+			return m, tea.Quit
+		}
+
 		// In search modes, treat most single-character keys as text input
 		// Only allow navigation keys (arrows, page up/down, esc, backspace, space, enter)
 		if m.logsSearchMode || m.searchMode {
@@ -274,6 +284,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filterMode = false
 				return m, nil
 			}
+			if !m.detailMode && m.searchMode {
+				// Enter from a searched list commits the search and opens the
+				// detail: the input state is dropped so the detail view owns
+				// the keyboard (Esc, q, the footer). The search text stays, so
+				// the result the user was looking at is still filtered when
+				// they come back.
+				m.searchMode = false
+			}
 			if m.detailMode && m.currentView == ViewJobDetail && m.selectedJob != nil {
 				// Navigate from Job detail to Pod detail
 				jobPods := m.getJobPods(m.selectedJob)
@@ -318,7 +336,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if nodes == nil {
 						nodes = m.clusterData.Nodes
 					}
-					if m.selectedIndex < len(nodes) {
+					if m.selectedIndex >= 0 && m.selectedIndex < len(nodes) {
 						m.selectedNode = nodes[m.selectedIndex]
 						m.currentView = ViewNodeDetail
 						m.detailMode = true
@@ -330,7 +348,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if pods == nil {
 						pods = m.getFilteredPods()
 					}
-					if m.selectedIndex < len(pods) {
+					if m.selectedIndex >= 0 && m.selectedIndex < len(pods) {
 						m.selectedPod = pods[m.selectedIndex]
 						m.currentView = ViewPodDetail
 						m.detailMode = true
@@ -342,7 +360,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if events == nil {
 						events = m.getFilteredEvents()
 					}
-					if m.selectedIndex < len(events) {
+					if m.selectedIndex >= 0 && m.selectedIndex < len(events) {
 						m.selectedEvent = events[m.selectedIndex]
 						m.currentView = ViewEventDetail
 						m.detailMode = true
@@ -351,7 +369,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case ViewNetwork:
 					// Mirror the order the network table renders (endpoint-less first).
 					services := m.sortedNetworkServices()
-					if m.selectedIndex < len(services) {
+					if m.selectedIndex >= 0 && m.selectedIndex < len(services) {
 						m.selectedService = services[m.selectedIndex]
 						m.currentView = ViewServiceDetail
 						m.detailMode = true
@@ -436,7 +454,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					totalPVs := len(m.clusterData.PVs)
 					totalPVCs := len(m.clusterData.PVCs)
 
-					if m.selectedIndex < totalPVs {
+					if m.selectedIndex >= 0 && m.selectedIndex < totalPVs {
 						// Selected a PV
 						m.selectedPV = m.clusterData.PVs[m.selectedIndex]
 						m.currentView = ViewPVDetail
@@ -452,7 +470,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				case ViewQueues:
 					// Queue view - select queue for detail
-					if m.selectedIndex < len(m.clusterData.Queues) {
+					if m.selectedIndex >= 0 && m.selectedIndex < len(m.clusterData.Queues) {
 						m.selectedQueue = m.clusterData.Queues[m.selectedIndex]
 						m.currentView = ViewQueueDetail
 						m.detailMode = true
@@ -461,7 +479,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case ViewTopology:
 					// Topology view - select SuperPod for detail
 					superPods := m.getSuperPodTopology()
-					if m.selectedIndex < len(superPods) {
+					if m.selectedIndex >= 0 && m.selectedIndex < len(superPods) {
 						m.selectedSuperPod = &superPods[m.selectedIndex]
 						m.currentView = ViewTopologyDetail
 						m.detailMode = true
@@ -720,8 +738,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case key.Matches(msg, m.keys.Actions):
-			// A key opens action menu in detail views
-			if m.detailMode && !m.actionMenuMode {
+			// A key opens action menu in detail views. The menu is drawn below
+			// the detail content, so it can only be opened from a detail layer
+			// the user can actually see: under the command output overlay it
+			// would be invisible and Enter would run the highlighted action
+			// blind.
+			if m.detailMode && !m.actionMenuMode && !m.commandOutputMode {
 				// Check if current view supports actions
 				if m.currentView == ViewPodDetail || m.currentView == ViewNodeDetail {
 					m.actionMenuMode = true
@@ -892,18 +914,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.handleFilterNavigation(1)
 			}
 			if m.commandOutputMode {
-				// Scroll down in command output view
-				lines := strings.Split(m.commandOutputContent, "\n")
-				maxVisible := m.height - 6
-				if maxVisible < 1 {
-					maxVisible = 1
-				}
-				totalLines := len(lines)
-				maxScroll := totalLines - maxVisible
-				if maxScroll < 0 {
-					maxScroll = 0
-				}
-				if m.commandOutputScroll < maxScroll {
+				// Scroll down in command output view. The bound comes from the
+				// renderer's own window so ↓ cannot scroll past the last row.
+				if maxScroll := m.commandOutputMaxScroll(); m.commandOutputScroll < maxScroll {
 					m.commandOutputScroll++
 				}
 				return m, nil
@@ -911,10 +924,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.logsMode {
 				// Scroll down in logs view - use wrapped line count for correct bounds
 				totalLines := m.getLogsDisplayLineCount()
-				maxVisible := m.height - 8
-				if maxVisible < 1 {
-					maxVisible = 1
-				}
+				maxVisible := m.logsRows()
 				maxScroll := totalLines - maxVisible
 				if maxScroll < 0 {
 					maxScroll = 0
@@ -1011,6 +1021,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.logsAutoScroll = false // Disable auto-scroll when user pages up
 				return m, nil
 			}
+			if m.commandOutputMode {
+				// Page the command output, not the detail it covers: the
+				// footer advertises PgUp/PgDn for the output window.
+				pageSize := max(1, m.commandOutputRows())
+				if m.commandOutputScroll -= pageSize; m.commandOutputScroll < 0 {
+					m.commandOutputScroll = 0
+				}
+				return m, nil
+			}
 			if m.detailMode {
 				// Scroll up by a page in detail view
 				pageSize := m.height - 10
@@ -1034,6 +1053,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// view actually shows: the renderers report it, because the rows a
 			// view fits is not the terminal height minus a constant.
 			if !m.detailMode {
+				if m.getMaxIndex() == 0 {
+					// Paging an empty list is a no-op: there is nothing to page
+					// to, and writing the zero selection would be a side effect
+					// with no visible result.
+					return m, nil
+				}
 				pageSize := m.listRowsFor()
 				if m.selectedIndex >= pageSize {
 					m.selectedIndex -= pageSize
@@ -1059,10 +1084,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				// Calculate bounds using wrapped line count
 				totalLines := m.getLogsDisplayLineCount()
-				maxVisible := m.height - 8
-				if maxVisible < 1 {
-					maxVisible = 1
-				}
+				maxVisible := m.logsRows()
 				maxScroll := totalLines - maxVisible
 				if maxScroll < 0 {
 					maxScroll = 0
@@ -1078,6 +1100,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.logsAutoScroll = true
 				}
 
+				return m, nil
+			}
+			if m.commandOutputMode {
+				// Page the command output, not the detail it covers.
+				pageSize := max(1, m.commandOutputRows())
+				if m.commandOutputScroll += pageSize; m.commandOutputScroll > m.commandOutputMaxScroll() {
+					m.commandOutputScroll = m.commandOutputMaxScroll()
+				}
 				return m, nil
 			}
 			if m.detailMode {
@@ -1102,6 +1132,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// view actually shows: the renderers report it, because the rows a
 			// view fits is not the terminal height minus a constant.
 			if !m.detailMode {
+				if m.getMaxIndex() == 0 {
+					// An empty list has nothing to page to. Without this the
+					// else branch below would set selectedIndex to -1, which the
+					// Enter guard used to accept (items[-1] panic).
+					return m, nil
+				}
 				pageSize := m.listRowsFor()
 				maxIndex := m.getMaxIndex()
 				if m.selectedIndex+pageSize < maxIndex {
@@ -1254,10 +1290,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.logsAutoScroll {
 				// Only auto-scroll if enabled and not first time
 				// Calculate the new bottom position using wrapped line count
-				maxVisible := m.height - 8
-				if maxVisible < 1 {
-					maxVisible = 1
-				}
+				maxVisible := m.logsRows()
 				totalLines := m.getLogsDisplayLineCount()
 				maxScroll := totalLines - maxVisible
 				if maxScroll < 0 {
