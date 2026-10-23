@@ -106,6 +106,13 @@ type ClusterSummary struct {
 	KubeletMetricsAvailable bool     // True if at least one kubelet metrics call succeeded
 	KubeletError            string   // First kubelet error encountered
 	KubeletErrors           []string // Unique kubelet error messages
+	// KubeletErrorKey/Args carry the i18n key and template arguments for
+	// KubeletError when that text is the kubelet access denial (the same
+	// convention as Alert.MessageKey): the overview renders the key through
+	// the localizer when set and falls back to the raw text otherwise. Raw
+	// per-node kubelet errors have no key.
+	KubeletErrorKey  string
+	KubeletErrorArgs map[string]interface{}
 
 	// Node health statistics (pressure indicators)
 	MemoryPressureNodes int // Number of nodes with memory pressure

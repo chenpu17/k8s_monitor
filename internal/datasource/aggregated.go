@@ -31,6 +31,11 @@ type AggregatedDataSource struct {
 	kubeletAccessMu   sync.RWMutex
 	kubeletAccess     *diagnostic.KubeletAccessStatus
 	kubeletSkipReason string
+	// kubeletSkipKey/Args are the i18n key and template arguments of the
+	// kubelet access denial that produced kubeletSkipReason (empty for raw
+	// reasons, which have no diagnostic status behind them).
+	kubeletSkipKey  string
+	kubeletSkipArgs map[string]interface{}
 }
 
 // NewAggregatedDataSource creates a new aggregated data source
@@ -165,11 +170,11 @@ func (a *AggregatedDataSource) GetClusterData(ctx context.Context, namespace str
 
 	// Enrich with kubelet metrics if available
 	if a.kubeletClient != nil {
-		if skip, reason := a.shouldSkipKubeletEnrichment(ctx); skip {
+		if skip, reason, accessStatus := a.shouldSkipKubeletEnrichment(ctx); skip {
 			a.logger.Warn("Skipping kubelet metrics enrichment",
 				zap.String("reason", reason),
 			)
-			a.applyKubeletSkipReason(reason, nodes, pods)
+			a.applyKubeletSkipReason(reason, accessStatus, nodes, pods)
 		} else {
 			a.clearKubeletSkipReason()
 			a.enrichWithKubeletMetrics(ctx, nodes, pods)
@@ -497,20 +502,32 @@ func (a *AggregatedDataSource) buildClusterSummary(nodes []*model.NodeData, pods
 		}
 	}
 	summary.KubeletMetricsAvailable = summary.NodesWithMetrics > 0
+	skipReason, skipKey, skipArgs := a.getKubeletSkipInfo()
 	if len(summary.KubeletErrors) > 0 {
 		summary.KubeletError = summary.KubeletErrors[0]
+		// A node error is raw kubelet/API text and stays keyless; but when the
+		// first error IS the access denial the skip check wrote into the
+		// nodes, its key/args travel with it.
+		if skipKey != "" && summary.KubeletError == skipReason {
+			summary.KubeletErrorKey = skipKey
+			summary.KubeletErrorArgs = skipArgs
+		}
 	}
 	if !summary.KubeletMetricsAvailable && a.kubeletClient == nil && len(nodes) > 0 {
 		msg := "kubelet metrics disabled (client not initialized)"
 		summary.KubeletError = msg
 		summary.KubeletErrors = []string{msg}
+		summary.KubeletErrorKey = ""
+		summary.KubeletErrorArgs = nil
 	} else if !summary.KubeletMetricsAvailable && summary.KubeletError == "" {
-		if reason := a.getKubeletSkipReason(); reason != "" {
-			summary.KubeletError = reason
+		if skipReason != "" {
+			summary.KubeletError = skipReason
+			summary.KubeletErrorKey = skipKey
+			summary.KubeletErrorArgs = skipArgs
 			if len(summary.KubeletErrors) == 0 {
-				summary.KubeletErrors = []string{reason}
+				summary.KubeletErrors = []string{skipReason}
 			} else {
-				summary.KubeletErrors = append([]string{reason}, summary.KubeletErrors...)
+				summary.KubeletErrors = append([]string{skipReason}, summary.KubeletErrors...)
 			}
 		}
 	}
@@ -714,9 +731,11 @@ func (a *AggregatedDataSource) buildClusterSummary(nodes []*model.NodeData, pods
 }
 
 // shouldSkipKubeletEnrichment performs a cached RBAC check to avoid spamming kubelet when access is denied.
-func (a *AggregatedDataSource) shouldSkipKubeletEnrichment(ctx context.Context) (bool, string) {
+// The returned status is the denial behind the reason (nil for the allow path);
+// its MessageKey/MessageArgs let the UI localize the denial message.
+func (a *AggregatedDataSource) shouldSkipKubeletEnrichment(ctx context.Context) (bool, string, *diagnostic.KubeletAccessStatus) {
 	if a.kubeletClient == nil || a.apiServerClient == nil {
-		return false, ""
+		return false, "", nil
 	}
 
 	a.kubeletAccessMu.RLock()
@@ -725,10 +744,10 @@ func (a *AggregatedDataSource) shouldSkipKubeletEnrichment(ctx context.Context) 
 
 	if status != nil {
 		if status.ProxyAllowed {
-			return false, ""
+			return false, "", nil
 		}
 		if time.Since(status.CheckedAt) < kubeletAccessCheckTTL {
-			return true, status.Message()
+			return true, status.Message(), status
 		}
 	}
 
@@ -749,17 +768,13 @@ func (a *AggregatedDataSource) shouldSkipKubeletEnrichment(ctx context.Context) 
 		)
 
 		// Cache this as a denial to prevent repeated failed checks
-		deniedStatus := &diagnostic.KubeletAccessStatus{
-			ProxyAllowed: false,
-			ProxyMessage: fmt.Sprintf("Access review failed: %v", err),
-			CheckedAt:    time.Now(),
-		}
+		deniedStatus := diagnostic.AccessReviewFailedStatus(err)
 
 		a.kubeletAccessMu.Lock()
 		a.kubeletAccess = deniedStatus
 		a.kubeletAccessMu.Unlock()
 
-		return true, deniedStatus.Message()
+		return true, deniedStatus.Message(), deniedStatus
 	}
 
 	a.kubeletAccessMu.Lock()
@@ -767,19 +782,27 @@ func (a *AggregatedDataSource) shouldSkipKubeletEnrichment(ctx context.Context) 
 	a.kubeletAccessMu.Unlock()
 
 	if newStatus.ProxyAllowed {
-		return false, ""
+		return false, "", nil
 	}
 
-	return true, newStatus.Message()
+	return true, newStatus.Message(), newStatus
 }
 
-func (a *AggregatedDataSource) applyKubeletSkipReason(reason string, nodes []*model.NodeData, pods []*model.PodData) {
+func (a *AggregatedDataSource) applyKubeletSkipReason(reason string, accessStatus *diagnostic.KubeletAccessStatus, nodes []*model.NodeData, pods []*model.PodData) {
 	if reason == "" {
 		return
 	}
 
 	a.kubeletAccessMu.Lock()
 	a.kubeletSkipReason = reason
+	a.kubeletSkipKey = ""
+	a.kubeletSkipArgs = nil
+	if accessStatus != nil && !accessStatus.ProxyAllowed {
+		// The raw reason stays the display text everywhere; the key/args only
+		// feed the localized render in the overview.
+		a.kubeletSkipKey = accessStatus.MessageKey
+		a.kubeletSkipArgs = accessStatus.MessageArgs
+	}
 	a.kubeletAccessMu.Unlock()
 
 	// Clear kubelet metrics from nodes
@@ -824,13 +847,17 @@ func (a *AggregatedDataSource) applyKubeletSkipReason(reason string, nodes []*mo
 func (a *AggregatedDataSource) clearKubeletSkipReason() {
 	a.kubeletAccessMu.Lock()
 	a.kubeletSkipReason = ""
+	a.kubeletSkipKey = ""
+	a.kubeletSkipArgs = nil
 	a.kubeletAccessMu.Unlock()
 }
 
-func (a *AggregatedDataSource) getKubeletSkipReason() string {
+// getKubeletSkipInfo returns the stored skip reason with its i18n key and
+// template arguments, if the reason is a keyed denial rather than raw text.
+func (a *AggregatedDataSource) getKubeletSkipInfo() (reason, key string, args map[string]interface{}) {
 	a.kubeletAccessMu.RLock()
 	defer a.kubeletAccessMu.RUnlock()
-	return a.kubeletSkipReason
+	return a.kubeletSkipReason, a.kubeletSkipKey, a.kubeletSkipArgs
 }
 
 // Name returns the data source name

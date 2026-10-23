@@ -177,6 +177,36 @@ func renderSummaryPanel(lines []string, targetContentLines int) string {
 		Render(strings.Join(lines, "\n"))
 }
 
+// joinPanelRows lays summary panels out in as few rows as the terminal width
+// allows; a wide terminal keeps the single-row JoinHorizontal layout byte for
+// byte. An unset width (0) means unknown, so it keeps the single-row layout
+// too — real rendering is gated on a positive width by View().
+func (m *Model) joinPanelRows(panels []string) string {
+	if len(panels) == 0 {
+		return ""
+	}
+
+	// All summary panels share renderSummaryPanel's width; measuring the
+	// first one is enough.
+	perRow := len(panels)
+	if w1 := lipgloss.Width(panels[0]); m.width > 0 && w1 > 0 {
+		perRow = max(1, m.width/w1)
+	}
+
+	if perRow >= len(panels) {
+		return lipgloss.JoinHorizontal(lipgloss.Top, panels...)
+	}
+
+	// Group the panels per row and join the rows directly adjacent; every
+	// group fits the terminal by construction of perRow.
+	var rows []string
+	for start := 0; start < len(panels); start += perRow {
+		end := min(start+perRow, len(panels))
+		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, panels[start:end]...))
+	}
+	return strings.Join(rows, "\n")
+}
+
 // renderOverview renders the overview view with adaptive layout
 func (m *Model) renderOverview() string {
 	if m.clusterData == nil {
@@ -279,14 +309,13 @@ func (m *Model) overviewContentLines(summary *model.ClusterSummary) []string {
 		nodesPods := renderSummaryPanel(nodesLines, targetLines)
 		alertPanel := renderSummaryPanel(alertLines, targetLines)
 
-		row2 := lipgloss.JoinHorizontal(
-			lipgloss.Top,
+		row2 := m.joinPanelRows([]string{
 			cpuPanel,
 			memoryPanel,
 			podPanel,
 			nodesPods,
 			alertPanel,
-		)
+		})
 		allLines = append(allLines, strings.Split(row2, "\n")...)
 		allLines = append(allLines, "")
 	}
@@ -493,7 +522,14 @@ func (m *Model) renderClusterLoadCompact(summary *model.ClusterSummary) string {
 			message += fmt.Sprintf(" (%d/%d %s)", summary.NodesWithMetrics, summary.TotalNodes, m.T("common.nodes"))
 		}
 		if summary.KubeletError != "" {
-			message += fmt.Sprintf(" • %s", truncateText(summary.KubeletError, 60))
+			errText := summary.KubeletError
+			// A keyed denial renders through the localizer (zh copy is
+			// byte-identical to the raw text; en fixes its Chinese leak).
+			// Raw node errors have no key and keep the stored text.
+			if summary.KubeletErrorKey != "" {
+				errText = m.TF(summary.KubeletErrorKey, summary.KubeletErrorArgs)
+			}
+			message += fmt.Sprintf(" • %s", truncateText(errText, 60))
 		}
 		hint := m.kubeletHint(detectKubeletHintKind(summary.KubeletError))
 		if hint != "" {
@@ -627,7 +663,7 @@ func (m *Model) renderServicesAndStorage(summary *model.ClusterSummary) string {
 		panels = append(panels, volcanoPanel)
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, panels...)
+	return m.joinPanelRows(panels)
 }
 
 func (m *Model) servicesPanelLines(summary *model.ClusterSummary) []string {

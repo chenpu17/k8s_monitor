@@ -2454,3 +2454,12 @@ other = "关机时出错"
 
 [cli.err_application]
 other = "应用错误"
+
+[diagnostic.access_review_failed]
+other = "Access review failed: {{.Error}} • 请执行 `kubectl auth can-i get nodes/proxy` 或授予相应 RBAC"
+
+[diagnostic.proxy_denied_details]
+other = "{{.Reason}} • 请执行 `kubectl auth can-i get nodes/proxy` 或授予相应 RBAC"
+
+[diagnostic.proxy_denied_default]
+other = "当前凭证无法访问 kubelet proxy (需要 get nodes/proxy 权限) • 请执行 `kubectl auth can-i get nodes/proxy` 或授予相应 RBAC"

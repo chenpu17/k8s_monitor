@@ -296,12 +296,15 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 			info = append(info, StyleTextSecondary.Render("  "+m.T("npudetail.chip_details")))
 
 			if hasExtendedMetrics {
-				// Column widths for extended metrics table
+				// Column widths for the extended metrics table. HBM adapts to
+				// the data: 14 covers the widest cell the format emits at the
+				// real 64 GiB per-chip geometry ("58.9/64G(92%)"); larger HBM
+				// capacities (a 128 GB seed reaches 16) grow the column so the
+				// widest cell is never clipped.
 				const (
 					colID     = 3
 					colAICore = 7
 					colVector = 7
-					colHBM    = 14
 					colTemp   = 6
 					colPower  = 6
 					colVolt   = 6
@@ -309,18 +312,35 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 					colLink   = 4
 				)
 
-				// Terminal-width tiers: the nine-column table is 72 cells wide
-				// (indent + columns + separators) and gets clipped at the right
-				// edge on narrower terminals, so whole columns are dropped from
-				// the right instead. The row width below is
-				// 4 (indent) + sum(widths) + (columns-1) separators:
-				//   w >= 72      : 9 columns, row width 72 (unchanged)
-				//   62 <= w < 72 : 7 columns, row width 59 (Freq and Link dropped)
-				//   w < 62       : 6 columns, row width 52 (Volt dropped as well)
-				const (
-					extFullWidth = 72
-					extMidWidth  = 62
-				)
+				// Pre-scan the HBM cells once: the column width and the row
+				// cells share these strings, so the width can never drift
+				// from the data.
+				hbmCells := make([]string, len(node.NPUChips))
+				colHBM := 14
+				for i, chip := range node.NPUChips {
+					hbmCells[i] = extendedHBMCell(chip)
+					if w := visualLength(hbmCells[i]); w > colHBM {
+						colHBM = w
+					}
+				}
+
+				// Terminal-width tiers, derived from the column widths so a
+				// wider HBM column widens the tiers with the table. The row
+				// width is 4 (indent) + surviving columns + one separator per
+				// gap between them:
+				//   w >= full tier : 9 columns, row 4 + Σ(9) + 8
+				//   w >= mid tier  : 7 columns (Freq, Link dropped),
+				//                    row 4 + Σ(7) + 6
+				//   w < mid tier   : 6 columns (Volt dropped as well),
+				//                    row 4 + Σ(6) + 5
+				// The mid-tier threshold counts the full tier's nine gaps
+				// rather than the surviving seven's six: the historical
+				// boundary sat three cells above the seven-column row (59 at
+				// colHBM 14) and the width-61 golden pins the tier switch at
+				// 62, so the derivation reproduces that boundary exactly
+				// (4 + 49 + 9 = 62 at colHBM 14).
+				extFullWidth := 4 + colID + colAICore + colVector + colHBM + colTemp + colPower + colVolt + colFreq + colLink + 8
+				extMidWidth := 4 + colID + colAICore + colVector + colHBM + colTemp + colPower + colVolt + 9
 
 				extCols := []struct {
 					title string
@@ -372,7 +392,7 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 				info = append(info, extRow(titles))
 				info = append(info, "    "+strings.Repeat("─", extWidth+len(extCols)-1))
 
-				for _, chip := range node.NPUChips {
+				for i, chip := range node.NPUChips {
 					// Temperature with color coding
 					tempStr := fmt.Sprintf("%d°C", chip.Temp)
 					if chip.Temp >= 80 {
@@ -381,14 +401,9 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 						tempStr = StyleWarning.Render(tempStr)
 					}
 
-					// HBM usage with capacity (convert MB to GB for readability)
-					hbmStr := "-"
-					if chip.HBMTotal > 0 {
-						usedGB := float64(chip.HBMUsed) / 1024
-						totalGB := float64(chip.HBMTotal) / 1024
-						hbmPercent := float64(chip.HBMUsed) / float64(chip.HBMTotal) * 100
-						hbmStr = fmt.Sprintf("%.1f/%.0fG(%d%%)", usedGB, totalGB, int(hbmPercent))
-					}
+					// HBM usage with capacity, formatted by the same helper
+					// the column width was measured from.
+					hbmStr := hbmCells[i]
 
 					// Health indicator in ID column
 					idStr := fmt.Sprintf("%d", chip.PhyID)
@@ -832,21 +847,71 @@ func (m *Model) renderNodePodsInfo(node *model.NodeData) string {
 	// padRight rather than fmt's %-Ns: RenderStatus emits ANSI codes, which
 	// %-Ns counts as bytes and therefore pads short, shifting every column
 	// after STATUS.
+	//
+	// Terminal-width tiers, row width = indent (2) + surviving columns + one
+	// separator per gap between them:
+	//   w >= 85 : NAME 35 + NAMESPACE 20 + STATUS 15 + RESTARTS 10 + 3 = 85
+	//   w >= 64 : NAMESPACE dropped                = 2 + 35+15+10 + 2 = 64
+	//   w >= 49 : NAME shrunk to 20 (truncate)     = 2 + 20+15+10 + 2 = 49
+	//   w <  49 : RESTARTS dropped as well         = 2 + 20+15 + 1   = 38
 	const (
 		colName      = 35
 		colNamespace = 20
 		colStatus    = 15
 		colRestarts  = 10
+		shortName    = 20
 	)
-	headerRow := "  " + strings.Join([]string{
-		padRight(m.T("columns.name"), colName),
-		padRight(m.T("columns.namespace"), colNamespace),
-		padRight(m.T("columns.status"), colStatus),
-		padRight(m.T("columns.restarts"), colRestarts),
-	}, " ")
-	info = append(info, StyleTextSecondary.Render(headerRow))
-	// Indent (2) + all columns (80) + three separators = 85 cells.
-	info = append(info, "  "+strings.Repeat("─", 83))
+
+	nameWidth := colName
+	showNamespace, showRestarts := true, true
+	switch {
+	case m.width >= 85:
+		// full four-column table
+	case m.width >= 64:
+		showNamespace = false
+	case m.width >= 49:
+		showNamespace = false
+		nameWidth = shortName
+	default:
+		showNamespace = false
+		nameWidth = shortName
+		showRestarts = false
+	}
+
+	type podsCol struct {
+		title string
+		width int
+	}
+	podsCols := []podsCol{{m.T("columns.name"), nameWidth}}
+	if showNamespace {
+		podsCols = append(podsCols, podsCol{m.T("columns.namespace"), colNamespace})
+	}
+	podsCols = append(podsCols, podsCol{m.T("columns.status"), colStatus})
+	if showRestarts {
+		podsCols = append(podsCols, podsCol{m.T("columns.restarts"), colRestarts})
+	}
+
+	// podsRow renders one table row. Header and data rows go through the same
+	// column list, so the column set can never drift between them.
+	podsRow := func(cells []string) string {
+		parts := make([]string, len(podsCols))
+		for i, c := range podsCols {
+			parts[i] = padRight(cells[i], c.width)
+		}
+		return "  " + strings.Join(parts, " ")
+	}
+
+	titles := make([]string, len(podsCols))
+	for i, c := range podsCols {
+		titles[i] = c.title
+	}
+	info = append(info, StyleTextSecondary.Render(podsRow(titles)))
+	podsSep := 0
+	for _, c := range podsCols {
+		podsSep += c.width
+	}
+	podsSep += len(podsCols) - 1
+	info = append(info, "  "+strings.Repeat("─", podsSep))
 
 	// Pod rows (limited to visible area)
 	maxVisible := m.height - 20
@@ -864,6 +929,11 @@ func (m *Model) renderNodePodsInfo(node *model.NodeData) string {
 		if len(name) > 33 {
 			name = name[:30] + "..."
 		}
+		// On the narrowed-NAME tiers the byte-based 33-cell cut above is not
+		// enough: truncate to the column width (width-aware, "..." suffix).
+		if nameWidth < colName {
+			name = truncate(pod.Name, nameWidth)
+		}
 
 		namespace := pod.Namespace
 		if len(namespace) > 18 {
@@ -873,13 +943,15 @@ func (m *Model) renderNodePodsInfo(node *model.NodeData) string {
 		status := RenderStatus(pod.Phase)
 		restarts := fmt.Sprintf("%d", pod.RestartCount)
 
-		row := "  " + strings.Join([]string{
-			padRight(name, colName),
-			padRight(namespace, colNamespace),
-			padRight(status, colStatus),
-			padRight(restarts, colRestarts),
-		}, " ")
-		info = append(info, row)
+		cells := []string{name}
+		if showNamespace {
+			cells = append(cells, namespace)
+		}
+		cells = append(cells, status)
+		if showRestarts {
+			cells = append(cells, restarts)
+		}
+		info = append(info, podsRow(cells))
 	}
 
 	if len(nodePods) > maxVisible {
@@ -891,6 +963,20 @@ func (m *Model) renderNodePodsInfo(node *model.NodeData) string {
 	}
 
 	return strings.Join(info, "\n")
+}
+
+// extendedHBMCell renders the HBM cell of the extended chip table for one
+// chip: used/total in GB with a percent, "-" when the chip reports no HBM.
+// The HBM column width is measured from these same strings, so the cell and
+// the width can never drift apart.
+func extendedHBMCell(chip model.NPUChipData) string {
+	if chip.HBMTotal <= 0 {
+		return "-"
+	}
+	usedGB := float64(chip.HBMUsed) / 1024
+	totalGB := float64(chip.HBMTotal) / 1024
+	hbmPercent := float64(chip.HBMUsed) / float64(chip.HBMTotal) * 100
+	return fmt.Sprintf("%.1f/%.0fG(%d%%)", usedGB, totalGB, int(hbmPercent))
 }
 
 // formatPacketCount formats a large packet count with K/M/G suffix

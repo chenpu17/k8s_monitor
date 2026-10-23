@@ -278,6 +278,16 @@ func (m *Model) renderFooter() string {
 		footer += binding
 	}
 
+	// On a terminal narrower than the joined bindings the footer would wrap
+	// and push the layout around, so clip it to the terminal width. truncate
+	// strips ANSI and adds "..." when it actually cuts, which is acceptable
+	// for a help footer; a footer that fits is returned untouched. m.width 0
+	// (unknown, e.g. tests) must not clip everything — View() only renders
+	// with a positive width.
+	if m.width > 0 {
+		footer = truncate(footer, m.width)
+	}
+
 	return StyleKeyDesc.Render(footer)
 }
 

@@ -2473,3 +2473,12 @@ other = "Error during shutdown"
 
 [cli.err_application]
 other = "application error"
+
+[diagnostic.access_review_failed]
+other = "Access review failed: {{.Error}} • run `kubectl auth can-i get nodes/proxy` or grant the corresponding RBAC permission"
+
+[diagnostic.proxy_denied_details]
+other = "{{.Reason}} • run `kubectl auth can-i get nodes/proxy` or grant the corresponding RBAC permission"
+
+[diagnostic.proxy_denied_default]
+other = "Current identity cannot access the kubelet proxy (requires get nodes/proxy) • run `kubectl auth can-i get nodes/proxy` or grant the corresponding RBAC permission"
