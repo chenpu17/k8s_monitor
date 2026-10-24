@@ -1757,6 +1757,15 @@ other = "🧮 NPU Overview"
 [npuview.health_summary]
 other = "{{.Healthy}}/{{.Total}} healthy · {{.Degraded}} degraded · {{.Fault}} fault"
 
+# Health segment used instead when some chips report no health status: the
+# graded chips are healthy in the matrix, but "healthy" would claim a signal
+# nobody sent, so the healthy part says what is actually known. At equal
+# counts it is one to two cells wider than the plain segment (en +1, zh +2),
+# so on a terminal too narrow for both it is always this segment that loses
+# its trailing degraded/fault counts first.
+[npuview.summary_no_known]
+other = "{{.Healthy}}/{{.Total}} no fault · {{.Degraded}} degraded · {{.Fault}} fault"
+
 [npuview.health_no_data]
 other = "Chip health: no data"
 
@@ -1777,6 +1786,11 @@ other = "{{.Count}} degraded"
 
 [npuview.row_fault]
 other = "{{.Count}} fault"
+
+# Appended to a node row when some of its chips carry an ownership
+# attribution: how many chips the exporter maps to a workload.
+[npuview.row_occupied]
+other = "{{.Count}} occupied"
 
 [npuview.monitoring_unavailable]
 other = "monitoring unavailable"
@@ -2543,6 +2557,23 @@ other = "    chip {{.NPU}}-{{.Chip}}: ECC total single {{.Single}}{{.SingleDelta
 # the knowledge base.
 [npudetail.error_code_chip]
 other = "    chip {{.NPU}}-{{.Chip}}: {{.Code}} · {{.Category}}"
+
+# The workload occupying a chip, as attributed by NPU-Exporter's container
+# mapping. One row per owned chip: two chips of the same pod stay two rows.
+[npudetail.chip_owner]
+other = "    chip {{.NPU}}-{{.Chip}} → {{.Owner}}"
+
+# The chips a pod occupies, on the pod detail. Chips of the node the pod runs
+# on whose owner labels name this pod.
+[npudetail.pod_chips]
+other = "Occupied NPU chips: {{.Chips}}"
+
+# Shown when a pod requests NPUs but no chip carries its ownership labels. The
+# wording names this tool's visibility limit, not a cluster fault: only
+# NPU-Exporter attributes chips, so an unreachable exporter or the annotation
+# collector path leaves the chips unattributed.
+[npudetail.pod_chips_unknown]
+other = "not captured (NPU-Exporter attribution only; it may be unreachable)"
 
 [npudetail.health_unknown]
 other = "Chips with unknown health"

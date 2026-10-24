@@ -406,8 +406,11 @@ func TestZhCopyFixes(t *testing.T) {
 // exporter_liveness,ecc_delta,error_code_chip}, npu.errorcat.* x6,
 // npuview.{summary_unknown,liveness_ok,liveness_backoff,liveness_never} and
 // npu.liveness.{ok,backoff,never} — 784 + 18 = 802.
+//
+// Batch 25 (Pod↔chip attribution) added 5: npudetail.{chip_owner,pod_chips,
+// pod_chips_unknown}, npuview.{row_occupied,summary_no_known} — 802 + 5 = 807.
 func TestBundleKeyCount(t *testing.T) {
-	const want = 802
+	const want = 807
 
 	en := readBundleMessages(t, "../../internal/i18n/active.en.toml")
 	zh := readBundleMessages(t, "../../internal/i18n/active.zh.toml")

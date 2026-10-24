@@ -123,11 +123,17 @@ func rawSpan(line string, from, to int) string {
 }
 
 // TestB24VUnknownSegmentsCoexistWithHealthyCount pins the truthfulness of the
-// summary bar for an all-unknown node: the bar reports "8/8 healthy" and
-// "unknown 8" on the same line, and the matrix row shows eight healthy cells.
-// The batch's design decision is explicit (unknown keeps a healthy grade), but
-// the two segments read as a contradiction for the same chips, so the probe
-// pins the exact bytes a reviewer sees.
+// summary bar for an all-unknown node. At HEAD=44c52af the bar reported "8/8
+// healthy" and "unknown 8" on the same line for the same chips, which is what
+// this probe pinned then.
+//
+// Batch 25 changed the wording on purpose: with unknown chips in the cluster the
+// health segment says "no fault" instead of "healthy", because the matrix
+// grade of an unknown chip is a statement about the absence of a fault signal,
+// not a health signal. The counts stay identical to the matrix tally; only the
+// word changes. The bytes below are the batch-25 expectation (wording shortened
+// in the fix round after review: the first cut, "no known fault", overflowed
+// the 38-column bar and truncated the trailing counters).
 func TestB24VUnknownSegmentsCoexistWithHealthyCount(t *testing.T) {
 	forcedAsciiProfile(t)
 
@@ -144,7 +150,7 @@ func TestB24VUnknownSegmentsCoexistWithHealthyCount(t *testing.T) {
 	out := stripANSI(m.renderNPUView())
 	bar := ""
 	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "healthy ·") {
+		if strings.Contains(line, "no fault ·") {
 			bar = line
 			break
 		}
@@ -152,8 +158,13 @@ func TestB24VUnknownSegmentsCoexistWithHealthyCount(t *testing.T) {
 	if bar == "" {
 		t.Fatalf("no summary bar rendered:\n%s", out)
 	}
-	if !strings.Contains(bar, "8/8 healthy") || !strings.Contains(bar, "unknown 8") {
-		t.Fatalf("the bar no longer shows the healthy/unknown pair: %q", bar)
+	if !strings.Contains(bar, "8/8 no fault") || !strings.Contains(bar, "unknown 8") {
+		t.Fatalf("the bar no longer shows the no-fault/unknown pair: %q", bar)
+	}
+	// The old wording must be gone: "healthy" next to "unknown" for the same
+	// chips is the contradiction this wording change exists to remove.
+	if strings.Contains(bar, "8/8 healthy") {
+		t.Errorf("the bar still claims health for chips it reports as unknown: %q", bar)
 	}
 	t.Logf("all-unknown node bar: %q", bar)
 }

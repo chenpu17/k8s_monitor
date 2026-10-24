@@ -704,6 +704,12 @@ func (c *NPUExporterClient) convertChipMetrics(chip *NPUChipMetrics) model.NPUCh
 		RoCERxErrPkts:        chip.RoCERxErrPktNum,
 		BandwidthRx:          chip.BandwidthRx,
 		BandwidthTx:          chip.BandwidthTx,
+
+		// Ownership as attributed by the exporter's container mapping. It
+		// emits empty strings for an unallocated chip, so the zero value
+		// carries over and omitempty drops the keys in the export.
+		OwnerPod:       chip.PodName,
+		OwnerNamespace: chip.Namespace,
 	}
 
 	// health_status is three-valued upstream (1 healthy, 0 unhealthy, -1 DCMI

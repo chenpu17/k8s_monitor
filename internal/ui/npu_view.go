@@ -109,9 +109,23 @@ func npuMatrixText(groups [][]string, limit int) string {
 	return out
 }
 
-// npuRowSuffix renders the per-row grade summary, e.g. "1 degraded • 2 fault".
-// A fully healthy row has no suffix: there is nothing to report about it.
+// npuRowSuffix renders the per-row summary, e.g. "1 degraded • 2 fault" and,
+// when the exporter attributes some of the node's chips to workloads,
+// "… • 3 occupied". A row with nothing to report has no suffix at all.
 func (m *Model) npuRowSuffix(node *model.NodeData) string {
+	parts := m.npuRowSuffixGradedParts(node)
+	// Occupied chips are informational, not a health claim, so the segment is
+	// left unstyled next to the graded/tinted counters.
+	if occupied := npuOwnedChipCount(node); occupied > 0 {
+		parts = append(parts, m.TF("npuview.row_occupied", map[string]interface{}{"Count": occupied}))
+	}
+	return strings.Join(parts, " • ")
+}
+
+// npuRowSuffixGradedParts returns the grade-counter segments of the row suffix —
+// the summary that predates chip attribution. npuMatrixRow uses them as the
+// fallback the occupancy count yields to when the row gets narrow.
+func (m *Model) npuRowSuffixGradedParts(node *model.NodeData) []string {
 	degraded, fault := 0, 0
 	for _, grade := range node.NPUChipHealth {
 		switch grade.Grade {
@@ -129,7 +143,20 @@ func (m *Model) npuRowSuffix(node *model.NodeData) string {
 	if fault > 0 {
 		parts = append(parts, StyleStatusNotReady.Render(m.TF("npuview.row_fault", map[string]interface{}{"Count": fault})))
 	}
-	return strings.Join(parts, " • ")
+	return parts
+}
+
+// npuOwnedChipCount counts the node's chips that NPU-Exporter attributes to a
+// workload. The ownership labels are the only attribution source, so a node
+// whose metrics come from the annotation collector path counts zero.
+func npuOwnedChipCount(node *model.NodeData) int {
+	count := 0
+	for _, chip := range node.NPUChips {
+		if chip.OwnerPod != "" {
+			count++
+		}
+	}
+	return count
 }
 
 // npuMatrixRow renders one node row: the name, the chip matrix and the grade
@@ -174,6 +201,9 @@ func (m *Model) npuMatrixRow(node *model.NodeData, selected bool) string {
 
 	groups := npuChipCellGroups(node.NPUChipHealth)
 	suffix := m.npuRowSuffix(node)
+	// The suffix without its informational occupancy count — what the row
+	// rendered before attribution existed.
+	gradedSuffix := strings.Join(m.npuRowSuffixGradedParts(node), " • ")
 
 	// The row width for a given name column, chip count and suffix, measured on
 	// exactly the strings that are going to be printed.
@@ -189,8 +219,18 @@ func (m *Model) npuMatrixRow(node *model.NodeData, selected bool) string {
 	withSuffix := suffix != ""
 	if !fits(shown, withSuffix) {
 		// The matrix is the content of this view, so the summary is the first
-		// thing to go when the terminal is narrow.
-		withSuffix = false
+		// thing to go when the terminal is narrow — but the occupancy count
+		// yields before the grade counters: it is informational, it sits last,
+		// and it must not evict the severity summary that predates it. A row
+		// whose suffix is only grade counters keeps the all-or-nothing drop.
+		// The swap happens before the refit: fits measures the suffix about to
+		// be printed, not the one that just failed. An emptied suffix must also
+		// clear the flag — a surviving flag would append the two-cell gap
+		// before nothing and leave the row with trailing spaces.
+		if suffix != gradedSuffix {
+			suffix = gradedSuffix
+		}
+		withSuffix = suffix != "" && fits(shown, true)
 	}
 	if !fits(shown, withSuffix) && nameW > nameFloor {
 		nameW = nameFloor
@@ -371,10 +411,19 @@ func (m *Model) npuSummarySegments(nodes []*model.NodeData) []string {
 	// Chip health across every node that reports chips.
 	healthy, degraded, fault := npuChipTally(nodes)
 	total := healthy + degraded + fault
+	unknown := npuUnknownHealthTally(nodes)
 	if total == 0 {
 		segments = append(segments, StyleTextMuted.Render(m.T("npuview.health_no_data")))
 	} else {
-		segments = append(segments, m.TF("npuview.health_summary", map[string]interface{}{
+		// The counts are the matrix's tally either way. The wording is not:
+		// with unknown chips in the cluster the healthy cells are "no reported
+		// fault", not a health signal anybody sent, so the segment must not
+		// print "8/8 healthy" next to its own "unknown 8".
+		key := "npuview.health_summary"
+		if unknown > 0 {
+			key = "npuview.summary_no_known"
+		}
+		segments = append(segments, m.TF(key, map[string]interface{}{
 			"Healthy":  StyleStatusReady.Render(fmt.Sprintf("%d", healthy)),
 			"Total":    total,
 			"Degraded": StyleWarning.Render(fmt.Sprintf("%d", degraded)),
@@ -410,7 +459,7 @@ func (m *Model) npuSummarySegments(nodes []*model.NodeData) []string {
 	// Chips the exporter said nothing about. The segment is conditional: a
 	// cluster whose chips all report a health status keeps the summary bar
 	// byte-identical to before this segment existed.
-	if unknown := npuUnknownHealthTally(nodes); unknown > 0 {
+	if unknown > 0 {
 		segments = append(segments, m.TF("npuview.summary_unknown", map[string]interface{}{
 			"Count": StyleTextMuted.Render(fmt.Sprintf("%d", unknown)),
 		}))
@@ -474,6 +523,14 @@ func (m *Model) npuLivenessSegment(liveness *model.NPUExporterLiveness) string {
 // line when the terminal is too narrow for the whole bar in one line. It
 // guarantees every returned line fits width (when width is known), because the
 // view's lines are asserted to fit pixel for pixel.
+//
+// The health segment carries its own " · " separators between the
+// healthy/degraded/fault counters, so its width grows with the cluster's chip
+// total. When a segment alone outgrows the terminal, cutting its tail would
+// silently drop the highest-severity counts, so a segment with that internal
+// separator is split and the counters wrap onto their own lines instead; the
+// bar separator ("  •  ") never appears inside a segment, which is what makes
+// the two distinguishable. Segments without it keep the truncate behavior.
 func wrapSummarySegments(segments []string, width int, sep string) []string {
 	if len(segments) == 0 {
 		return nil
@@ -483,6 +540,20 @@ func wrapSummarySegments(segments []string, width int, sep string) []string {
 	}
 
 	var lines []string
+	// Flush one accumulated line. An over-wide line is only cut when it has no
+	// internal separator to wrap on. The split is guarded by the part count,
+	// not by a separator search: a mismatch between the two literals would
+	// otherwise split the line into a single unchanged part and recurse on it
+	// forever.
+	flush := func(s string) {
+		parts := strings.Split(s, " · ")
+		if visualLength(s) > width && len(parts) > 1 {
+			lines = append(lines, wrapSummarySegments(parts, width, " · ")...)
+			return
+		}
+		lines = append(lines, truncate(s, width))
+	}
+
 	current := ""
 	for _, segment := range segments {
 		switch {
@@ -491,12 +562,12 @@ func wrapSummarySegments(segments []string, width int, sep string) []string {
 		case visualLength(current)+visualLength(sep)+visualLength(segment) <= width:
 			current += sep + segment
 		default:
-			lines = append(lines, truncate(current, width))
+			flush(current)
 			current = segment
 		}
 	}
 	if current != "" {
-		lines = append(lines, truncate(current, width))
+		flush(current)
 	}
 	return lines
 }

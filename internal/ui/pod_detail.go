@@ -127,6 +127,13 @@ func (m *Model) renderPodBasicInfo(pod *model.PodData) string {
 		StyleTextSecondary.Render(m.T("detail.field.restarts")),
 		pod.RestartCount))
 
+	// NPU chip attribution: the chips of the pod's own node whose exporter
+	// ownership labels name this pod. Rendered only when the pod is scheduled
+	// and either requests NPUs or actually owns a chip.
+	if line := m.renderPodNPUChipLine(pod); line != "" {
+		info = append(info, line)
+	}
+
 	// Network bandwidth (instantaneous MB/s, if we have history)
 	info = append(info, "")
 	info = append(info, StyleTextSecondary.Render("  "+m.T("detail.pod.network_bandwidth")))
@@ -194,6 +201,68 @@ func (m *Model) renderPodBasicInfo(pod *model.PodData) string {
 	}
 
 	return strings.Join(info, "\n")
+}
+
+// renderPodNPUChipLine renders the pod's NPU chip attribution row, or "" when
+// the pod has nothing to say about chips: it is unscheduled, or it neither
+// requests NPUs nor owns one.
+//
+// The chips are looked up by the node the pod runs on plus namespace and name:
+// the exporter attributes a chip to one pod, and two pods in different
+// namespaces may share a name, so the pod name alone would attribute the wrong
+// workload.
+func (m *Model) renderPodNPUChipLine(pod *model.PodData) string {
+	if pod.Node == "" {
+		return ""
+	}
+
+	label := m.T("detail.field.npu")
+	// The value is cut to the terminal: the chips list grows with every chip the
+	// pod holds and the "not captured" note is a full sentence, so neither may
+	// push the row past the edge. The row is indented two cells (not the four
+	// detailValueWidth assumes), so the budget is computed from the rendered
+	// prefix instead.
+	valueWidth := 120
+	if m.width > 0 {
+		valueWidth = max(1, min(120, m.width-2-visualLength(label+": ")))
+	}
+
+	chips := m.podOwnedChips(pod)
+	if len(chips) == 0 {
+		if pod.NPURequest <= 0 {
+			return ""
+		}
+		return "  " + StyleTextSecondary.Render(label+": ") +
+			StyleTextMuted.Render(truncate(m.T("npudetail.pod_chips_unknown"), valueWidth))
+	}
+
+	ids := make([]string, len(chips))
+	for i, chip := range chips {
+		ids[i] = fmt.Sprintf("%d-%d", chip.NPUID, chip.Chip)
+	}
+	value := m.TF("npudetail.pod_chips", map[string]interface{}{"Chips": strings.Join(ids, ", ")})
+	return "  " + StyleTextSecondary.Render(label+": ") + truncate(value, valueWidth)
+}
+
+// podOwnedChips returns the chips of the pod's node that the exporter attributes
+// to this pod, in the node's chip order.
+func (m *Model) podOwnedChips(pod *model.PodData) []model.NPUChipData {
+	if m.clusterData == nil {
+		return nil
+	}
+	for _, node := range m.clusterData.Nodes {
+		if node.Name != pod.Node {
+			continue
+		}
+		var chips []model.NPUChipData
+		for _, chip := range node.NPUChips {
+			if chip.OwnerNamespace == pod.Namespace && chip.OwnerPod == pod.Name {
+				chips = append(chips, chip)
+			}
+		}
+		return chips
+	}
+	return nil
 }
 
 // renderPodContainerInfo renders pod container information

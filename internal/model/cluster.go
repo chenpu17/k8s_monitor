@@ -351,6 +351,13 @@ type NPUChipData struct {
 	RoCERxErrPkts      int64   `json:"roce_rx_err_pkts"` // RoCE RX error packets
 	BandwidthRx        float64 `json:"bandwidth_rx"`     // Bandwidth RX in MB/s
 	BandwidthTx        float64 `json:"bandwidth_tx"`     // Bandwidth TX in MB/s
+
+	// OwnerPod/OwnerNamespace are the workload that occupies this chip, as
+	// attributed by NPU-Exporter's container mapping (pod_name/namespace
+	// labels). Empty on idle chips and on the deploy-collector path, which
+	// carries no ownership.
+	OwnerPod       string `json:"owner_pod,omitempty"`
+	OwnerNamespace string `json:"owner_namespace,omitempty"`
 }
 
 // NPU fault-code handling families, one per coarse tier of the device plugin's

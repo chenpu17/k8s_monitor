@@ -1741,6 +1741,13 @@ other = "🧮 NPU 总览"
 [npuview.health_summary]
 other = "{{.Healthy}}/{{.Total}} 健康 · {{.Degraded}} 降级 · {{.Fault}} 故障"
 
+# 存在健康状态未知的芯片时改用本段：矩阵里它们仍是健康格，但“健康”是在替
+# 没有发声的芯片断言，故健康部分改说已知的事实。等计数下比常规段宽 1~2 格
+# （en +1、zh +2），终端窄到两者装不下时，先丢末尾降级/故障计数的一定是
+# 更宽的本段。
+[npuview.summary_no_known]
+other = "{{.Healthy}}/{{.Total}} 无故障 · {{.Degraded}} 降级 · {{.Fault}} 故障"
+
 [npuview.health_no_data]
 other = "芯片健康：无数据"
 
@@ -1761,6 +1768,10 @@ other = "{{.Count}} 降级"
 
 [npuview.row_fault]
 other = "{{.Count}} 故障"
+
+# 节点行尾段的占用计数：exporter 归因到工作负载的芯片数。
+[npuview.row_occupied]
+other = "{{.Count}} 占用"
 
 [npuview.monitoring_unavailable]
 other = "监控不可用"
@@ -2521,6 +2532,20 @@ other = "    芯片 {{.NPU}}-{{.Chip}}：ECC 累计 单比特 {{.Single}}{{.Sing
 # 上报错误码的芯片，错误码在知识库中时附故障档位。
 [npudetail.error_code_chip]
 other = "    芯片 {{.NPU}}-{{.Chip}}：{{.Code}} · {{.Category}}"
+
+# 占用芯片的工作负载，来自 NPU-Exporter 的容器归因；同一 Pod 的多颗芯片逐行列出。
+[npudetail.chip_owner]
+other = "    芯片 {{.NPU}}-{{.Chip}} → {{.Owner}}"
+
+# Pod 详情中该 Pod 占用的芯片（按其所在节点上归属标签命中的芯片）。
+[npudetail.pod_chips]
+other = "占用 NPU 芯片：{{.Chips}}"
+
+# Pod 申请了 NPU 但没有任何芯片带它的归属标签：说明的是本工具的可见性边界，
+# 而不是集群异常——只有 NPU-Exporter 做芯片归因，采集器路径与不可达的 exporter
+# 都会让芯片没有归属。
+[npudetail.pod_chips_unknown]
+other = "未捕获（仅 NPU-Exporter 提供归属，可能不可达）"
 
 [npudetail.health_unknown]
 other = "健康状态未知的芯片"

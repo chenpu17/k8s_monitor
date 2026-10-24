@@ -1076,9 +1076,10 @@ func (m *Model) npuExporterLivenessLine() string {
 
 // npuChipSparseLines renders the per-chip lines that follow the chip table: one
 // for chips reporting an error code (with the fault-code knowledge base class
-// when the code is known) and one for chips with HBM ECC history. Both are
-// sparse — a healthy node renders nothing here — and both stay outside the
-// table so its column geometry cannot move.
+// when the code is known), one for chips with HBM ECC history and one for chips
+// the exporter attributes to a workload. All are sparse — a healthy idle node
+// renders nothing here — and all stay outside the table so its column geometry
+// cannot move.
 func (m *Model) npuChipSparseLines(node *model.NodeData) []string {
 	var lines []string
 
@@ -1113,6 +1114,31 @@ func (m *Model) npuChipSparseLines(node *model.NodeData) []string {
 			"SingleDelta": npuDeltaSuffix(chip.HBMEccDeltaSamples, chip.HBMEccSingleErrDelta),
 			"Double":      double,
 			"DoubleDelta": npuDeltaSuffix(chip.HBMEccDeltaSamples, chip.HBMEccDoubleErrDelta),
+		}))
+	}
+
+	// One row per owned chip, not per pod: the row's identity is the chip, and
+	// collapsing a pod's two chips into one row would drop which chips it holds.
+	for _, chip := range node.NPUChips {
+		if chip.OwnerPod == "" {
+			continue
+		}
+		owner := chip.OwnerPod
+		if chip.OwnerNamespace != "" {
+			owner = chip.OwnerNamespace + "/" + chip.OwnerPod
+		}
+		// The value budget needs the label as it is actually rendered, with the
+		// real chip numbers. The bundle template would measure its own
+		// placeholders and cost the row the difference — a budget shrink no
+		// terminal took away.
+		rendered := m.TF("npudetail.chip_owner", map[string]interface{}{
+			"NPU": chip.NPUID, "Chip": chip.Chip, "Owner": "",
+		})
+		label := strings.TrimPrefix(strings.TrimSuffix(rendered, " "), "    ")
+		lines = append(lines, m.TF("npudetail.chip_owner", map[string]interface{}{
+			"NPU":   chip.NPUID,
+			"Chip":  chip.Chip,
+			"Owner": truncate(owner, m.detailValueWidth(label, 60)),
 		}))
 	}
 
