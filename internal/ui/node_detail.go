@@ -5,9 +5,11 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/chenpu/k8s-monitor/internal/model"
+	"github.com/mattn/go-runewidth"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -1091,12 +1093,12 @@ func (m *Model) npuChipSparseLines(node *model.NodeData) []string {
 		if family == "" {
 			family = "unknown"
 		}
-		lines = append(lines, m.TF("npudetail.error_code_chip", map[string]interface{}{
+		lines = append(lines, m.npuSparseWrap(m.TF("npudetail.error_code_chip", map[string]interface{}{
 			"NPU":      chip.NPUID,
 			"Chip":     chip.Chip,
 			"Code":     fmt.Sprintf("%08X", chip.ErrorCode),
 			"Category": StyleWarning.Render(m.T("npu.errorcat." + family)),
-		}))
+		}))...)
 	}
 
 	for _, chip := range node.NPUChips {
@@ -1107,14 +1109,14 @@ func (m *Model) npuChipSparseLines(node *model.NodeData) []string {
 		// The delta is only shown once the window holds two samples: with one
 		// sample there is no increment to report, and printing Δ+0 would read
 		// as "nothing happened since monitoring started".
-		lines = append(lines, m.TF("npudetail.ecc_delta", map[string]interface{}{
+		lines = append(lines, m.npuSparseWrap(m.TF("npudetail.ecc_delta", map[string]interface{}{
 			"NPU":         chip.NPUID,
 			"Chip":        chip.Chip,
 			"Single":      single,
 			"SingleDelta": npuDeltaSuffix(chip.HBMEccDeltaSamples, chip.HBMEccSingleErrDelta),
 			"Double":      double,
 			"DoubleDelta": npuDeltaSuffix(chip.HBMEccDeltaSamples, chip.HBMEccDoubleErrDelta),
-		}))
+		}))...)
 	}
 
 	// One row per owned chip, not per pod: the row's identity is the chip, and
@@ -1141,6 +1143,226 @@ func (m *Model) npuChipSparseLines(node *model.NodeData) []string {
 			"Owner": truncate(owner, m.detailValueWidth(label, 60)),
 		}))
 	}
+
+	return lines
+}
+
+// npuSparseWrap wraps one sparse chip row to the terminal width and prefixes
+// each continuation with two spaces so a broken row still reads as that chip's
+// row rather than as a new one. Two, not four: the indent comes out of the
+// same budget the row needs, and at 20 columns four cells cost the separator-led
+// " · double 0 (Δ+0)" cell its fit.
+//
+// The two families that come through here (error code and ECC delta) carry the
+// heaviest signal of the detail — the fault class and the double-bit counter —
+// at the tail of the row, which is exactly the part a narrow terminal clipped.
+// They are wrapped rather than truncated because the detail view scrolls
+// vertically: an extra line is safe, a lost tail is not.
+//
+// The ECC row separates its halves with " · ", and breaking there moves the
+// whole double-bit half onto the continuation line instead of cutting a word in
+// half; a row with no room at a separator falls back to a cell-boundary break.
+//
+// ANSI integrity: the error-code row embeds a styled fault class, so a break
+// taken at a byte or rune offset could land inside an escape sequence or leave
+// a style unterminated. Breaks are therefore decided on the ANSI-stripped
+// layout and the active style is re-opened on each continuation, so every
+// emitted line holds complete sequences only and closes what it opened.
+func (m *Model) npuSparseWrap(s string) []string {
+	if m.width <= 0 || visualLength(s) <= m.width {
+		return []string{s}
+	}
+	return wrapANSIWidth(s, m.width, " · ", "  ")
+}
+
+// ansiToken is one unit of an ANSI-styled string: either an escape sequence
+// (no display width) or a single rune carrying its cell width.
+type ansiToken struct {
+	text  string
+	width int
+	isSGR bool
+}
+
+// tokenRunMatches reports whether the tokens starting at i are exactly the
+// given runes (SGR tokens never match a rune position).
+func tokenRunMatches(tokens []ansiToken, i int, runes []rune) bool {
+	if i+len(runes) > len(tokens) {
+		return false
+	}
+	for j, r := range runes {
+		tok := tokens[i+j]
+		if tok.isSGR || tok.text != string(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// tokenWidth sums the display width of tokens in [from, to).
+func tokenWidth(tokens []ansiToken, from, to int) int {
+	total := 0
+	for i := from; i < to && i < len(tokens); i++ {
+		total += tokens[i].width
+	}
+	return total
+}
+
+// wrapANSIWidth wraps an ANSI-styled string into lines no wider than width
+// display cells. Continuation lines start with contIndent, whose width counts
+// against the budget.
+//
+// The string is tokenised as SGR sequences and single runes, so a break can
+// never fall inside a sequence. Breaks are chosen in a first pass over the
+// token widths, where the string is cut into cells at the separator " · ": a
+// hard break may fall inside a cell (a long word), but it moves back to the
+// cell boundary whenever the overflowing cell would not be split anyway and the
+// cell's own start fits the line. That keeps the common case whole — the
+// double-bit half moves to the continuation line as one piece — without
+// wasting the room a blanket separator break would leave on the line above.
+// Terms around no separator fall back to pure cell-boundary wrapping.
+//
+// A second pass emits the lines, resetting the style at each break and
+// re-opening it after the indent, so every line is self-contained.
+//
+// width <= 0 returns the string untouched. A rune wider than the whole budget
+// is emitted on a line of its own: the break search always advances by at least
+// one token, so this can neither loop nor drop content.
+func wrapANSIWidth(s string, width int, sep, contIndent string) []string {
+	if width <= 0 {
+		return []string{s}
+	}
+
+	const reset = "\x1b[0m"
+
+	var tokens []ansiToken
+	for rest := s; rest != ""; {
+		if loc := ansiRegex.FindStringIndex(rest); loc != nil && loc[0] == 0 {
+			tokens = append(tokens, ansiToken{text: rest[:loc[1]], isSGR: true})
+			rest = rest[loc[1]:]
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(rest)
+		tokens = append(tokens, ansiToken{text: string(r), width: runewidth.RuneWidth(r)})
+		rest = rest[size:]
+	}
+
+	// Cell boundaries: the token index of each separator. A break lands right
+	// before it, and the space that preceded it is trimmed as trailing
+	// whitespace, so the continuation line starts on the separator itself.
+	sepRunes := []rune(sep)
+	var cells []int
+	if len(sepRunes) > 0 {
+		for i := 0; i+len(sepRunes) <= len(tokens); i++ {
+			if tokenRunMatches(tokens, i, sepRunes) {
+				cells = append(cells, i)
+			}
+		}
+	}
+
+	contWidth := runewidth.StringWidth(contIndent)
+
+	// Pass 1: the token index each line starts at.
+	starts := []int{0}
+	for {
+		lineStart := starts[len(starts)-1]
+		lineWidth := 0
+		if len(starts) > 1 {
+			lineWidth = contWidth
+		}
+		overflowAt := -1
+		for i := lineStart; i < len(tokens); i++ {
+			if tokens[i].isSGR {
+				continue
+			}
+			if lineWidth+tokens[i].width > width {
+				overflowAt = i
+				break
+			}
+			lineWidth += tokens[i].width
+		}
+		if overflowAt < 0 {
+			break // the rest fits on this line
+		}
+
+		// Prefer the last cell start in (lineStart, overflowAt] whose cell
+		// head also fits this line once the tail before it is dropped.
+		next := overflowAt
+		for k := len(cells) - 1; k >= 0; k-- {
+			cellStart := cells[k]
+			if cellStart <= lineStart || cellStart > overflowAt {
+				continue
+			}
+			lineWidth := 0
+			if len(starts) > 1 {
+				lineWidth = contWidth
+			}
+			if lineWidth+tokenWidth(tokens, lineStart, cellStart) <= width {
+				next = cellStart
+			}
+			break
+		}
+		// The break search must always advance. When the first token of the
+		// line already overflows (a rune wider than the whole budget, or a
+		// continuation indent that ate it), overflowAt equals lineStart and
+		// appending it again would never move: the wrap would spin forever,
+		// growing starts until memory runs out. Stepping one token past the
+		// start puts the overflowing token alone on its line, which is what
+		// the comment above promises.
+		if next <= lineStart {
+			next = lineStart + 1
+		}
+		starts = append(starts, next)
+	}
+
+	// Pass 2: emit the lines, carrying the active style across breaks.
+	var lines []string
+	var cur strings.Builder
+	active := ""
+	line := 0
+	openLine := func() {
+		if line > 0 {
+			cur.WriteString(contIndent)
+		}
+		if active != "" {
+			cur.WriteString(active)
+		}
+	}
+	skipSpaces := false
+	openLine()
+	for i, tok := range tokens {
+		if line+1 < len(starts) && i == starts[line+1] {
+			if active != "" {
+				cur.WriteString(reset)
+			}
+			// The break may sit just after a space that belonged to the
+			// separator: it is trailing whitespace on the line it ends.
+			lines = append(lines, strings.TrimRight(cur.String(), " "))
+			cur.Reset()
+			line++
+			openLine()
+			// The separator's leading space is dropped too, so the
+			// continuation line starts on "·" after the indent.
+			skipSpaces = true
+		}
+		if skipSpaces && !tok.isSGR && tok.text == " " {
+			continue
+		}
+		if !tok.isSGR {
+			skipSpaces = false
+		}
+		if tok.isSGR {
+			if tok.text == reset {
+				active = ""
+			} else {
+				active = tok.text
+			}
+		}
+		cur.WriteString(tok.text)
+	}
+	if active != "" {
+		cur.WriteString(reset)
+	}
+	lines = append(lines, cur.String())
 
 	return lines
 }

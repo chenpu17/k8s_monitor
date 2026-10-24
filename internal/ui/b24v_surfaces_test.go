@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 	"github.com/muesli/termenv"
+	"go.uber.org/zap"
 
 	"github.com/chenpu/k8s-monitor/internal/diagnostic"
 	"github.com/chenpu/k8s-monitor/internal/model"
@@ -301,42 +302,96 @@ func TestB24VUnknownAggregateIsMutedNotRed(t *testing.T) {
 	t.Fatal("the health-status line is missing")
 }
 
-// TestB24VSparseRowsWidthFloor pins the width at which the new sparse rows stop
-// fitting. The delivered probe asserts they "respect the terminal width like
-// every other line of the detail" at 60 / 80 / 120 columns only; below 60 they
-// are longer than the terminal and get clipped mid-token by the renderer (no
-// ellipsis, so the number itself is cut), which is what a 38/40-column terminal
-// shows. The chip *table* overflows narrow terminals at HEAD too, so this is not
-// a regression — but the batch adds two more overflowing lines and its own test
-// doc comment overstates the guarantee.
+// TestB24VSparseRowsWidthFloor pins the sparse-row width contract delivered by
+// batch 26. The rows used to have no width handling at all: below 60 columns
+// they were longer than the terminal and the renderer clipped the tail with no
+// ellipsis, cutting the fault class and the double-bit counter — the heaviest
+// signal of the page. They now wrap, so every row (continuations included) fits
+// the terminal at every width, and nothing is lost.
+//
+// The old assertion pinned the opposite (a floor of exactly 60 and deliberate
+// overflow at 38), which is why it is rewritten rather than deleted: the
+// property it protected has been reversed on purpose.
 func TestB24VSparseRowsWidthFloor(t *testing.T) {
 	forcedAsciiProfile(t)
 
-	const eccRow = "ECC total single"
-	floor := 0
-	for width := 20; width <= 100; width++ {
-		out := renderNPUDetailAtWidth(t, b24ChipNode(), width)
-		line := lineContaining(out, eccRow)
-		if line != "" && runewidth.StringWidth(line) <= width {
-			floor = width
-			break
+	for _, locale := range []string{"en", "zh"} {
+		for width := 20; width <= 80; width++ {
+			m := NewModel(nil, zap.NewNop(), time.Second, locale, "test", 200)
+			m.width, m.height = width, 200
+			m.selectedNode = b24ChipNode()
+
+			// Contract 1: every emitted sparse line (continuations too) fits.
+			sparse := m.npuChipSparseLines(b24ChipNode())
+			for _, line := range sparse {
+				if w := runewidth.StringWidth(stripANSI(line)); w > width {
+					t.Errorf("%s width %d: a sparse row is %d cells: %q", locale, width, w, stripANSI(line))
+				}
+			}
+
+			// Contract 2: nothing is dropped. Wrapping is only an acceptable
+			// fix because the tail survives: the join of the sparse lines
+			// must still carry the fault class, the totals and the double-bit
+			// half. The join also pins the separator: a cell break must not
+			// have eaten the " · " that keeps the two halves legible.
+			joined := strings.Join(sparse, "")
+			for _, want := range []string{"double 0 (Δ+0)", "·"} {
+				if locale == "zh" {
+					want = map[string]string{"double 0 (Δ+0)": "双比特 0 (Δ+0)", "·": "·"}[want]
+				}
+				if !strings.Contains(joined, want) {
+					t.Errorf("%s width %d: the sparse rows lost %q:\n%s", locale, width, want, strings.Join(sparse, "\n"))
+				}
+			}
+
+			// Contract 3: the separator-led cell starts a continuation line
+			// whenever the row had to break, so the double-bit half stays
+			// readable as one piece instead of being cut mid-word.
+			for _, line := range sparse {
+				if strings.HasSuffix(strings.TrimRight(stripANSI(line), " "), "·") {
+					t.Errorf("%s width %d: a sparse line ends on a dangling separator: %q", locale, width, stripANSI(line))
+				}
+			}
 		}
 	}
-	if floor == 0 {
-		t.Fatal("the ECC sparse row never fits any width up to 100")
-	}
-	if floor != 60 {
-		t.Errorf("the ECC sparse row starts fitting at %d columns, want 60 (the delivered probe's narrowest case)", floor)
+}
+
+// TestB26VSparseWrapTerminatesAtTinyWidths pins termination. At widths at or
+// below the continuation indent every line overflows on its first token, and
+// the break search used to answer with a start that never moved: the wrap spun
+// forever, growing the line-start slice until memory ran out — an OOM that
+// takes down whatever shares the machine with the TUI, not just the pane.
+// Termination and content survival are both judged: at these widths the wrap
+// may emit one rune per line, but it must emit all of them, and the full
+// sparse-line path over the real fixture must come back.
+func TestB26VSparseWrapTerminatesAtTinyWidths(t *testing.T) {
+	forcedAsciiProfile(t)
+
+	for _, width := range []int{1, 2, 3} {
+		lines := wrapANSIWidth("abcd · efgh", width, " · ", "  ")
+		// Reassemble for the content check: the continuation indent is
+		// decoration, not copy, so it comes off before joining. At these
+		// widths the indent can exceed the whole budget, which is exactly
+		// why only termination and content — not the width bound — are
+		// judged here.
+		parts := make([]string, len(lines))
+		for i, line := range lines {
+			if i > 0 {
+				line = strings.TrimPrefix(line, "  ")
+			}
+			parts[i] = line
+		}
+		joined := strings.Join(parts, "")
+		if !strings.Contains(joined, "abcd") || !strings.Contains(joined, "efgh") {
+			t.Errorf("width %d: wrap lost content: %q", width, lines)
+		}
 	}
 
-	// At the task book's 38-column smoke size the row is longer than the
-	// terminal, i.e. the real renderer clips it mid-value.
-	out := renderNPUDetailAtWidth(t, b24ChipNode(), 38)
-	line := lineContaining(out, eccRow)
-	if w := runewidth.StringWidth(line); w <= 38 {
-		t.Fatalf("the ECC row fits 38 columns after all (%d cells): %q", w, line)
-	} else {
-		t.Logf("at 38 columns the ECC row is %d cells and gets clipped: %q", w, line)
+	m := NewModel(nil, zap.NewNop(), time.Second, "en", "test", 200)
+	m.width, m.height = 2, 40
+	m.selectedNode = b24ChipNode()
+	if sparse := m.npuChipSparseLines(b24ChipNode()); len(sparse) == 0 {
+		t.Fatal("no sparse lines at width 2 — the fixture has ECC and error-code rows to show")
 	}
 }
 

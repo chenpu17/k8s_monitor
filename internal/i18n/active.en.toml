@@ -1759,10 +1759,10 @@ other = "{{.Healthy}}/{{.Total}} healthy · {{.Degraded}} degraded · {{.Fault}}
 
 # Health segment used instead when some chips report no health status: the
 # graded chips are healthy in the matrix, but "healthy" would claim a signal
-# nobody sent, so the healthy part says what is actually known. At equal
-# counts it is one to two cells wider than the plain segment (en +1, zh +2),
-# so on a terminal too narrow for both it is always this segment that loses
-# its trailing degraded/fault counts first.
+# nobody sent, so the healthy part says what is actually known. At equal counts
+# it is one to two cells wider than the plain segment (en +1, zh +2). The
+# segment split guarantees the counts are never truncated; this segment only
+# costs those one to two cells.
 [npuview.summary_no_known]
 other = "{{.Healthy}}/{{.Total}} no fault · {{.Degraded}} degraded · {{.Fault}} fault"
 

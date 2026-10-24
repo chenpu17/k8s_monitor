@@ -284,10 +284,66 @@ func TestFinalSweepGuardNoHardcodedUILabels(t *testing.T) {
 	}
 }
 
+// unquoteLiteral returns the interpreted value of a string literal, falling
+// back to trimming the quotes when the source is not a valid Go literal.
+func unquoteLiteral(lit *ast.BasicLit) string {
+	value, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		return strings.Trim(lit.Value, `"`)
+	}
+	return value
+}
+
+// stringLiterals returns every string-literal operand of expr, in source
+// order, together with its position. It descends into +-concatenations and
+// parenthesised groups so that an operand split across literals — the
+// "lit" + expr shape that used to be invisible to the census — is reported
+// as the literals it is made of. Non-literal operands (identifiers, calls)
+// yield nothing: only what the compiler would splice into the value counts.
+func stringLiterals(expr ast.Expr) []*ast.BasicLit {
+	var lits []*ast.BasicLit
+	ast.Inspect(expr, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.BinaryExpr:
+			// Add is string concatenation only when both operands are
+			// strings; a numeric expression's literals are not UI copy and
+			// are not reported (their Kind is not STRING anyway).
+			return node.Op == token.ADD
+		case *ast.ParenExpr:
+			return true
+		case *ast.BasicLit:
+			if node.Kind == token.STRING {
+				lits = append(lits, node)
+			}
+			return false
+		}
+		return false
+	})
+	return lits
+}
+
+// joinLiterals unquotes the collected literals and joins them into the single
+// value the assembled expression evaluates to for its literal parts. Only the
+// literals are joined, so the result is what a reader of the site sees as
+// words: the non-literal operands contribute their runtime value, not copy.
+func joinLiterals(lits []*ast.BasicLit) string {
+	var b strings.Builder
+	for _, lit := range lits {
+		b.WriteString(unquoteLiteral(lit))
+	}
+	return b.String()
+}
+
 // censusScan parses the given files and returns one violation string per
 // hardcoded-label site (patterns A/B/C above; test files are skipped).
 // It is a standalone function so the anti-blind-positive probe can run it
 // against injected files without touching the package directory.
+//
+// Every pattern reads the *literal parts* of its expression rather than a
+// bare literal node, so a concatenation cannot hide copy behind an operand
+// boundary ("Hard" + "coded" is the same label as "Hardcoded"; "%.1f" + "G"
+// is the same format as "%.1fG"). Format strings are judged after joining,
+// because the verbs and the words around them may sit in different operands.
 func censusScan(t *testing.T, files []string) []string {
 	t.Helper()
 
@@ -393,13 +449,17 @@ func censusScan(t *testing.T, files []string) []string {
 				switch sel.Sel.Name {
 				case "Render":
 					for _, arg := range node.Args {
-						lit, isLit := arg.(*ast.BasicLit)
-						if !isLit || lit.Kind != token.STRING || !hasLetters(lit.Value) {
-							continue
-						}
-						value := strings.Trim(lit.Value, `"`)
-						if _, allowed := allowRender[value]; !allowed {
-							violations = append(violations, fmt.Sprintf("%s:%d: hardcoded label passed to Render: %s (use m.T with a bundle key, or extend the census allowlist with a reason)", base, fset.Position(lit.Pos()).Line, lit.Value))
+						for _, lit := range stringLiterals(arg) {
+							// Judge the interpreted value: the raw source of
+							// "\n" carries an 'n', which would otherwise be
+							// reported as a letter-bearing label.
+							value := unquoteLiteral(lit)
+							if !hasLetters(value) {
+								continue
+							}
+							if _, allowed := allowRender[value]; !allowed {
+								violations = append(violations, fmt.Sprintf("%s:%d: hardcoded label passed to Render: %q (use m.T with a bundle key, or extend the census allowlist with a reason)", base, fset.Position(lit.Pos()).Line, value))
+							}
 						}
 					}
 				case "Sprintf", "Fprintf", "Errorf":
@@ -416,16 +476,15 @@ func censusScan(t *testing.T, files []string) []string {
 					if len(node.Args) <= fmtIdx {
 						return true
 					}
-					lit, isLit := node.Args[fmtIdx].(*ast.BasicLit)
-					if !isLit || lit.Kind != token.STRING {
+					lits := stringLiterals(node.Args[fmtIdx])
+					if len(lits) == 0 {
 						return true
 					}
 					// Work on the interpreted value so escape sequences
-					// (\n, \t, …) cannot masquerade as letters.
-					value, err := strconv.Unquote(lit.Value)
-					if err != nil {
-						value = strings.Trim(lit.Value, `"`)
-					}
+					// (\n, \t, …) cannot masquerade as letters. The joined
+					// value is what the verbs and words are judged against:
+					// "%.1f" + "G" concatenates to the same allowed "%.1fG".
+					value := joinLiterals(lits)
 					// Strip fmt verbs: what remains must be free of letters,
 					// else the format string carries hardcoded words.
 					nonVerb := verbRe.ReplaceAllString(value, "")
@@ -433,18 +492,22 @@ func censusScan(t *testing.T, files []string) []string {
 						return true
 					}
 					if _, allowed := allowFmt[value]; !allowed {
-						violations = append(violations, fmt.Sprintf("%s:%d: hardcoded words in fmt format string: %q (use m.T/m.TF with a bundle key, or extend the census allowlist with a reason)", base, fset.Position(lit.Pos()).Line, value))
+						violations = append(violations, fmt.Sprintf("%s:%d: hardcoded words in fmt format string: %q (use m.T/m.TF with a bundle key, or extend the census allowlist with a reason)", base, fset.Position(lits[0].Pos()).Line, value))
 					}
 				}
 			case *ast.ReturnStmt:
 				if len(node.Results) != 1 {
 					return true
 				}
-				lit, isLit := node.Results[0].(*ast.BasicLit)
-				if !isLit || lit.Kind != token.STRING || !hasLetters(lit.Value) {
+				lits := stringLiterals(node.Results[0])
+				if len(lits) == 0 {
 					return true
 				}
-				violations = append(violations, fmt.Sprintf("%s:%d: bare return of a string literal with letters: %s (use m.T with a bundle key)", base, fset.Position(lit.Pos()).Line, lit.Value))
+				value := joinLiterals(lits)
+				if !hasLetters(value) {
+					return true
+				}
+				violations = append(violations, fmt.Sprintf("%s:%d: bare return of a string literal with letters: %q (use m.T with a bundle key)", base, fset.Position(lits[0].Pos()).Line, value))
 			}
 			return true
 		})
@@ -519,6 +582,66 @@ func TestCensusGuardPatternsFire(t *testing.T) {
 	for shape, seen := range shapes {
 		if !seen {
 			t.Errorf("censusScan missed the %q probe shape:\n%s", shape, strings.Join(violations, "\n"))
+		}
+	}
+}
+
+// TestCensusGuardConcatenationFire is the batch-26 anti-blind-positive probe
+// for the concatenation blind spot: each pattern re-fired with its label split
+// across a +-concatenation, so no single *ast.BasicLit carries the copy. The
+// scanner must descend into the operands and report the same shapes it reports
+// for the unsplit literals. It also pins the join boundary in the other
+// direction: "%.1f" + "G" assembles into the *allowed* "%.1fG" and stays silent,
+// which only holds if the format string is judged after joining rather than
+// operand by operand.
+func TestCensusGuardConcatenationFire(t *testing.T) {
+	dir := t.TempDir()
+
+	files := []string{
+		// Pattern C, concatenated: the words straddle the operator.
+		writeProbe(t, dir, "probe_fmt_concat.go", "package ui\n\nfunc probeFmtConcat(n int) string {\n\treturn fmt.Sprintf(\"Join\"+\"ed label %d\", n)\n}\n"),
+		// Pattern A, concatenated: neither operand is the whole label.
+		writeProbe(t, dir, "probe_render_concat.go", "package ui\n\ntype probeStyle struct{}\n\nfunc (probeStyle) Render(s string) string { return s }\n\nfunc probeRenderConcat() string {\n\tvar st probeStyle\n\treturn st.Render(\"Hard\" + \"coded\")\n}\n"),
+		// Pattern B, concatenated.
+		writeProbe(t, dir, "probe_return_concat.go", "package ui\n\nfunc probeReturnConcat() string {\n\treturn \"Hard\" + \"coded\"\n}\n"),
+		// Pattern B split by parentheses rather than directly: the descent must
+		// survive the ParenExpr around a grouped operand.
+		writeProbe(t, dir, "probe_return_paren.go", "package ui\n\nfunc probeReturnParen() string {\n\treturn \"Hard\" + (\"coded\")\n}\n"),
+		// Negative control: verb + unit split across operands, assembling into
+		// the allowlisted "%.1fG". Must not be reported.
+		writeProbe(t, dir, "probe_fmt_concat_allowed.go", "package ui\n\nfunc probeFmtConcatAllowed(v float64) string {\n\treturn fmt.Sprintf(\"%.1f\"+\"G\", v)\n}\n"),
+	}
+
+	violations := censusScan(t, files)
+	// Five probe files yield five violations: the concatenated Render probe
+	// reports both of its operands (each alone is already a hardcoded
+	// fragment), and the two concatenated returns report their joined values.
+	// The allowlisted "%.1f"+"G" contributes nothing.
+	if len(violations) != 5 {
+		t.Fatalf("censusScan reported %d violations on the concatenation probes, want exactly 5:\n%s",
+			len(violations), strings.Join(violations, "\n"))
+	}
+	shapes := map[string]bool{
+		"Joined label %d": false, // pattern C, concatenated
+		`"Hard"`:          false, // pattern A, concatenated (first operand)
+		`"coded"`:         false, // pattern A, concatenated (second operand)
+		`"Hardcoded"`:     false, // pattern B, concatenated (joined operands)
+	}
+	for _, v := range violations {
+		for shape := range shapes {
+			if strings.Contains(v, shape) {
+				shapes[shape] = true
+			}
+		}
+	}
+	for shape, seen := range shapes {
+		if !seen {
+			t.Errorf("censusScan missed the %q concatenation probe shape:\n%s", shape, strings.Join(violations, "\n"))
+		}
+	}
+	for _, v := range violations {
+		if strings.Contains(v, "probe_fmt_concat_allowed.go") {
+			t.Errorf("the allowlisted post-join format was reported: %s", v)
 		}
 	}
 }

@@ -410,8 +410,14 @@ func TestPodDetailChipLineFitsTerminal(t *testing.T) {
 
 			info := stripANSI(m.renderPodBasicInfo(pod))
 			line := lineContaining(info, "NPU:")
+			// All three fixtures are scheduled pods (Node set) that request
+			// NPUs, so the row is mandatory: owned0 lists its chips,
+			// unattributed renders the "not captured" explanation and wide
+			// lists every chip of the node. A missing row is a failure, not a
+			// case to skip — skipping made the probe green on exactly the
+			// regression it exists to catch.
 			if line == "" {
-				continue // no row for this pod/width combination
+				t.Fatalf("width %d, pod %s: no NPU chip row rendered", width, pod.Name)
 			}
 			if w := runewidth.StringWidth(line); w > width {
 				t.Errorf("width %d, pod %s: the chip row is %d cells: %q", width, pod.Name, w, line)
