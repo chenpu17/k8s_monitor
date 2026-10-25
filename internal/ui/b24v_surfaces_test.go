@@ -395,6 +395,187 @@ func TestB26VSparseWrapTerminatesAtTinyWidths(t *testing.T) {
 	}
 }
 
+// TestB26VWrapTerminationKeepsContent pins that the wrap is length-preserving,
+// not just terminating. The shipped termination test only judges termination
+// plus two substrings it looks for in a 12-rune toy input, and the rewritten
+// contract test only asserts that two known phrases survive somewhere in the
+// join — a wrap can drop any other rune and both stay green. Verified by
+// mutation: dropping the first token of every continuation line (pass 2
+// `continue` at the break) leaves the contract test passing while losing
+// characters of the real rows. This probe compares the full row content against
+// the unwrapped rendering, so any dropped rune fails it.
+//
+// Compared with whitespace removed: a break legitimately replaces the
+// separator's leading space with a line break, so whitespace is the only
+// difference a correct wrap may introduce. The continuation indent is stripped
+// for the same reason — it is decoration, not copy. Judged at every width from
+// 1, where the forced-advance branch fires on every line.
+func TestB26VWrapTerminationKeepsContent(t *testing.T) {
+	forcedAsciiProfile(t)
+
+	dropSpaces := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			if r == ' ' || r == '\t' {
+				return -1
+			}
+			return r
+		}, stripANSI(s))
+	}
+
+	// Join the sparse rows, dropping the continuation indent (decoration, not
+	// copy) so the wrapped and unwrapped renderings are comparable.
+	joined := func(m *Model) string {
+		var b strings.Builder
+		for i, line := range m.npuChipSparseLines(b24ChipNode()) {
+			if i > 0 {
+				line = strings.TrimPrefix(line, "  ")
+			}
+			b.WriteString(stripANSI(line))
+		}
+		return dropSpaces(b.String())
+	}
+
+	baseline := NewModel(nil, zap.NewNop(), time.Second, "en", "test", 200)
+	baseline.width = 0 // no width reported: the unwrapped render
+	want := joined(baseline)
+	if want == "" {
+		t.Fatal("the unwrapped baseline is empty — the fixture lost its sparse rows")
+	}
+
+	for width := 1; width <= 80; width++ {
+		m := NewModel(nil, zap.NewNop(), time.Second, "en", "test", 200)
+		m.width, m.height = width, 200
+		if got := joined(m); got != want {
+			idx := 0
+			for idx < len(got) && idx < len(want) && got[idx] == want[idx] {
+				idx++
+			}
+			lo := max(0, idx-20)
+			t.Errorf("width %d: the wrap changed the row's content at both-common byte %d\n got ...%s...\nwant ...%s...",
+				width, idx, got[lo:min(len(got), idx+40)], want[lo:min(len(want), idx+40)])
+		}
+	}
+}
+
+// TestB26VCountsSplitAtCommonWidths records the readability cost of wrapping:
+// the break search prefers a separator cell, but when none fits it falls back
+// to a cell-boundary break that can land inside a number. The halves are then
+// separated by the continuation indent, so a counter reads as two counters
+// ("single 9" / "9992"). The delivery report concedes this only at 20 columns;
+// it in fact happens across 32..35 as well — widths a split terminal pane hits
+// in practice — so the range is pinned here rather than left as folklore.
+//
+// This is a recorded behaviour, not a regression guard: the wrap is still
+// strictly better than the clipping it replaced at these widths (all the digits
+// survive, the tail is no longer cut). If the break search ever learns to move
+// a whole numeric token to the next line, this test is the one to update.
+func TestB26VCountsSplitAtCommonWidths(t *testing.T) {
+	forcedAsciiProfile(t)
+
+	const eccTotal = "99992"
+	split := func(width int) bool {
+		m := NewModel(nil, zap.NewNop(), time.Second, "en", "test", 200)
+		m.width = width
+		for _, line := range m.npuChipSparseLines(b24ChipNode()) {
+			if strings.Contains(stripANSI(line), eccTotal) {
+				return false // the whole count is on one line
+			}
+		}
+		return true
+	}
+
+	// The count must survive at every width (batch 26's contract)…
+	for width := 20; width <= 80; width++ {
+		m := NewModel(nil, zap.NewNop(), time.Second, "en", "test", 200)
+		m.width = width
+		var joined strings.Builder
+		for i, line := range m.npuChipSparseLines(b24ChipNode()) {
+			s := stripANSI(line)
+			if i > 0 {
+				s = strings.TrimPrefix(s, "  ")
+			}
+			joined.WriteString(s)
+		}
+		if !strings.Contains(joined.String(), eccTotal) {
+			t.Errorf("width %d: the ECC count %s is missing entirely", width, eccTotal)
+		}
+	}
+
+	// …and the widths where it is split across lines are the documented set.
+	for _, width := range []int{32, 33, 34, 35} {
+		if !split(width) {
+			t.Errorf("width %d: the ECC count is no longer split; update the documented range", width)
+		}
+	}
+	// Wide enough to hold the count in one piece: not split.
+	for _, width := range []int{36, 38, 60} {
+		if split(width) {
+			t.Errorf("width %d: the ECC count is split, wider than the documented 32..35 range", width)
+		}
+	}
+}
+
+// TestB26VHealthStatusLineOverflowsBelow41 records the overflow the batch did
+// not fix: on a healthy node with no sparse rows at all, the
+// "    Health Status (npu-exporter): <status>" line is still 41 cells (en) / 36
+// (zh), because it appends the value without a detailValueWidth budget unlike
+// its neighbours (hypernode id, owner, liveness error). Measured here so the
+// finding is on record with numbers, and so a future fix has a test to flip.
+//
+// Clamping it the way the L1072 precedent does is NOT a drop-in fix: below 41
+// columns the budget for the value falls to <= 7 cells, and truncate() would cut
+// all four legal statuses to a single letter ("Healthy"/"Unhealthy" both become
+// "H"/"U"), so the line would keep its width but lose the one thing it reports.
+// A real fix has to shorten or split the label, not truncate the value.
+func TestB26VHealthStatusLineOverflowsBelow41(t *testing.T) {
+	forcedAsciiProfile(t)
+
+	// The label alone, rendered, is what the value budget would be charged.
+	for _, tc := range []struct{ locale, label string }{
+		{"en", "Health Status (npu-exporter)"},
+		{"zh", "健康状态 (npu-exporter)"},
+	} {
+		m := NewModel(nil, zap.NewNop(), time.Second, tc.locale, "test", 200)
+		if got := m.T("npudetail.health_status") + " (" + m.T("npudetail.health_exporter") + ")"; got != tc.label {
+			t.Errorf("%s label moved to %q; the measurement below is stale", tc.locale, got)
+		}
+		if w := visualLength(tc.label); w != 28 && tc.locale == "en" {
+			t.Errorf("en label is %d cells, want the measured 28", w)
+		}
+	}
+
+	idle := extendedChipNode() // healthy: no error code, no ECC, no owner
+	for _, tc := range []struct {
+		locale string
+		want   int
+	}{{"en", 41}, {"zh", 36}} {
+		// It overflows at every width below its own length.
+		for _, width := range []int{20, 30, 38, tc.want - 1} {
+			out := renderNodeDetailAt(t, tc.locale, idle, width)
+			found := ""
+			for _, line := range strings.Split(out, "\n") {
+				if strings.Contains(line, "npu-exporter") {
+					found = line
+					break
+				}
+			}
+			if found == "" {
+				t.Fatalf("%s width %d: the health-status line is not rendered at all", tc.locale, width)
+			}
+			if w := visualLength(found); w != tc.want {
+				t.Errorf("%s width %d: health-status line is %d cells, want the measured %d: %q",
+					tc.locale, width, w, tc.want, found)
+			}
+		}
+	}
+
+	// At 41 (en) it fits; the line does not grow with the terminal, so it stays
+	// a fixed 41 cells and is not the wrap's problem at wide widths.
+	if out := renderNodeDetailAt(t, "en", idle, 80); !strings.Contains(out, "npu-exporter") {
+		t.Error("en width 80: the health-status line disappeared")
+	}
+}
+
 // TestB24VLivenessUnknownStatusIsNotOK pins the default branch of both new
 // liveness surfaces. Neither switch originally had a case for a status outside
 // ok/backoff/never, and both fell back to the "ok" styling and wording, so a

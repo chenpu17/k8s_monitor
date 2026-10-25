@@ -426,6 +426,44 @@ func TestPodDetailChipLineFitsTerminal(t *testing.T) {
 	}
 }
 
+// TestPodDetailChipLineScanIsNotVacuous covers the residual blind spot in the
+// verify-side superset probe. TestB25VPodChipLineFitsAtEveryWidth scans the
+// rendered info block for the NPU label and asserts a width only when it finds
+// it, so a regression that removes the row entirely leaves it green — it
+// asserts on zero cells instead of failing. Batch 26 fixed exactly this shape
+// in TestPodDetailChipLineFitsTerminal; the superset file is a verify artifact
+// and stays untouched, so the coverage is pinned here instead.
+//
+// The count is asserted, not just the row: "found the row" is what makes the
+// width bound in the sibling test mean anything.
+func TestPodDetailChipLineScanIsNotVacuous(t *testing.T) {
+	forcedAsciiProfile(t)
+
+	data, owned0, _, unattributed := podChipFixture()
+
+	for _, width := range []int{30, 80} {
+		for _, pod := range []*model.PodData{owned0, unattributed} {
+			m := NewModel(nil, nil, 0, "en", "test", 200)
+			m.width, m.height = width, 60
+			m.clusterData = data
+			m.selectedPod = pod
+
+			info := stripANSI(m.renderPodBasicInfo(pod))
+			label := m.T("detail.field.npu") + ":"
+			found := 0
+			for _, line := range strings.Split(info, "\n") {
+				if strings.Contains(line, label) {
+					found++
+				}
+			}
+			if found != 1 {
+				t.Errorf("width %d, pod %s: the NPU label scan matched %d line(s), want exactly 1 — the superset width assertion covers %d cells at this size",
+					width, pod.Name, found, found)
+			}
+		}
+	}
+}
+
 // TestOwnerKeysZhCopy pins the zh values of the five new keys: present, no key
 // name leak, and the zh owner line keeps the full-width colon convention of its
 // sibling sparse rows.
