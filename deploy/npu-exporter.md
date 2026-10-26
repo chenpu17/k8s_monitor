@@ -13,11 +13,17 @@ k8s-monitor 的 NPU-Exporter 客户端把服务名、命名空间、端口和路
 | Service 命名空间 | `kube-system` | `NewNPUExporterClient` 的 `serviceNS` |
 | Service 名 | `npu-exporter` | `serviceName` |
 | Service 端口 | `8082` | `servicePort` |
-| 指标路径 | `/metrics` | `fetchMetricsViaProxy` 的 `Suffix("metrics")` |
-| 访问方式 | API Server 代理 | `/api/v1/namespaces/kube-system/services/npu-exporter:8082/proxy/metrics` |
+| 指标路径 | `/metrics` | `fetchMetricsViaProxy` / `fetchPodMetrics` 的 `Suffix("metrics")` |
+| 逐 pod 抓取 | API Server pod 代理 | `/api/v1/namespaces/kube-system/pods/{pod}:8082/proxy/metrics` |
+| pod 发现 | API Server 列表,两种标签都认:`app.kubernetes.io/name=npu-exporter`(华为官方清单)与 `app=npu-exporter`(本仓库 YAML) | `listExporterPods` 的 `npuExporterPodSelectors` |
+| 回退通路 | API Server service 代理 | `/api/v1/namespaces/kube-system/services/npu-exporter:8082/proxy/metrics` |
+
+客户端优先**逐 exporter pod 抓取**并按 pod 所在节点归属(多 NPU 节点集群因此可用);
+发现不到 pod 时才回退到 Service 单份响应。两条通路的取舍见第 6 节。
 
 所以:**改名、换命名空间、换端口都会静默关闭 NPU 指标**,客户端只会退化为「NPU-Exporter 不可达」,
-不会报错。若确实部署在别处,用 `--npu-exporter http://host:port` 覆盖(该分支走直连 HTTP,不走代理)。
+不会报错。若确实部署在别处,用 `--npu-exporter http://host:port` 覆盖(该分支走直连 HTTP,不走代理,
+且**没有节点身份**,只适用于单 NPU 节点集群)。
 
 `deploy/k8s-monitor-npu-collector.yaml` 是另一条独立通路(用 npu-smi 写节点注解),两者不冲突,可同时存在。
 
@@ -89,9 +95,42 @@ kubectl logs -n kube-system -l app=npu-exporter --tail=50
 
 ## 6. 已知限制
 
-- `EnrichNodeData` 只在**单个 NPU 节点**的集群里把指标归属到节点:多个 NPU 节点时,
-  ClusterIP 后面的响应无法区分来源节点,客户端会记一条 warn 并跳过 enrichment
-  (`internal/datasource/npu_exporter.go`)。多 NPU 节点场景请用
-  `k8s-monitor-npu-collector.yaml` 那条按节点采集的通路。
+- 客户端先按两种标签(`app.kubernetes.io/name=npu-exporter` 与 `app=npu-exporter`)列出
+  `kube-system` 下的 exporter pod,再**逐个 pod 走 `pods/{name}:8082/proxy/metrics` 抓取**,
+  按 `spec.nodeName` 把每份指标归到对应节点,因此**多 NPU 节点集群也能按节点归属**
+  (每份响应只含它所在节点的芯片)。
+- **权限前置条件(最容易踩的坑)**:这一步需要 k8s-monitor 自身凭证具备 `pods` 的 `list`
+  与 `pods/proxy` 的 `get`。`services/proxy` 与 `pods/proxy` 是**两套独立授权**,只授过
+  service 代理的旧凭证会在逐 pod 通路全数被拒。部署前自查:
+  ```bash
+  kubectl auth can-i list pods -n kube-system
+  kubectl auth can-i get pods/proxy -n kube-system
+  ```
+  若要给 k8s-monitor 建一个专用最小权限身份,可直接 apply:
+  ```yaml
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: k8s-monitor-npu
+  rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]          # 发现 exporter pod 与归属容器
+  - apiGroups: [""]
+    resources: ["pods/proxy"]
+    verbs: ["get"]           # 逐 pod 抓取 /metrics(主通路)
+  - apiGroups: [""]
+    resources: ["services/proxy"]
+    verbs: ["get"]           # service 回退通路
+  ```
+  (`deploy/k8s-monitor-npu-collector.yaml` 里的 Role 属于 npu-smi 采集器,**不是**
+  k8s-monitor 主程序的;它不需要也不应共用这里的 proxy 权限。)
+- **通路取舍**:发现不到 exporter pod(列表失败或为空)时回退到 Service 单份响应的老路径,
+  那条通路**只有一个答案、无节点身份**,因此仅在**单个 NPU 节点**的集群里做 enrichment,
+  多节点时记一条 warn 并跳过。用 `--npu-exporter <url>`(自定义端点)同样走这条单份通路。
+  另有一条自动兜底:**pod 列表成功、但逐个 proxy 全部被拒时,单 NPU 节点集群会转走
+  Service 通路**(该场景下答案归属同样成立),多节点集群则进退避并出
+  `npu_monitor_degraded` 提示——若单节点集群"明明有 exporter 却只剩注解健康位图",
+  先用上面的 `auth can-i` 自查。
 - 部署本 DaemonSet 前,节点详情页的芯片健康位图(`huawei.com/ascend-status`)与
   管理面故障信息(`os.modelarts.node/fault-info`)不依赖 npu-exporter,由设备插件/巡检任务直接写在节点上。

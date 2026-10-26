@@ -258,7 +258,14 @@ To enable NPU monitoring for Huawei Ascend accelerators:
    kubectl get svc -n kube-system npu-exporter
    ```
 
-2. **Automatic Detection**: k8s-monitor automatically connects to NPU-Exporter via Kubernetes API proxy
+2. **Automatic Detection**: k8s-monitor scrapes each NPU-Exporter DaemonSet pod
+   through its own pod proxy and attributes every answer to the node that pod
+   runs on, so multi-NPU-node clusters are covered per node. It falls back to
+   the Service proxy (single NPU node only) when no exporter pod is
+   discoverable. The pod path requires `list pods` and `get pods/proxy`
+   permissions for the kubeconfig in use — see
+   [deploy/npu-exporter.md](deploy/npu-exporter.md) §6 for the self-check and
+   a minimal RBAC snippet.
 
 3. **Custom Endpoint** (optional): If NPU-Exporter is deployed in a different location
    ```bash
@@ -312,7 +319,8 @@ To enable NPU monitoring for Huawei Ascend accelerators:
 - **Data Sources**:
   - API Server via [client-go](https://github.com/kubernetes/client-go)
   - Kubelet Summary API for real-time metrics
-  - NPU-Exporter for Huawei Ascend NPU metrics (via K8s API proxy)
+  - NPU-Exporter for Huawei Ascend NPU metrics (per-pod scrape through the K8s
+    API pod proxy, Service-proxy fallback)
   - Volcano client for HyperNode topology (optional)
 - **Cache Layer**: TTL-based caching with background refresh
 

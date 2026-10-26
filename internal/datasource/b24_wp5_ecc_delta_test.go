@@ -21,6 +21,11 @@ import (
 	"github.com/chenpu/k8s-monitor/internal/model"
 )
 
+// eccTestNode is the node name the ECC-window unit tests sample under. The
+// windows are keyed per (node, chip) because chip IDs repeat across nodes, so
+// even a single-node probe has to name one.
+const eccTestNode = "ecc-test-node"
+
 // eccPayload builds an exporter payload whose chip 0 carries the given
 // cumulative single-bit total and chip 1 the given cumulative double-bit total.
 func eccPayload(singleTotal, doubleTotal int64) string {
@@ -45,12 +50,12 @@ func TestECCDeltaSlidingWindowMath(t *testing.T) {
 	c := &NPUExporterClient{}
 	base := time.Now()
 
-	if got := c.recordECCSamples([]*NPUChipMetrics{{ID: 0, HBMEccSingleBitErrTotal: totals[0]}}, base); got[0].single != 0 || got[0].samples != 1 {
+	if got := c.recordECCSamples(eccTestNode, []*NPUChipMetrics{{ID: 0, HBMEccSingleBitErrTotal: totals[0]}}, base); got[0].single != 0 || got[0].samples != 1 {
 		t.Fatalf("first sample = %+v, want zero delta over 1 sample", got[0])
 	}
 
 	for i := 1; i < len(totals); i++ {
-		got := c.recordECCSamples([]*NPUChipMetrics{{ID: 0, HBMEccSingleBitErrTotal: totals[i]}}, base.Add(time.Duration(i)*time.Second))[0]
+		got := c.recordECCSamples(eccTestNode, []*NPUChipMetrics{{ID: 0, HBMEccSingleBitErrTotal: totals[i]}}, base.Add(time.Duration(i)*time.Second))[0]
 
 		wantSamples := i + 1
 		if wantSamples > eccSampleWindow {
@@ -68,7 +73,7 @@ func TestECCDeltaSlidingWindowMath(t *testing.T) {
 
 	// Non-vacuousness: the last delta must not be the whole history (the 1st
 	// sample has already scrolled out of the window).
-	last := c.recordECCSamples([]*NPUChipMetrics{{ID: 0, HBMEccSingleBitErrTotal: 310}}, base.Add(time.Minute))[0]
+	last := c.recordECCSamples(eccTestNode, []*NPUChipMetrics{{ID: 0, HBMEccSingleBitErrTotal: 310}}, base.Add(time.Minute))[0]
 	if last.single == 310-totals[0] {
 		t.Fatalf("the window still holds the first sample: delta %d", last.single)
 	}
@@ -82,13 +87,13 @@ func TestECCDeltaCounterReset(t *testing.T) {
 	c := &NPUExporterClient{}
 	now := time.Now()
 
-	c.recordECCSamples([]*NPUChipMetrics{{ID: 3, HBMEccSingleBitErrTotal: 500}}, now)
-	before := c.recordECCSamples([]*NPUChipMetrics{{ID: 3, HBMEccSingleBitErrTotal: 700}}, now.Add(time.Second))[3]
+	c.recordECCSamples(eccTestNode, []*NPUChipMetrics{{ID: 3, HBMEccSingleBitErrTotal: 500}}, now)
+	before := c.recordECCSamples(eccTestNode, []*NPUChipMetrics{{ID: 3, HBMEccSingleBitErrTotal: 700}}, now.Add(time.Second))[3]
 	if before.single != 200 {
 		t.Fatalf("delta before the reset = %d, want 200", before.single)
 	}
 
-	after := c.recordECCSamples([]*NPUChipMetrics{{ID: 3, HBMEccSingleBitErrTotal: 5}}, now.Add(2*time.Second))[3]
+	after := c.recordECCSamples(eccTestNode, []*NPUChipMetrics{{ID: 3, HBMEccSingleBitErrTotal: 5}}, now.Add(2*time.Second))[3]
 	if after.single != 0 {
 		t.Errorf("delta across a counter reset = %d, want 0", after.single)
 	}
@@ -96,7 +101,7 @@ func TestECCDeltaCounterReset(t *testing.T) {
 		t.Errorf("window after a reset holds %d samples, want 1", after.samples)
 	}
 
-	next := c.recordECCSamples([]*NPUChipMetrics{{ID: 3, HBMEccSingleBitErrTotal: 12}}, now.Add(3*time.Second))[3]
+	next := c.recordECCSamples(eccTestNode, []*NPUChipMetrics{{ID: 3, HBMEccSingleBitErrTotal: 12}}, now.Add(3*time.Second))[3]
 	if next.single != 7 {
 		t.Errorf("delta after the reset = %d, want 7 (12 - 5)", next.single)
 	}
@@ -108,11 +113,11 @@ func TestECCDeltaPerChipIsolation(t *testing.T) {
 	c := &NPUExporterClient{}
 	now := time.Now()
 
-	c.recordECCSamples([]*NPUChipMetrics{
+	c.recordECCSamples(eccTestNode, []*NPUChipMetrics{
 		{ID: 0, HBMEccSingleBitErrTotal: 10},
 		{ID: 1, HBMEccSingleBitErrTotal: 40},
 	}, now)
-	got := c.recordECCSamples([]*NPUChipMetrics{
+	got := c.recordECCSamples(eccTestNode, []*NPUChipMetrics{
 		{ID: 0, HBMEccSingleBitErrTotal: 2}, // reset
 		{ID: 1, HBMEccSingleBitErrTotal: 55},
 	}, now.Add(time.Second))

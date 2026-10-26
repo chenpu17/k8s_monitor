@@ -150,9 +150,10 @@ type ClusterSummary struct {
 	NPUChipType     string // e.g., "Ascend910", "Ascend310"
 
 	// NPUExporterLiveness reports the health of the NPU-Exporter fetch path.
-	// It is summary-scoped rather than per-node: one ClusterIP service feeds a
-	// single-NPU-node cluster, and multi-NPU-node clusters are never enriched.
-	// nil means no exporter client is attached or the cluster has no NPU node.
+	// It is summary-scoped rather than per-node: the client reports one fetch
+	// state for the whole exporter, however many exporter pods it scraped.
+	// nil means no exporter client is attached, the cluster has no NPU node, or
+	// the cycle took a path whose answers cannot be attributed per node.
 	NPUExporterLiveness *NPUExporterLiveness `json:"npu_exporter_liveness,omitempty"`
 
 	// Topology information (Volcano HyperNode)
@@ -280,8 +281,8 @@ type PodRestartInfo struct {
 }
 
 // NPUExporterLiveness reports the health of the NPU-Exporter fetch path,
-// summary-scoped: one ClusterIP service feeds a single-NPU-node cluster and
-// multi-NPU-node clusters are not enriched at all.
+// summary-scoped: the client scrapes NPU-Exporter per node through the API
+// server pod proxy, but keeps one fetch state for the whole path.
 //
 // Status distinguishes the three states the client can be in: "ok" (the last
 // request succeeded), "backoff" (a recent request failed and enrichment is

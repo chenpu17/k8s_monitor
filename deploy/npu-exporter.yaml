@@ -1,15 +1,21 @@
 # NPU-Exporter DaemonSet for Huawei Ascend NPUs
 #
 # Exposes Prometheus metrics on /metrics:8082 so that k8s-monitor's default
-# NPU-Exporter data path becomes live. The client is hard-coded to reach the
-# exporter through the API server proxy at:
+# NPU-Exporter data path becomes live. The client scrapes each DaemonSet pod
+# through its own proxy, so every answer belongs to the node that pod runs on:
+#   /api/v1/namespaces/kube-system/pods/<pod>:8082/proxy/metrics
+# (pod discovery: kube-system pods labelled app.kubernetes.io/name=npu-exporter
+#  or app=npu-exporter)
+# and falls back to the Service proxy when no exporter pod is discovered:
 #   /api/v1/namespaces/kube-system/services/npu-exporter:8082/proxy/metrics
 # (see internal/datasource/npu_exporter.go: serviceName "npu-exporter",
 #  serviceNS "kube-system", servicePort "8082", sub path "metrics").
 #
 # Therefore the Service below MUST be named npu-exporter in namespace
-# kube-system and expose port 8082. Renaming it silently disables NPU metrics;
-# use `--npu-exporter <url>` only for an exporter deployed elsewhere.
+# kube-system and expose port 8082, and the DaemonSet pods MUST keep the
+# app.kubernetes.io/name=npu-exporter label. Renaming either silently disables
+# NPU metrics; use `--npu-exporter <url>` only for an exporter deployed
+# elsewhere (that mode has no per-node attribution, single NPU node only).
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -77,6 +83,11 @@ spec:
     metadata:
       labels:
         app: npu-exporter
+        # Matches Huawei's official manifests, so the per-pod discovery in
+        # internal/datasource/npu_exporter.go finds these pods on either label
+        # shape. Adding a template label rolls the DaemonSet's pods once;
+        # the DS selector above stays app=npu-exporter (it is immutable).
+        app.kubernetes.io/name: npu-exporter
     spec:
       serviceAccountName: npu-exporter
       # The exporter reads the device through the host's dcmi/npu-smi, so it

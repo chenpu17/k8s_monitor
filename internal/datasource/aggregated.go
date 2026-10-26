@@ -733,13 +733,18 @@ func (a *AggregatedDataSource) buildClusterSummary(nodes []*model.NodeData, pods
 	summary.HyperNodeCount = len(hyperNodeIDs)
 	summary.SuperPodCount = len(superPodIDs)
 
-	// NPU-Exporter liveness. It is stamped only when the client exists and the
-	// cluster is the single-NPU-node shape the client actually polls:
-	// EnrichNodeData skips multi-NPU-node clusters (one exporter answer cannot
-	// be attributed per node), so there a never-polled client would report
-	// "never" and the view would read "monitoring unavailable" while the
-	// exporter is fine. The claim is only made where the walk happens.
-	if a.npuExporterClient != nil && summary.NPUNodesCount == 1 {
+	// NPU-Exporter liveness. The stamp follows the path the client actually
+	// walked this cycle, which the client reports through LivenessAppliesTo:
+	//   - Per-pod scrape path: each NPU-Exporter DaemonSet pod is scraped
+	//     through its own proxy, so the metrics belong to the node that pod
+	//     runs on and the state is meaningful for any number of NPU nodes.
+	//   - Single-answer service path (or a custom endpoint): one answer with no
+	//     node identity, only usable when the cluster has exactly one NPU node,
+	//     so a liveness claim is only made for that shape.
+	// Stamping the single-answer path on a multi-NPU-node cluster would report
+	// "never" for a client that is never polled, and the view would read
+	// "monitoring unavailable" while the exporter is fine.
+	if a.npuExporterClient != nil && a.npuExporterClient.LivenessAppliesTo(summary.NPUNodesCount) {
 		liveness := a.npuExporterClient.Liveness()
 		summary.NPUExporterLiveness = &liveness
 	}
@@ -1176,8 +1181,9 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 	// metrics and the whole threshold family for the retry-backoff window.
 	// Surface that suspension itself as an Info alert so the alerts view has
 	// no silent window; it clears itself on the next successful refresh.
-	// Multi-NPU-node clusters never poll the exporter (its response cannot be
-	// attributed per node), so they correctly never report degradation here.
+	// The backoff is armed cluster-wide and only when a cycle failed to fetch
+	// anything at all, so one flapping node does not raise it while the rest of
+	// the nodes keep reporting.
 	if a.npuExporterClient != nil && a.npuExporterClient.Degraded() {
 		for _, node := range nodes {
 			if node.NPUCapacity > 0 {

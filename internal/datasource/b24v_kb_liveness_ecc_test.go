@@ -110,13 +110,13 @@ func TestB24VECCSamplesDoNotAgeOut(t *testing.T) {
 	base := time.Now()
 
 	for i := int64(0); i < 3; i++ {
-		client.recordECCSamples([]*NPUChipMetrics{{ID: 0, HBMEccSingleBitErrTotal: i * 10}}, base.Add(time.Duration(i)*time.Second))
+		client.recordECCSamples(eccTestNode, []*NPUChipMetrics{{ID: 0, HBMEccSingleBitErrTotal: i * 10}}, base.Add(time.Duration(i)*time.Second))
 	}
 	// The chip is absent from the payload for far longer than the window.
 	for i := 0; i < 30; i++ {
-		client.recordECCSamples([]*NPUChipMetrics{{ID: 1}}, base.Add(time.Duration(10+i)*time.Second))
+		client.recordECCSamples(eccTestNode, []*NPUChipMetrics{{ID: 1}}, base.Add(time.Duration(10+i)*time.Second))
 	}
-	delta := client.recordECCSamples([]*NPUChipMetrics{{ID: 0, HBMEccSingleBitErrTotal: 1000}}, base.Add(time.Hour))[0]
+	delta := client.recordECCSamples(eccTestNode, []*NPUChipMetrics{{ID: 0, HBMEccSingleBitErrTotal: 1000}}, base.Add(time.Hour))[0]
 
 	if delta.samples > 2 {
 		t.Logf("window kept %d samples across a 30-refresh absence; the delta (%d) spans an unbounded wall-clock gap",

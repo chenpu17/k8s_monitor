@@ -2,7 +2,9 @@ package datasource
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +17,8 @@ import (
 
 	"github.com/chenpu/k8s-monitor/internal/model"
 	"go.uber.org/zap"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -31,6 +35,18 @@ const (
 	// Ascend 910 series typically has 2 chips per NPU card
 	chipsPerNPU = 2
 )
+
+// npuExporterPodSelectors lists the pod labels NPU-Exporter DaemonSets
+// carry in the wild. Huawei's official manifests (CCE) label the pods
+// app.kubernetes.io/name=npu-exporter, while this repository's
+// deploy/npu-exporter.yaml historically uses app=npu-exporter. Every pod
+// scrapes only its own node's chips, which is what makes an answer
+// attributable at all, so discovery tries both shapes before falling back
+// to the label-less service path.
+var npuExporterPodSelectors = []string{
+	"app.kubernetes.io/name=npu-exporter",
+	"app=npu-exporter",
+}
 
 // NPUExporterClient provides access to NPU metrics from NPU-Exporter
 // It is safe for concurrent use: the refresh loop, the ForceRefresh path and
@@ -53,10 +69,46 @@ type NPUExporterClient struct {
 	lastSuccess     time.Time // Time of last success, reported by Liveness
 	lastError       string    // Raw text of the last failure, reported by Liveness
 	everSucceeded   bool      // Whether any request has ever succeeded
+	// perNodeAttribution reports whether the last enrichment cycle scraped the
+	// exporter per node (one pod each) instead of through the single-answer
+	// service path. Where it is true the metrics are attributable per node and
+	// the liveness state describes a path that really was walked for every NPU
+	// node, not just for a one-node cluster.
+	perNodeAttribution bool
 	// eccSamples is the per-chip sliding window of cumulative ECC counters the
 	// enrichment path keeps (last eccSampleWindow refreshes), used to derive the
 	// session-scoped delta. Guarded by mu like the fields above.
-	eccSamples map[int][]eccSample
+	//
+	// The key carries the node name: every node numbers its chips from 0, so a
+	// chip-ID-only key would mix one node's counters into another's window and
+	// produce deltas across two unrelated chips.
+	eccSamples map[eccChipKey][]eccSample
+
+	// podLister/podFetcher are the seams to the per-exporter-pod scrape path.
+	// The defaults talk to the API server (list kube-system pods, then proxy
+	// :8082/metrics per pod); tests inject fixtures. Both are set once at
+	// construction and only read afterwards.
+	podLister  func(ctx context.Context) ([]npuExporterPod, error)
+	podFetcher func(ctx context.Context, pod npuExporterPod) (io.ReadCloser, error)
+}
+
+// eccChipKey identifies one chip's ECC window: chip IDs repeat across nodes.
+type eccChipKey struct {
+	node string
+	id   int
+}
+
+// npuExporterPod is one NPU-Exporter pod discovered through the API server, the
+// unit of a per-node scrape: NodeName is the node whose chips it reports.
+type npuExporterPod struct {
+	Name     string
+	NodeName string
+}
+
+// npuExporterTarget is one discovered pod paired with the node it reports on.
+type npuExporterTarget struct {
+	pod  npuExporterPod
+	node *model.NodeData
 }
 
 // eccSampleWindow is how many cumulative ECC counter samples the client keeps
@@ -139,6 +191,8 @@ func NewNPUExporterClient(config *rest.Config, logger *zap.Logger) (*NPUExporter
 		logger:      logger,
 		available:   false,
 	}
+	client.podLister = client.listExporterPods
+	client.podFetcher = client.fetchPodMetrics
 
 	return client, nil
 }
@@ -196,6 +250,31 @@ func (c *NPUExporterClient) recordFailure(cause ...error) {
 	if len(cause) > 0 && cause[0] != nil {
 		c.lastError = cause[0].Error()
 	}
+}
+
+// setPerNodeAttribution records which enrichment path the running cycle took.
+func (c *NPUExporterClient) setPerNodeAttribution(perNode bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.perNodeAttribution = perNode
+}
+
+// LivenessAppliesTo reports whether the exporter's liveness state describes a
+// path that was actually walked for a cluster with npuNodeCount NPU nodes. The
+// per-pod path covers every NPU node, so its state is meaningful there; the
+// single-answer service path is only walked for a one-node cluster, and
+// claiming a liveness state for several nodes would render as "monitoring
+// unavailable" while the exporter is fine.
+func (c *NPUExporterClient) LivenessAppliesTo(npuNodeCount int) bool {
+	if npuNodeCount == 0 {
+		return false
+	}
+
+	c.mu.Lock()
+	perNode := c.perNodeAttribution
+	c.mu.Unlock()
+
+	return perNode || npuNodeCount == 1
 }
 
 // endpointConfig returns the endpoint settings to use for the next request
@@ -265,6 +344,81 @@ func (c *NPUExporterClient) Liveness() model.NPUExporterLiveness {
 		liveness.MessageKey = "npu.liveness.ok"
 	}
 	return liveness
+}
+
+// listExporterPods discovers the NPU-Exporter pods and the node each of them
+// runs on. This is the only way to attribute an exporter answer to a node: the
+// metrics carry no node identity, but the pod that serves them does.
+//
+// Every known label variant is listed and the results merged, so a cluster
+// becomes undiscoverable only when no variant answers. Pods seen twice (both
+// variants matching) are kept once; attribution orders by pod name anyway.
+func (c *NPUExporterClient) listExporterPods(ctx context.Context) ([]npuExporterPod, error) {
+	seen := make(map[string]struct{})
+	pods := make([]npuExporterPod, 0, len(seen))
+	var lastErr error
+	for _, selector := range npuExporterPodSelectors {
+		result := c.restClient.Get().
+			Namespace(c.serviceNS).
+			Resource("pods").
+			VersionedParams(&metav1.ListOptions{LabelSelector: selector}, metav1.ParameterCodec).
+			Do(ctx)
+
+		rawResp, err := result.Raw()
+		if err != nil {
+			// One label variant failing to list must not hide the other: only
+			// when no variant answered is the discovery declared failed and
+			// the cycle falls back to the service endpoint.
+			lastErr = fmt.Errorf("failed to list NPU-Exporter pods (%s): %w", selector, err)
+			c.logger.Debug("NPU-Exporter pod list failed for one label variant",
+				zap.String("selector", selector), zap.Error(err),
+			)
+			continue
+		}
+
+		var podList corev1.PodList
+		if err := json.Unmarshal(rawResp, &podList); err != nil {
+			lastErr = fmt.Errorf("failed to decode NPU-Exporter pod list (%s): %w", selector, err)
+			continue
+		}
+
+		for _, pod := range podList.Items {
+			if _, dup := seen[pod.Name]; dup {
+				continue
+			}
+			seen[pod.Name] = struct{}{}
+			pods = append(pods, npuExporterPod{Name: pod.Name, NodeName: pod.Spec.NodeName})
+		}
+	}
+	if len(pods) == 0 && lastErr != nil {
+		return nil, lastErr
+	}
+	return pods, nil
+}
+
+// fetchPodMetrics fetches one exporter pod's own /metrics through the API
+// server pod proxy. Unlike the service path this hits a specific pod, so the
+// answer describes exactly one node.
+func (c *NPUExporterClient) fetchPodMetrics(ctx context.Context, pod npuExporterPod) (io.ReadCloser, error) {
+	// Path: /api/v1/namespaces/{ns}/pods/{name}:{port}/proxy/metrics
+	result := c.restClient.Get().
+		Namespace(c.serviceNS).
+		Resource("pods").
+		Name(fmt.Sprintf("%s:%s", pod.Name, c.servicePort)).
+		SubResource("proxy").
+		Suffix("metrics").
+		Do(ctx)
+
+	if err := result.Error(); err != nil {
+		return nil, fmt.Errorf("failed to proxy to NPU-Exporter pod %s: %w", pod.Name, err)
+	}
+
+	rawResp, err := result.Raw()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get raw response from pod %s: %w", pod.Name, err)
+	}
+
+	return io.NopCloser(bytes.NewReader(rawResp)), nil
 }
 
 // fetchMetricsViaProxy fetches metrics using Kubernetes API server proxy
@@ -476,7 +630,17 @@ func (c *NPUExporterClient) parseMetrics(body io.Reader) (map[int]*NPUChipMetric
 	return chipMetrics, npuCount, nil
 }
 
-// EnrichNodeData enriches node data with NPU metrics from NPU-Exporter
+// EnrichNodeData enriches node data with NPU metrics from NPU-Exporter.
+//
+// Two paths reach the exporter and they differ in what an answer proves:
+//   - Per exporter pod (API server path): every NPU-Exporter DaemonSet pod is
+//     scraped through its own pod proxy, so each answer belongs to the node
+//     that pod runs on and a multi-NPU-node cluster is enriched per node.
+//   - Service / custom endpoint: one answer whose metrics carry no node
+//     identity, so only a single-NPU-node cluster can be enriched.
+//
+// The per-pod path is tried first and falls back to the service path when no
+// exporter pod can be discovered.
 func (c *NPUExporterClient) EnrichNodeData(ctx context.Context, nodes []*model.NodeData) error {
 	// Skip if recently failed (retry backoff)
 	if c.inBackoff() {
@@ -497,6 +661,107 @@ func (c *NPUExporterClient) EnrichNodeData(ctx context.Context, nodes []*model.N
 		c.logger.Debug("No NPU nodes found in cluster")
 		return nil
 	}
+
+	if c.enrichPerExporterPod(ctx, npuNodes) {
+		return nil
+	}
+
+	return c.enrichViaService(ctx, npuNodes)
+}
+
+// enrichPerExporterPod scrapes one exporter pod per NPU node and returns
+// whether it handled the cycle. It declines (returns false) when the answer
+// cannot be attributed: a custom endpoint has no node identity, pod discovery
+// failed, or no discovered pod runs on an NPU node.
+func (c *NPUExporterClient) enrichPerExporterPod(ctx context.Context, npuNodes []*model.NodeData) bool {
+	useProxy, _ := c.endpointConfig()
+	if !useProxy || c.podLister == nil || c.podFetcher == nil {
+		// Custom endpoint mode: a single endpoint is scraped directly and
+		// carries no node identity, so there is nothing to attribute here.
+		return false
+	}
+
+	pods, err := c.podLister(ctx)
+	if err != nil {
+		c.logger.Warn("Failed to list NPU-Exporter pods, falling back to the service endpoint", zap.Error(err))
+		return false
+	}
+	if len(pods) == 0 {
+		c.logger.Debug("No NPU-Exporter pods discovered, falling back to the service endpoint")
+		return false
+	}
+
+	targets := c.attributePods(pods, npuNodes)
+	if len(targets) == 0 {
+		c.logger.Debug("No discovered NPU-Exporter pod runs on an NPU node, falling back to the service endpoint",
+			zap.Int("pods", len(pods)),
+		)
+		return false
+	}
+
+	// Claim per-node attribution before scraping: a cycle where every scrape
+	// fails must still report a liveness state, otherwise a multi-node cluster
+	// with a broken proxy path would read as "not polled yet". The claim is
+	// about the shape of the path (each node has its own answer), not about
+	// this cycle's luck.
+	c.setPerNodeAttribution(true)
+
+	attempted, succeeded := 0, 0
+	var lastErr error
+	for _, target := range targets {
+		attempted++
+		chips, err := c.fetchChipsFromPod(ctx, target.pod)
+		if err != nil {
+			lastErr = err
+			c.logger.Warn("Failed to scrape NPU-Exporter pod, keeping the rest of the cluster",
+				zap.String("pod", target.pod.Name),
+				zap.String("node", target.node.Name),
+				zap.Error(err),
+			)
+			continue
+		}
+		succeeded++
+		c.enrichSingleNode(target.node, chips)
+	}
+
+	// The backoff is a cluster-wide state, so only a cycle in which every
+	// attempted scrape failed may arm it: one flapping node must not silence
+	// the chip metrics of the nodes that answered.
+	switch {
+	case succeeded > 0:
+		c.recordSuccess()
+	case attempted > 0 && len(npuNodes) == 1:
+		// A credential that may list pods but may not proxy them (the legacy
+		// grant is the service proxy, a separate verb) fails every scrape
+		// here. On a single-NPU-node cluster the service answer is
+		// attributable to that one node just as well, and it is exactly the
+		// path such credentials have always been able to use — so hand the
+		// cycle over before arming the backoff, otherwise the failure just
+		// recorded would silence the service request that follows through
+		// the backoff check it starts with. Returning false lets
+		// EnrichNodeData run enrichViaService, whose own bookkeeping then
+		// owns the cycle's success or failure.
+		c.logger.Debug("Every per-pod scrape failed on a single-NPU-node cluster, falling back to the service endpoint",
+			zap.Int("attempted", attempted),
+		)
+		return false
+	case attempted > 0:
+		c.recordFailure(lastErr)
+	}
+
+	c.logger.Debug("Enriched NPU nodes from per-pod scrapes",
+		zap.Int("npu_nodes", len(npuNodes)),
+		zap.Int("attempted", attempted),
+		zap.Int("succeeded", succeeded),
+	)
+
+	return true
+}
+
+// enrichViaService is the legacy path: one answer from the ClusterIP Service
+// (or a custom endpoint), usable only when the cluster has one NPU node.
+func (c *NPUExporterClient) enrichViaService(ctx context.Context, npuNodes []*model.NodeData) error {
+	c.setPerNodeAttribution(false)
 
 	// NPU-Exporter is reached through a ClusterIP Service, so the response comes
 	// from a single exporter pod on a single node and carries no node identity.
@@ -538,7 +803,84 @@ func (c *NPUExporterClient) EnrichNodeData(ctx context.Context, nodes []*model.N
 		zap.Int("chip_count", len(chipMetrics)),
 	)
 
-	// Convert chip metrics map to sorted slice for consistent assignment
+	c.enrichSingleNode(npuNodes[0], sortedChips(chipMetrics))
+
+	return nil
+}
+
+// attributePods pairs discovered exporter pods with the NPU nodes they report
+// on. A pod without a node assignment, or on a node without NPU capacity, is
+// skipped; when several pods run on the same node (docker and containerd
+// variants side by side) the first by pod name wins, so the choice is stable
+// across refreshes.
+func (c *NPUExporterClient) attributePods(pods []npuExporterPod, npuNodes []*model.NodeData) []npuExporterTarget {
+	byName := make(map[string]*model.NodeData, len(npuNodes))
+	for _, node := range npuNodes {
+		byName[node.Name] = node
+	}
+
+	sorted := make([]npuExporterPod, len(pods))
+	copy(sorted, pods)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
+
+	targets := make([]npuExporterTarget, 0, len(sorted))
+	chosen := make(map[string]string, len(sorted)) // node name -> pod scraped for it
+	for _, pod := range sorted {
+		if pod.NodeName == "" {
+			c.logger.Debug("NPU-Exporter pod has no node assignment, skipping", zap.String("pod", pod.Name))
+			continue
+		}
+		node, ok := byName[pod.NodeName]
+		if !ok {
+			c.logger.Debug("NPU-Exporter pod runs on a node without NPU capacity, skipping",
+				zap.String("pod", pod.Name), zap.String("node", pod.NodeName),
+			)
+			continue
+		}
+		if first, dup := chosen[pod.NodeName]; dup {
+			c.logger.Debug("Node already covered by another NPU-Exporter pod, skipping duplicate",
+				zap.String("pod", pod.Name), zap.String("node", pod.NodeName), zap.String("kept_pod", first),
+			)
+			continue
+		}
+		chosen[pod.NodeName] = pod.Name
+		targets = append(targets, npuExporterTarget{pod: pod, node: node})
+	}
+
+	return targets
+}
+
+// fetchChipsFromPod scrapes one exporter pod and parses its chips.
+func (c *NPUExporterClient) fetchChipsFromPod(ctx context.Context, pod npuExporterPod) ([]*NPUChipMetrics, error) {
+	// Each pod gets its own request timeout, so one hung pod cannot stall the
+	// rest of the nodes beyond the same bound the service path uses.
+	reqCtx, cancel := context.WithTimeout(ctx, npuExporterTimeout)
+	defer cancel()
+
+	body, err := c.podFetcher(reqCtx, pod)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	chipMetrics, npuCount, err := c.parseMetrics(body)
+	if err != nil {
+		return nil, err
+	}
+
+	c.logger.Debug("Got NPU metrics from NPU-Exporter pod",
+		zap.String("pod", pod.Name),
+		zap.String("node", pod.NodeName),
+		zap.Int("npu_count", npuCount),
+		zap.Int("chip_count", len(chipMetrics)),
+	)
+
+	return sortedChips(chipMetrics), nil
+}
+
+// sortedChips converts the chip map to a slice ordered by chip ID, the order
+// the node enrichment consumes.
+func sortedChips(chipMetrics map[int]*NPUChipMetrics) []*NPUChipMetrics {
 	chips := make([]*NPUChipMetrics, 0, len(chipMetrics))
 	for _, chip := range chipMetrics {
 		chips = append(chips, chip)
@@ -546,10 +888,7 @@ func (c *NPUExporterClient) EnrichNodeData(ctx context.Context, nodes []*model.N
 	sort.Slice(chips, func(i, j int) bool {
 		return chips[i].ID < chips[j].ID
 	})
-
-	c.enrichSingleNode(npuNodes[0], chips)
-
-	return nil
+	return chips
 }
 
 // recordECCSamples appends this refresh's cumulative ECC counters to each
@@ -558,19 +897,25 @@ func (c *NPUExporterClient) EnrichNodeData(ctx context.Context, nodes []*model.N
 // A counter that went backwards (chip reset, driver reload, exporter restart)
 // clears the window first and keeps only the new sample, the same reset
 // handling the UI's rate trends use, so the delta never goes negative.
-func (c *NPUExporterClient) recordECCSamples(chips []*NPUChipMetrics, now time.Time) map[int]eccSampleDelta {
+//
+// nodeName scopes the windows: every node numbers its chips from 0, so the
+// windows are keyed by (node, chip) and one node's counters can never land in
+// another node's window. The returned map is keyed by chip ID alone because a
+// single scrape's answer holds at most one entry per chip ID.
+func (c *NPUExporterClient) recordECCSamples(nodeName string, chips []*NPUChipMetrics, now time.Time) map[int]eccSampleDelta {
 	deltas := make(map[int]eccSampleDelta, len(chips))
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.eccSamples == nil {
-		c.eccSamples = make(map[int][]eccSample, len(chips))
+		c.eccSamples = make(map[eccChipKey][]eccSample, len(chips))
 	}
 
 	for _, chip := range chips {
+		key := eccChipKey{node: nodeName, id: chip.ID}
 		sample := eccSample{at: now, single: chip.HBMEccSingleBitErrTotal, double: chip.HBMEccDoubleBitErrTotal}
-		window := c.eccSamples[chip.ID]
+		window := c.eccSamples[key]
 		if n := len(window); n > 0 {
 			last := window[n-1]
 			if sample.single < last.single || sample.double < last.double {
@@ -581,7 +926,7 @@ func (c *NPUExporterClient) recordECCSamples(chips []*NPUChipMetrics, now time.T
 		if len(window) > eccSampleWindow {
 			window = window[len(window)-eccSampleWindow:]
 		}
-		c.eccSamples[chip.ID] = window
+		c.eccSamples[key] = window
 
 		delta := eccSampleDelta{samples: len(window)}
 		if len(window) >= 2 {
@@ -611,7 +956,7 @@ func (c *NPUExporterClient) enrichSingleNode(node *model.NodeData, chips []*NPUC
 	var totalHBMUsed, totalHBMTotal int64
 	var healthyCount, unhealthyCount int
 
-	deltas := c.recordECCSamples(chips, time.Now())
+	deltas := c.recordECCSamples(node.Name, chips, time.Now())
 
 	nodeChips := make([]model.NPUChipData, 0, len(chips))
 	for _, chip := range chips {
