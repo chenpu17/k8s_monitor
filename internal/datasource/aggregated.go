@@ -1099,6 +1099,16 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 			}
 
 			if level := fault.SwitchFaultLevel; level != "" && !strings.EqualFold(level, "Normal") {
+				// NotHandle is the management plane's "seen it, no action
+				// needed" tier — on real clusters it is the idle value: both
+				// nodes of the A3 pair carry a permanent NotHandle switch
+				// annotation (L1-1520), which used to pin two never-clearing
+				// warning alerts onto the alerts view. The event stays worth
+				// surfacing, but as information, not as a standing warning.
+				severity := model.AlertSeverityWarning
+				if strings.EqualFold(level, "NotHandle") {
+					severity = model.AlertSeverityInfo
+				}
 				// No MessageKey: the message quotes fault-info annotation text
 				// verbatim, so the alerts view falls back to Message.
 				message := fmt.Sprintf("NPU switch fault level %s", level)
@@ -1106,7 +1116,7 @@ func (a *AggregatedDataSource) collectAlerts(nodes []*model.NodeData, pods []*mo
 					message += " (" + fault.SwitchFaultName + ")"
 				}
 				alerts = append(alerts, model.Alert{
-					Severity:          model.AlertSeverityWarning,
+					Severity:          severity,
 					Category:          "NPU",
 					AlertType:         model.AlertTypeNPUSwitchFault,
 					ResourceType:      "Node",
