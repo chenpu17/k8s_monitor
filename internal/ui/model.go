@@ -103,6 +103,31 @@ type PodMetric struct {
 	Timestamp      time.Time // Kubelet-provided timestamp for accurate rate calculation
 }
 
+// VizSample is one session sample of the cluster-wide series the overview and
+// NPU views draw sparklines from. It is deliberately separate from
+// MetricSnapshot: that one is keyed per node/pod and only kept for ten samples,
+// whereas the sparklines need a long, flat series and cluster-level NPU
+// aggregates the per-node maps never carried.
+//
+// NPUUtilKnown separates "the chips report 0% utilisation" (a real, idle-safe
+// value) from "no chip data arrived": an unknown utilisation must not be drawn
+// as an idle cluster. The same distinction gates the whole NPU block — a
+// cluster without chip data has no temperature, power or HBM either.
+type VizSample struct {
+	At         time.Time
+	CPUPct     float64 // cluster CPU used / allocatable
+	MemPct     float64 // cluster memory used / allocatable
+	NetRxKBps  float64 // cluster receive rate, KB/s
+	NetTxKBps  float64 // cluster transmit rate, KB/s
+	NPUUtilPct float64 // mean AI Core utilisation over the chips that reported
+
+	NPUUtilKnown bool    // at least one chip reported utilisation
+	NPUTempAvg   float64 // mean chip temperature, °C
+	NPUPowerW    float64 // sum of chip power, W
+	HBMUsedMB    int64   // sum of HBM used, MB
+	HBMTotalMB   int64   // sum of HBM capacity, MB
+}
+
 // Trend represents the trend direction
 type Trend int
 
@@ -183,6 +208,17 @@ type Model struct {
 	metricHistory    []MetricSnapshot
 	maxHistory       int       // Maximum history snapshots to keep
 	lastSnapshotTime time.Time // Timestamp of last recorded metric snapshot
+
+	// Session history behind the sparklines (keep the last 60 refresh samples,
+	// ≈2 minutes at the default 2s interval). Recorded on the same guarded
+	// path as metricHistory, so a cached repeat is not drawn twice.
+	vizHistory    []VizSample
+	maxVizHistory int
+
+	// npuMatrixMode selects how the NPU view encodes a chip cell: 0 grades the
+	// health (the default, unchanged from before the heat modes), 1-3 shade the
+	// healthy chips by utilisation, temperature or power.
+	npuMatrixMode int
 
 	// Logs viewer state
 	logsMode          bool      // True when viewing logs
@@ -336,6 +372,8 @@ func NewModel(dataProvider DataProvider, logger *zap.Logger, refreshInterval tim
 		keys:             DefaultKeyMap(),
 		metricHistory:    make([]MetricSnapshot, 0, 10),
 		maxHistory:       10, // Keep last 10 snapshots for trend calculation
+		vizHistory:       make([]VizSample, 0, 60),
+		maxVizHistory:    60, // ≈2 minutes of refresh samples at the default interval
 		workloadSections: make(map[string]workloadSection),
 	}
 }

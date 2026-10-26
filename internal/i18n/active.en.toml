@@ -752,6 +752,28 @@ other = "for chip metrics"
 [overview.npu_no_nodes]
 other = "No NPU nodes"
 
+# Chip-level lines of the NPU card, drawn only when chip data arrived.
+[overview.npu_chip_health]
+other = "Chips:"
+
+# Mean AI Core utilisation over the chips that reported one. A separate label
+# from the resource-level "Usage:" row above, which counts allocated NPUs.
+[overview.npu_chip_util]
+other = "Util:"
+
+# Unknown-health qualifier appended to the card's chip-health line; kept short
+# because the card panel is 18 content cells wide.
+[overview.npu_chip_unknown]
+other = "{{.Count}} unk"
+
+[overview.npu_temp_power]
+other = "{{.Temp}}°C · {{.Power}}kW"
+
+# Fallback when the pair above does not fit the panel's content width: the
+# temperature is the figure nothing else on the card carries, so it survives.
+[overview.npu_temp_only]
+other = "{{.Temp}}°C"
+
 # Volcano panel: the header stays untranslated (product name). Row labels are
 # bare and padded with padRight to the historical column widths.
 [overview.panel_volcano]
@@ -1806,6 +1828,49 @@ other = "Monitoring degraded · last success {{.LastSuccess}}"
 
 [npuview.liveness_never]
 other = "Monitoring unavailable"
+
+# Aggregate gauge bar: the cluster-wide numbers the chip matrix cannot show at a
+# glance. Every segment is chip-derived, so the bar is omitted entirely when no
+# chip data arrived — an empty gauge would read as a measured zero.
+[npuview.aggregate_nodes]
+other = "Nodes {{.Count}}"
+
+# Chip health in the bar's short form: totals only, so the segment stays narrow
+# enough for a 38-column terminal.
+[npuview.aggregate_health]
+other = "Chips {{.Healthy}}/{{.Total}} healthy"
+
+# Wording rule from the summary bar: with unknown-health chips in the cluster,
+# the tally is "no reported fault", never "healthy".
+[npuview.aggregate_health_no_known]
+other = "Chips {{.Healthy}}/{{.Total}} no fault"
+
+[npuview.aggregate_power]
+other = "Power {{.Power}}W"
+
+[npuview.aggregate_temp]
+other = "Avg temp {{.Temp}}°C"
+
+[npuview.aggregate_hbm]
+other = "HBM {{.Used}}/{{.Total}}G ({{.Percent}}%)"
+
+[npuview.aggregate_util]
+other = "Utilization {{.Percent}}%"
+
+# Heat matrix: the metric the chips are shaded by, the key that changes it and
+# the ramp direction. Only rendered in a heat mode; the health matrix keeps its
+# own legend line unchanged.
+[npuview.mode_aicore]
+other = "AI Core utilization"
+
+[npuview.mode_temp]
+other = "Temperature"
+
+[npuview.mode_power]
+other = "Power"
+
+[npuview.heat_legend]
+other = "Mode: {{.Mode}} (h to switch) · {{.Ramp}} low→high"
 
 # The exporter fetch path state, rendered in the node detail next to the raw
 # failure text (which the view appends itself and truncates to the field width).

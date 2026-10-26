@@ -95,6 +95,9 @@ k8s-monitor --help
   - RoCE network statistics
   - ECC error tracking
 - Cross-node NPU overview (`n`): per-chip health grades, allocation and monitoring coverage
+- Chip matrix heat modes (`h` in the NPU view): shade the healthy chips by AI Core utilisation, temperature or power, scaled node-locally; degraded/faulted chips keep their health glyphs in every mode
+- Cluster aggregate bar: total power, average temperature, HBM occupancy and mean AI Core utilisation, each with a session sparkline
+- Overview sparklines: cluster CPU/memory load trends and an upgraded NPU card (chip health, per-chip utilisation, temperature · power)
 - Topology information (SuperPod, HyperNode)
 - Integration with NPU-Exporter for runtime metrics
 
@@ -173,6 +176,7 @@ k8s-monitor --help
 | `c` | Clear all filters |
 | `s` | Cycle sort order |
 | `/` | Search by name |
+| `h` | Cycle NPU matrix mode: health → AI Core → temperature → power (NPU view only) |
 | `e` | Export current view data |
 
 ### Detail View Keys

@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/chenpu/k8s-monitor/internal/model"
 	"github.com/mattn/go-runewidth"
 )
@@ -44,7 +45,137 @@ const (
 	// npuViewRecentAlerts is how many of the newest NPU alerts the summary
 	// shows below the counts.
 	npuViewRecentAlerts = 5
+	// npuAggregateSparkWidth is the fixed sparkline width of the aggregate bar's
+	// gauges. It matches the overview's CPU/Memory sparkline so the two views
+	// read the same way; the bar drops the sparkline entirely rather than
+	// overrun a terminal that cannot hold it.
+	npuAggregateSparkWidth = 10
 )
+
+// The NPU matrix heat modes. Mode 0 is the health matrix every earlier batch
+// rendered: the glyph is the grade and nothing else. Modes 1-3 shade the
+// healthy chips by a metric, so a wall of ▉ chips becomes a readability map.
+// The grades keep their own glyphs in every mode — heat is an addition to the
+// health semantics, never a replacement.
+const (
+	npuMatrixModeHealth = iota // grade glyphs (default)
+	npuMatrixModeAICore        // AI Core utilisation, %
+	npuMatrixModeTemp          // temperature, °C
+	npuMatrixModePower         // power draw, W
+	npuMatrixModeCount
+)
+
+// npuHeatRamp is the heat glyph ramp, low to high. It is deliberately a
+// different set from the health glyphs (▉▒▁): it starts at ▂, so no heat cell
+// can collide with the fault glyph ▁ — in --no-color a cold healthy chip and a
+// faulted chip must stay distinct bytes, and the two legend lines on screen
+// must not give ▁ two contradictory readings. A flat series lands on ▅, the
+// ramp's middle.
+const npuHeatRamp = "▂▃▄▅▆▇█"
+
+// npuHeatColors is the 256-colour ramp behind the heat glyphs, cold to hot,
+// one entry per ramp glyph. It is only a second channel: --no-color drops it
+// entirely and the glyph height is what carries the value then.
+var npuHeatColors = []string{"21", "27", "39", "46", "226", "208", "196"}
+
+// npuHeatValue extracts the metric the heat mode shades by.
+func npuHeatValue(chip model.NPUChipData, mode int) float64 {
+	switch mode {
+	case npuMatrixModeAICore:
+		return float64(chip.AICore)
+	case npuMatrixModeTemp:
+		return float64(chip.Temp)
+	case npuMatrixModePower:
+		return chip.Power
+	default:
+		return 0
+	}
+}
+
+// npuChipValues returns the heat metric of every grade in the node's canonical
+// chip order. The grades are built from the same slice as the chips, so the
+// index alignment holds for produced data; a fixture that carries grades only
+// yields zeros, which renders as the flat line it is.
+func npuChipValues(node *model.NodeData, mode int) []float64 {
+	values := make([]float64, len(node.NPUChipHealth))
+	if mode == npuMatrixModeHealth {
+		return values
+	}
+	if len(node.NPUChips) == len(node.NPUChipHealth) {
+		for i, chip := range node.NPUChips {
+			values[i] = npuHeatValue(chip, mode)
+		}
+		return values
+	}
+	// Fall back to the stable chip identity for data whose slice lengths differ.
+	byChip := make(map[[2]int]model.NPUChipData, len(node.NPUChips))
+	for _, chip := range node.NPUChips {
+		byChip[[2]int{chip.NPUID, chip.Chip}] = chip
+	}
+	for i, grade := range node.NPUChipHealth {
+		if chip, ok := byChip[[2]int{grade.NPUID, grade.Chip}]; ok {
+			values[i] = npuHeatValue(chip, mode)
+		}
+	}
+	return values
+}
+
+// npuHeatLevels normalizes values to the heat ramp, node-local: the ramp spans
+// this node's own min and max, so a rack full of idle chips still shows which
+// ones are busiest. Values from every chip of the node are considered, because
+// the range is a property of the node, not of the healthy subset — a faulted
+// chip's temperature is still evidence about the node's thermal band.
+//
+// A node whose values are all equal maps to the middle level, which renders as
+// the flat ▄ row.
+func npuHeatLevels(values []float64) []int {
+	levels := make([]int, len(values))
+	if len(values) == 0 {
+		return levels
+	}
+	top := len([]rune(npuHeatRamp)) - 1
+	minVal, maxVal := values[0], values[0]
+	for _, v := range values {
+		if v < minVal {
+			minVal = v
+		}
+		if v > maxVal {
+			maxVal = v
+		}
+	}
+	if maxVal == minVal {
+		for i := range levels {
+			levels[i] = top / 2
+		}
+		return levels
+	}
+	for i, v := range values {
+		idx := int((v - minVal) / (maxVal - minVal) * float64(top))
+		if idx < 0 {
+			idx = 0
+		}
+		if idx > top {
+			idx = top
+		}
+		levels[i] = idx
+	}
+	return levels
+}
+
+// npuHeatCell renders one heat cell: the ramp glyph at its level, in the
+// matching colour. The colour is decoration only; the glyph carries the value
+// in --no-color mode.
+func npuHeatCell(level int) string {
+	ramp := []rune(npuHeatRamp)
+	if level < 0 {
+		level = 0
+	}
+	if level >= len(ramp) {
+		level = len(ramp) - 1
+	}
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color(npuHeatColors[level]))
+	return style.Render(string(ramp[level]))
+}
 
 // npuGradeCell renders one matrix cell. The glyph alone distinguishes the three
 // grades, which is what keeps the matrix readable in --no-color mode where the
@@ -60,10 +191,30 @@ func npuGradeCell(grade string) string {
 	}
 }
 
+// npuHeatModeCell renders one cell in a heat mode: a healthy chip is shaded by
+// its metric, while a degraded or faulted chip keeps the health glyph and style
+// it has in the health matrix. The health semantics are not heat: they have to
+// survive whatever the metric says about a broken chip.
+func npuHeatModeCell(grade model.NPUChipGrade, level int) string {
+	switch grade.Grade {
+	case model.NPUChipGradeFault, model.NPUChipGradeDegraded:
+		return npuGradeCell(grade.Grade)
+	default:
+		return npuHeatCell(level)
+	}
+}
+
 // npuChipCellGroups groups a node's chips by NPU, in the node's canonical chip
 // order (NPUChipHealth is already in that order). A run of chips with the same
 // NPUID is one group, so the matrix can render NPU boundaries as a wider gap.
 func npuChipCellGroups(grades []model.NPUChipGrade) [][]string {
+	return npuChipCellRow(grades, nil)
+}
+
+// npuChipCellRow is npuChipCellGroups with an optional heat metric: levels is
+// nil for the health matrix (the default, unchanged output) and carries one
+// normalized heat level per grade otherwise.
+func npuChipCellRow(grades []model.NPUChipGrade, levels []int) [][]string {
 	groups := make([][]string, 0, len(grades))
 	lastNPU := 0
 	for i, grade := range grades {
@@ -71,7 +222,15 @@ func npuChipCellGroups(grades []model.NPUChipGrade) [][]string {
 			groups = append(groups, nil)
 			lastNPU = grade.NPUID
 		}
-		groups[len(groups)-1] = append(groups[len(groups)-1], npuGradeCell(grade.Grade))
+		cell := npuGradeCell(grade.Grade)
+		if levels != nil {
+			level := 0
+			if i < len(levels) {
+				level = levels[i]
+			}
+			cell = npuHeatModeCell(grade, level)
+		}
+		groups[len(groups)-1] = append(groups[len(groups)-1], cell)
 	}
 	return groups
 }
@@ -200,6 +359,13 @@ func (m *Model) npuMatrixRow(node *model.NodeData, selected bool) string {
 	}
 
 	groups := npuChipCellGroups(node.NPUChipHealth)
+	if m.npuMatrixMode != npuMatrixModeHealth {
+		// Heat mode: the cells are shaded by the node-local metric range, so the
+		// row shows this node's own hot and cold chips. The health glyphs stay
+		// for the chips that are not healthy, which is why this is an override of
+		// the healthy cells and not a different matrix.
+		groups = npuChipCellRow(node.NPUChipHealth, npuHeatLevels(npuChipValues(node, m.npuMatrixMode)))
+	}
 	suffix := m.npuRowSuffix(node)
 	// The suffix without its informational occupancy count — what the row
 	// rendered before attribution existed.
@@ -329,6 +495,17 @@ func npuNodesWithData(nodes []*model.NodeData) int {
 		if len(node.NPUChipHealth) > 0 {
 			count++
 		}
+	}
+	return count
+}
+
+// npuChipDataCount counts every chip that carries data, across the given nodes.
+// The aggregate gauge bar is keyed on this: it is the "is there anything to
+// average at all" question.
+func npuChipDataCount(nodes []*model.NodeData) int {
+	count := 0
+	for _, node := range nodes {
+		count += len(node.NPUChips)
 	}
 	return count
 }
@@ -643,6 +820,139 @@ func (m *Model) npuClipLine(line string) string {
 	return truncate(line, m.width)
 }
 
+// npuHeatModeName returns the localized name of a heat mode.
+func (m *Model) npuHeatModeName(mode int) string {
+	switch mode {
+	case npuMatrixModeAICore:
+		return m.T("npuview.mode_aicore")
+	case npuMatrixModeTemp:
+		return m.T("npuview.mode_temp")
+	case npuMatrixModePower:
+		return m.T("npuview.mode_power")
+	default:
+		return ""
+	}
+}
+
+// npuHeatLegend renders the line that says which metric the matrix is shaded
+// by, how to change it, and in which direction the ramp runs. It only exists in
+// heat mode: the health matrix is self-describing through the health legend
+// below it and keeps its bytes.
+func (m *Model) npuHeatLegend() string {
+	if m.npuMatrixMode == npuMatrixModeHealth {
+		return ""
+	}
+	return m.npuClipLine(StyleTextMuted.Render(m.TF("npuview.heat_legend", map[string]interface{}{
+		"Mode": m.npuHeatModeName(m.npuMatrixMode),
+		"Ramp": npuHeatRamp,
+	})))
+}
+
+// npuAggregateSpark appends a sparkline of the session series to a segment. The
+// trend is an extra beside the value, so it takes only the room the value leaves
+// on the terminal and disappears when there is none: a segment handed to the
+// wrap path already wider than the terminal is how a narrow terminal loses the
+// value itself.
+func (m *Model) npuAggregateSpark(segment string, series []float64, width int) string {
+	if len(series) < 2 || width < 1 {
+		return segment
+	}
+	if m.width > 0 {
+		width = min(width, m.width-visualLength(segment)-1)
+	}
+	if width < 1 {
+		return segment
+	}
+	spark := sparkline(series, width)
+	if spark == "" {
+		return segment
+	}
+	return segment + " " + spark
+}
+
+// npuAggregateSegments builds the cluster-wide gauge bar: the numbers the chip
+// matrix cannot show at a glance (power, average temperature, HBM occupancy,
+// mean AI Core utilisation) with their recent trend beside them. It reuses the
+// summary bar's segment list and wrap path, so it obeys the same width
+// guarantees.
+//
+// Every segment is chip-derived, so the whole bar is omitted when no chip data
+// arrived — a bar of empty gauges would read as a measured zero, which is the
+// same lie the "monitoring unavailable" wording exists to avoid.
+//
+// The health segment is the one part of the bar that repeats the summary bar's
+// tally, and it does so narrowly: it answers "how much of the silicon is
+// healthy" with two numbers, while the severities stay on the bar above where
+// they already have their own styled counters.
+func (m *Model) npuAggregateSegments(nodes []*model.NodeData, sample *VizSample) []string {
+	if sample == nil || npuChipDataCount(nodes) == 0 {
+		return nil
+	}
+
+	var segments []string
+	segments = append(segments, m.TF("npuview.aggregate_nodes", map[string]interface{}{
+		"Count": len(nodes),
+	}))
+
+	// Chip health, in the "H/total healthy" short form. The degraded and fault
+	// counts stay with the summary bar above: this segment answers "how much of
+	// the silicon is healthy", and the severities are read there. The wording
+	// follows the summary bar's rule: with unknown-health chips in the cluster
+	// the healthy tally is "no reported fault", not a health signal anybody
+	// sent, so the segment must not print "8/8 healthy" next to the summary's
+	// own "unknown 8".
+	healthy, degraded, fault := npuChipTally(nodes)
+	healthKey := "npuview.aggregate_health"
+	if npuUnknownHealthTally(nodes) > 0 {
+		healthKey = "npuview.aggregate_health_no_known"
+	}
+	segments = append(segments, m.TF(healthKey, map[string]interface{}{
+		"Healthy": StyleStatusReady.Render(fmt.Sprintf("%d", healthy)),
+		"Total":   healthy + degraded + fault,
+	}))
+
+	segments = append(segments, m.npuAggregateSpark(
+		m.TF("npuview.aggregate_power", map[string]interface{}{
+			"Power": fmt.Sprintf("%d", int(sample.NPUPowerW)),
+		}),
+		m.vizSeries(func(s VizSample) (float64, bool) { return s.NPUPowerW, true }),
+		npuAggregateSparkWidth,
+	))
+
+	segments = append(segments, m.npuAggregateSpark(
+		m.TF("npuview.aggregate_temp", map[string]interface{}{
+			"Temp": fmt.Sprintf("%d", int(sample.NPUTempAvg)),
+		}),
+		m.vizSeries(func(s VizSample) (float64, bool) { return s.NPUTempAvg, true }),
+		npuAggregateSparkWidth,
+	))
+
+	// HBM is a ratio, so an unknown capacity has no segment: "0/0 (NaN%)" would
+	// be worse than saying nothing.
+	if sample.HBMTotalMB > 0 {
+		percent := float64(sample.HBMUsedMB) / float64(sample.HBMTotalMB) * 100
+		segments = append(segments, m.TF("npuview.aggregate_hbm", map[string]interface{}{
+			"Used":    sample.HBMUsedMB / 1024,
+			"Total":   sample.HBMTotalMB / 1024,
+			"Percent": fmt.Sprintf("%.0f", percent),
+		}))
+	}
+
+	// Utilisation is only drawn when a chip actually reported it: an idle
+	// cluster's 0% is a real value, "no chip answered" is not.
+	if sample.NPUUtilKnown {
+		segments = append(segments, m.npuAggregateSpark(
+			m.TF("npuview.aggregate_util", map[string]interface{}{
+				"Percent": fmt.Sprintf("%.0f", sample.NPUUtilPct),
+			}),
+			m.vizSeries(func(s VizSample) (float64, bool) { return s.NPUUtilPct, s.NPUUtilKnown }),
+			npuAggregateSparkWidth,
+		))
+	}
+
+	return segments
+}
+
 // npuContentLines returns every line of the NPU view, in order, before it is
 // sliced down to what fits on screen. Scrolling and the "showing X-Y of Z"
 // indicator both work off this list, so they cannot disagree with the content.
@@ -660,6 +970,18 @@ func (m *Model) npuContentLines() []string {
 	lines = append(lines, "")
 
 	lines = append(lines, wrapSummarySegments(m.npuSummarySegments(nodes), m.width, "  •  ")...)
+
+	// The aggregate gauge bar and the heat legend only exist when they have
+	// something to say: a cluster with no chip data gets no aggregate bar (the
+	// summary's "monitoring unavailable" already covers it), and the health
+	// matrix keeps the bytes it had before either existed.
+	if agg := m.npuAggregateSegments(nodes, m.currentVizSample()); len(agg) > 0 {
+		lines = append(lines, wrapSummarySegments(agg, m.width, "  •  ")...)
+	}
+	if heat := m.npuHeatLegend(); heat != "" {
+		lines = append(lines, heat)
+	}
+
 	lines = append(lines, m.npuClipLine(StyleTextMuted.Render(m.T("npuview.legend"))))
 	lines = append(lines, "")
 

@@ -13,9 +13,44 @@ const (
 	summaryPanelMinContentLine = 5
 	// Border draws 1 line on top and bottom, padding adds 1 line each by default.
 	summaryPanelExtraHeight = 4
+	// clusterLoadBoxWidth is the width the cluster-load box is drawn at. lipgloss
+	// counts the horizontal padding in Width but not the border, so the widest
+	// content line that renders in full is this minus the 4 cells of padding
+	// (measured: 91 cells fit, 92 wrap onto a second line and shift every panel
+	// below the box).
+	clusterLoadBoxWidth = 95
+	clusterLoadContent  = clusterLoadBoxWidth - 4
+	// summaryPanelContent is the widest line renderSummaryPanel prints in full.
+	// Unlike the load box, a longer line is clipped by lipgloss, so a value
+	// pushed past it is lost silently instead of wrapping.
+	summaryPanelContent = summaryPanelWidth - 2
+	overviewSparkWidth  = 10
+	npuPanelSparkWidth  = 10
+	npuPanelBarWidth    = 6
+	// npuPanelAllocBarWidth keeps the pre-batch 14-cell allocation bar: that
+	// line is unchanged by this batch.
+	npuPanelAllocBarWidth = 14
 )
 
 var summaryPanelStyle = StyleBorder.Copy().Padding(1, 1)
+
+// appendSpark appends a sparkline of series to line when the whole sparkline
+// fits the given content budget. It yields entirely rather than shortening: a
+// half sparkline would misreport the recent trend, and the line must not be
+// pushed past its panel's width (see summaryPanelContent).
+func appendSpark(line string, series []float64, width, budget int) (string, bool) {
+	if len(series) == 0 || width < 1 {
+		return line, false
+	}
+	if visualLength(line)+1+width > budget {
+		return line, false
+	}
+	spark := sparkline(series, width)
+	if spark == "" {
+		return line, false
+	}
+	return line + " " + spark, true
+}
 
 // formatCPU formats CPU millicores to a human-readable string
 func formatCPU(millicores int64) string {
@@ -414,16 +449,20 @@ func (m *Model) renderClusterLoadCompact(summary *model.ClusterSummary) string {
 	// CPU Load - show both capacity and allocatable for transparency
 	if summary.CPUUsed > 0 {
 		usagePercent := summary.CPUUsageUtilization
-		content = append(content,
-			fmt.Sprintf("%s %s / %s %s (%s) %s",
-				m.T("metrics.cpu_used"),
-				StyleWarning.Render(formatCPU(summary.CPUUsed)),
-				formatCPU(summary.CPUCapacity),
-				m.T("metrics.capacity"),
-				StyleHighlight.Render(formatPercentage(usagePercent)),
-				renderProgressBar(usagePercent, 40),
-			),
+		line := fmt.Sprintf("%s %s / %s %s (%s) %s",
+			m.T("metrics.cpu_used"),
+			StyleWarning.Render(formatCPU(summary.CPUUsed)),
+			formatCPU(summary.CPUCapacity),
+			m.T("metrics.capacity"),
+			StyleHighlight.Render(formatPercentage(usagePercent)),
+			renderProgressBar(usagePercent, 40),
 		)
+		// Session trend beside the instantaneous figure. It is measured against
+		// the box's content width and is left out whole when it does not fit, so
+		// the bar and the numbers keep their layout.
+		line, _ = appendSpark(line, m.vizSeries(func(s VizSample) (float64, bool) { return s.CPUPct, true }),
+			overviewSparkWidth, clusterLoadContent)
+		content = append(content, line)
 		// Show allocatable for reference
 		if summary.CPUAllocatable != summary.CPUCapacity {
 			allocPercent := float64(summary.CPUUsed) / float64(summary.CPUAllocatable) * 100
@@ -454,16 +493,17 @@ func (m *Model) renderClusterLoadCompact(summary *model.ClusterSummary) string {
 	// Memory Load - show both capacity and allocatable for transparency
 	if summary.MemoryUsed > 0 {
 		usagePercent := summary.MemUsageUtilization
-		content = append(content,
-			fmt.Sprintf("%s %s / %s %s (%s) %s",
-				m.T("metrics.mem_used"),
-				StyleWarning.Render(formatMemory(summary.MemoryUsed)),
-				formatMemory(summary.MemoryCapacity),
-				m.T("metrics.capacity"),
-				StyleHighlight.Render(formatPercentage(usagePercent)),
-				renderProgressBar(usagePercent, 40),
-			),
+		line := fmt.Sprintf("%s %s / %s %s (%s) %s",
+			m.T("metrics.mem_used"),
+			StyleWarning.Render(formatMemory(summary.MemoryUsed)),
+			formatMemory(summary.MemoryCapacity),
+			m.T("metrics.capacity"),
+			StyleHighlight.Render(formatPercentage(usagePercent)),
+			renderProgressBar(usagePercent, 40),
 		)
+		line, _ = appendSpark(line, m.vizSeries(func(s VizSample) (float64, bool) { return s.MemPct, true }),
+			overviewSparkWidth, clusterLoadContent)
+		content = append(content, line)
 		// Show allocatable for reference
 		if summary.MemoryAllocatable != summary.MemoryCapacity {
 			allocPercent := float64(summary.MemoryUsed) / float64(summary.MemoryAllocatable) * 100
@@ -553,7 +593,7 @@ func (m *Model) renderClusterLoadCompact(summary *model.ClusterSummary) string {
 		)
 	}
 
-	return StyleBorder.Width(95).Render(strings.Join(content, "\n"))
+	return StyleBorder.Width(clusterLoadBoxWidth).Render(strings.Join(content, "\n"))
 }
 
 func (m *Model) cpuDetailsLines(summary *model.ClusterSummary) []string {
@@ -774,7 +814,91 @@ func (m *Model) npuPanelLines(summary *model.ClusterSummary) []string {
 		)
 
 		// Progress bar
-		lines = append(lines, fmt.Sprintf("  %s", renderProgressBar(summary.NPUUtilization, 14)))
+		lines = append(lines, fmt.Sprintf("  %s", renderProgressBar(summary.NPUUtilization, npuPanelAllocBarWidth)))
+
+		// Chip-level lines. They exist only when chip data arrived: the card's
+		// allocation figures above are about the resource, these are about the
+		// silicon, and a card that printed "0°C" for a cluster whose exporter
+		// never answered would claim a measurement it does not have.
+		//
+		// Each line is measured against the panel's content width before it is
+		// printed: a longer line is clipped by lipgloss, so a value pushed past
+		// the edge would be lost silently rather than wrapping.
+		if sample := m.currentVizSample(); sample != nil && npuChipDataCount(m.npuNodes()) > 0 {
+			healthy, degraded, fault := npuChipTally(m.npuNodes())
+			healthLine := fmt.Sprintf("%s%s/%d",
+				padRight(m.T("overview.npu_chip_health"), 6),
+				StyleStatusReady.Render(fmt.Sprintf("%d", healthy)),
+				healthy+degraded+fault)
+			// Unknown-health chips make the H/T tally "no reported fault"
+			// rather than a health signal (the summary bar's wording rule), so
+			// the card states the unknown count outright instead of letting
+			// "8/8" read as an all-clear the exporters never gave.
+			if unknown := npuUnknownHealthTally(m.npuNodes()); unknown > 0 {
+				healthLine += " " + StyleTextMuted.Render(m.TF("overview.npu_chip_unknown",
+					map[string]interface{}{"Count": unknown}))
+			}
+			lines = append(lines, healthLine)
+
+			// The non-healthy counts keep their own rows, one per severity, so a
+			// mixed cluster never prints them truncated and each keeps the style
+			// its severity owns.
+			if degraded > 0 {
+				lines = append(lines, StyleWarning.Render(m.TF("npuview.row_degraded",
+					map[string]interface{}{"Count": degraded})))
+			}
+			if fault > 0 {
+				lines = append(lines, StyleStatusNotReady.Render(m.TF("npuview.row_fault",
+					map[string]interface{}{"Count": fault})))
+			}
+
+			// The chip utilisation row is only drawn when a chip reported a
+			// utilisation: an idle cluster's 0% is a real value, a silent
+			// exporter's is not. The ramp sparkline fills whatever the 20-cell
+			// panel leaves over and is dropped whole below three cells; it is a
+			// ramp, never the block bar of the allocation row above, so the two
+			// cannot be read as the same gauge.
+			if sample.NPUUtilKnown {
+				// The percentage is the payload, the bar its decoration: the
+				// bar yields width to the value first (zh at 100% does not fit
+				// both at full width) and disappears before the value could be
+				// clipped by the panel edge.
+				label := padRight(m.T("overview.npu_chip_util"), 6)
+				pct := fmt.Sprintf("%.0f%%", sample.NPUUtilPct)
+				barWidth := npuPanelBarWidth
+				if avail := summaryPanelContent - visualLength(label) - 1 - visualLength(pct) - 1; barWidth > avail {
+					barWidth = avail
+				}
+				var line string
+				if barWidth >= 1 {
+					line = fmt.Sprintf("%s%s %s", label, renderProgressBar(sample.NPUUtilPct, barWidth), pct)
+				} else {
+					line = label + pct
+				}
+				if left := summaryPanelContent - visualLength(line) - 1; left >= 3 {
+					if spark := sparkline(m.vizSeries(func(s VizSample) (float64, bool) {
+						return s.NPUUtilPct, s.NPUUtilKnown
+					}), min(left, npuPanelSparkWidth)); spark != "" {
+						line += " " + spark
+					}
+				}
+				lines = append(lines, line)
+			}
+
+			// Temperature and power share one line so the card gains as few rows
+			// as the data allows; a pair that does not fit keeps the temperature,
+			// which is the figure nothing else on the card carries.
+			tempPower := m.TF("overview.npu_temp_power", map[string]interface{}{
+				"Temp":  fmt.Sprintf("%d", int(sample.NPUTempAvg)),
+				"Power": fmt.Sprintf("%.1f", sample.NPUPowerW/1000),
+			})
+			if visualLength(tempPower) > summaryPanelContent {
+				tempPower = m.TF("overview.npu_temp_only", map[string]interface{}{
+					"Temp": fmt.Sprintf("%d", int(sample.NPUTempAvg)),
+				})
+			}
+			lines = append(lines, tempPower)
+		}
 
 		// NPU Efficiency: Running jobs NPU / Allocated NPU
 		volcanoSummary := m.clusterData.VolcanoSummary

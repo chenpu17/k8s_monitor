@@ -745,6 +745,26 @@ other = "以获取芯片指标"
 [overview.npu_no_nodes]
 other = "无 NPU 节点"
 
+# NPU 卡片的芯片级行，仅在收到芯片数据时绘制。
+[overview.npu_chip_health]
+other = "芯片："
+
+# 上报了利用率的芯片的 AI 核平均利用率。与上方资源口径的"使用率："是两回事
+# （那个按已分配 NPU 计）。
+[overview.npu_chip_util]
+other = "芯片率："
+
+# 卡片芯片健康行尾的未知健康限定词；面板内容宽只有 18 格，措辞须短。
+[overview.npu_chip_unknown]
+other = "未知 {{.Count}}"
+
+[overview.npu_temp_power]
+other = "{{.Temp}}°C · {{.Power}}kW"
+
+# 上面那一行放不进面板内容宽度时的回退：温度是卡片上别的行都没有的值，保留它。
+[overview.npu_temp_only]
+other = "{{.Temp}}°C"
+
 # Volcano 面板:表头保留产品名不译。行标签为裸键,
 # 由渲染端按历史列宽用 padRight 补齐。
 [overview.panel_volcano]
@@ -1786,6 +1806,46 @@ other = "监控 降级 · 上次成功 {{.LastSuccess}}"
 
 [npuview.liveness_never]
 other = "监控 不可用"
+
+# 聚合仪表条：矩阵一眼看不出的集群级数值。所有段都由芯片数据算出，
+# 没有芯片数据时整条让位——空仪表会被读成"测得 0"。
+[npuview.aggregate_nodes]
+other = "节点 {{.Count}}"
+
+# 仪表条里的芯片健康短式：只印计数，让该段在 38 列终端上也放得下。
+[npuview.aggregate_health]
+other = "芯片 {{.Healthy}}/{{.Total}} 健康"
+
+# 摘要条的措辞规则：集群里有健康状态未知的芯片时，计数只能说"无故障"，
+# 不能说"健康"。
+[npuview.aggregate_health_no_known]
+other = "芯片 {{.Healthy}}/{{.Total}} 无故障"
+
+[npuview.aggregate_power]
+other = "功耗 {{.Power}}W"
+
+[npuview.aggregate_temp]
+other = "均温 {{.Temp}}°C"
+
+[npuview.aggregate_hbm]
+other = "HBM {{.Used}}/{{.Total}}G（{{.Percent}}%）"
+
+[npuview.aggregate_util]
+other = "利用率 {{.Percent}}%"
+
+# 热力矩阵：芯片按哪个指标着色、切换键与渐变方向。仅在热力模式下渲染；
+# 健康矩阵保持原有图例行不变。
+[npuview.mode_aicore]
+other = "AI核利用率"
+
+[npuview.mode_temp]
+other = "温度"
+
+[npuview.mode_power]
+other = "功耗"
+
+[npuview.heat_legend]
+other = "模式：{{.Mode}}（h 切换）· {{.Ramp}} 低→高"
 
 # 采集通道状态，在节点详情中渲染（原始失败文本由视图自行追加并按字段宽截断）。
 [npu.liveness.ok]

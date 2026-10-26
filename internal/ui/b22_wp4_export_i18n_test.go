@@ -409,8 +409,17 @@ func TestZhCopyFixes(t *testing.T) {
 //
 // Batch 25 (Pod↔chip attribution) added 5: npudetail.{chip_owner,pod_chips,
 // pod_chips_unknown}, npuview.{row_occupied,summary_no_known} — 802 + 5 = 807.
+//
+// Batch 29 (overview visualisation) added 14: npuview.{aggregate_nodes,
+// aggregate_health,aggregate_power,aggregate_temp,aggregate_hbm,aggregate_util,
+// mode_aicore,mode_temp,mode_power,heat_legend} and overview.{npu_chip_health,
+// npu_chip_util,npu_temp_power,npu_temp_only} — 807 + 14 = 821.
+//
+// Batch 29 review fixes added 2: npuview.aggregate_health_no_known (the
+// aggregate bar's no-known-fault wording for unknown-health chips) and
+// overview.npu_chip_unknown (the card's unknown count) — 821 + 2 = 823.
 func TestBundleKeyCount(t *testing.T) {
-	const want = 807
+	const want = 823
 
 	en := readBundleMessages(t, "../../internal/i18n/active.en.toml")
 	zh := readBundleMessages(t, "../../internal/i18n/active.zh.toml")
