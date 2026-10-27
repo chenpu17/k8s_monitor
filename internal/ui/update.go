@@ -540,14 +540,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.fetchLogs()
 				}
 				// Exit logs mode entirely
-				m.logsMode = false
-				m.logsAutoRefresh = false // Stop auto-refresh
-				m.logsAutoScroll = false  // Reset auto-scroll
-				m.selectedContainer = ""
-				m.containerLogs = ""
-				m.logsFetched = false
-				m.logsScrollOffset = 0
-				m.logsError = ""
+				m.exitLogsViewer()
 				return m, nil
 			}
 			// Exit action menu if active
@@ -567,110 +560,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.detailMode {
-				// Special handling for navigating back from Pod detail to Job detail
-				if m.currentView == ViewPodDetail && m.fromJobDetail {
-					m.currentView = ViewJobDetail
-					m.fromJobDetail = false
-					m.detailScrollOffset = 0
-					m.selectedPod = nil
-					// Keep m.selectedJob intact
-					return m, nil
-				}
-
-				// Special handling for navigating back from Pod detail to Volcano Job detail
-				if m.currentView == ViewPodDetail && m.fromVolcanoJobDetail {
-					m.currentView = ViewVolcanoJobDetail
-					m.fromVolcanoJobDetail = false
-					m.detailScrollOffset = 0
-					m.selectedPod = nil
-					// Keep m.selectedVolcanoJob intact
-					return m, nil
-				}
-
-				// Special handling for navigating back from Service detail to Network view
-				if m.currentView == ViewServiceDetail && m.fromNetworkView {
-					m.currentView = ViewNetwork
-					m.fromNetworkView = false
-					m.detailMode = false
-					m.detailScrollOffset = 0
-					m.selectedService = nil
-					// Keep m.scrollOffset and m.selectedIndex intact
-					return m, nil
-				}
-
-				// Special handling for navigating back from Node detail to the NPU
-				// view. Returning early skips the main reset block below, so the
-				// detail flag, the scroll offset and the selection are all handled
-				// here: the list the user came from comes back as they left it.
-				if m.currentView == ViewNodeDetail && m.fromNPUView {
-					m.currentView = ViewNPU
-					m.fromNPUView = false
-					m.detailMode = false
-					m.detailScrollOffset = 0
-					m.selectedNode = nil
-					// Keep m.scrollOffset and m.selectedIndex intact
-					return m, nil
-				}
-
-				switch m.currentView {
-				case ViewNodeDetail:
-					m.currentView = ViewNodes
-				case ViewPodDetail:
-					m.currentView = ViewPods
-				case ViewEventDetail:
-					m.currentView = ViewEvents
-				case ViewJobDetail:
-					m.currentView = ViewWorkloads
-					m.jobPodSelectedIndex = 0 // Reset selection
-				case ViewVolcanoJobDetail:
-					m.currentView = ViewWorkloads
-					m.volcanoJobPodSelectedIndex = 0 // Reset selection
-				case ViewServiceDetail:
-					m.currentView = ViewWorkloads
-				case ViewDeploymentDetail:
-					m.currentView = ViewWorkloads
-				case ViewStatefulSetDetail:
-					m.currentView = ViewWorkloads
-				case ViewDaemonSetDetail:
-					m.currentView = ViewWorkloads
-				case ViewCronJobDetail:
-					m.currentView = ViewWorkloads
-				case ViewPVDetail:
-					m.currentView = ViewStorage
-				case ViewPVCDetail:
-					m.currentView = ViewStorage
-				case ViewQueueDetail:
-					m.currentView = ViewQueues
-				case ViewTopologyDetail:
-					m.currentView = ViewTopology
-				}
-				m.detailMode = false
-				m.detailScrollOffset = 0 // Reset detail scroll offset
-				m.selectedNode = nil
-				m.selectedPod = nil
-				m.selectedEvent = nil
-				m.selectedJob = nil
-				m.selectedService = nil
-				m.selectedDeployment = nil
-				m.selectedStatefulSet = nil
-				m.selectedDaemonSet = nil
-				m.selectedCronJob = nil
-				m.selectedPV = nil
-				m.selectedPVC = nil
-				m.selectedVolcanoJob = nil
-				m.selectedQueue = nil
-				m.selectedSuperPod = nil
-				m.scrollOffset = 0
-				m.selectedIndex = 0 // Reset selected index when returning from detail view
-
-				// Clamp selectedIndex to valid range after view switch
-				maxIndex := m.getMaxIndex()
-				if maxIndex > 0 && m.selectedIndex >= maxIndex {
-					m.selectedIndex = maxIndex - 1
-				}
-				if m.selectedIndex < 0 {
-					m.selectedIndex = 0
-				}
+				m.backFromDetail()
 			}
 			return m, nil
 
@@ -1301,6 +1191,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Only update data and counters if successful
 		if msg.err == nil && msg.data != nil {
 			m.clusterData = msg.data
+			// The detail views hold pointers captured when they were opened;
+			// this snapshot replaced every object wholesale, so re-point them
+			// (or leave a detail whose object is gone) before anything renders.
+			m.reresolveDetailSelections()
 			m.lastUpdate = time.Now()
 			m.refreshCounter++
 
@@ -1461,4 +1355,139 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// backFromDetail applies the "Esc from a detail view" transition: it returns to
+// the list the detail was opened from, clears the detail flags and selections,
+// and re-clamps the list selection. The Esc key and the refresh re-resolution
+// (reresolveDetailSelections in detail_fresh.go) both call it, so a detail view
+// whose object disappears on a refresh leaves the model in exactly the state
+// pressing Esc would - there is no second, divergent exit path.
+func (m *Model) backFromDetail() {
+	if !m.detailMode {
+		return
+	}
+
+	// Special handling for navigating back from Pod detail to Job detail
+	if m.currentView == ViewPodDetail && m.fromJobDetail {
+		m.currentView = ViewJobDetail
+		m.fromJobDetail = false
+		m.detailScrollOffset = 0
+		m.selectedPod = nil
+		// Keep m.selectedJob intact
+		return
+	}
+
+	// Special handling for navigating back from Pod detail to Volcano Job detail
+	if m.currentView == ViewPodDetail && m.fromVolcanoJobDetail {
+		m.currentView = ViewVolcanoJobDetail
+		m.fromVolcanoJobDetail = false
+		m.detailScrollOffset = 0
+		m.selectedPod = nil
+		// Keep m.selectedVolcanoJob intact
+		return
+	}
+
+	// Special handling for navigating back from Service detail to Network view
+	if m.currentView == ViewServiceDetail && m.fromNetworkView {
+		m.currentView = ViewNetwork
+		m.fromNetworkView = false
+		m.detailMode = false
+		m.detailScrollOffset = 0
+		m.selectedService = nil
+		// Keep m.scrollOffset and m.selectedIndex intact
+		return
+	}
+
+	// Special handling for navigating back from Node detail to the NPU
+	// view. Returning early skips the main reset block below, so the
+	// detail flag, the scroll offset and the selection are all handled
+	// here: the list the user came from comes back as they left it.
+	if m.currentView == ViewNodeDetail && m.fromNPUView {
+		m.currentView = ViewNPU
+		m.fromNPUView = false
+		m.detailMode = false
+		m.detailScrollOffset = 0
+		m.selectedNode = nil
+		// Keep m.scrollOffset and m.selectedIndex intact
+		return
+	}
+
+	switch m.currentView {
+	case ViewNodeDetail:
+		m.currentView = ViewNodes
+	case ViewPodDetail:
+		m.currentView = ViewPods
+	case ViewEventDetail:
+		m.currentView = ViewEvents
+	case ViewJobDetail:
+		m.currentView = ViewWorkloads
+		m.jobPodSelectedIndex = 0 // Reset selection
+	case ViewVolcanoJobDetail:
+		m.currentView = ViewWorkloads
+		m.volcanoJobPodSelectedIndex = 0 // Reset selection
+	case ViewServiceDetail:
+		m.currentView = ViewWorkloads
+	case ViewDeploymentDetail:
+		m.currentView = ViewWorkloads
+	case ViewStatefulSetDetail:
+		m.currentView = ViewWorkloads
+	case ViewDaemonSetDetail:
+		m.currentView = ViewWorkloads
+	case ViewCronJobDetail:
+		m.currentView = ViewWorkloads
+	case ViewPVDetail:
+		m.currentView = ViewStorage
+	case ViewPVCDetail:
+		m.currentView = ViewStorage
+	case ViewQueueDetail:
+		m.currentView = ViewQueues
+	case ViewTopologyDetail:
+		m.currentView = ViewTopology
+	}
+	m.detailMode = false
+	m.detailScrollOffset = 0 // Reset detail scroll offset
+	m.selectedNode = nil
+	m.selectedPod = nil
+	m.selectedEvent = nil
+	m.selectedJob = nil
+	m.selectedService = nil
+	m.selectedDeployment = nil
+	m.selectedStatefulSet = nil
+	m.selectedDaemonSet = nil
+	m.selectedCronJob = nil
+	m.selectedPV = nil
+	m.selectedPVC = nil
+	m.selectedVolcanoJob = nil
+	m.selectedQueue = nil
+	m.selectedSuperPod = nil
+	m.scrollOffset = 0
+	m.selectedIndex = 0 // Reset selected index when returning from detail view
+
+	// Clamp selectedIndex to valid range after view switch
+	maxIndex := m.getMaxIndex()
+	if maxIndex > 0 && m.selectedIndex >= maxIndex {
+		m.selectedIndex = maxIndex - 1
+	}
+	if m.selectedIndex < 0 {
+		m.selectedIndex = 0
+	}
+}
+
+// exitLogsViewer closes the logs viewer and drops the per-request log state.
+// It is the Esc handler's teardown, plus the search-state reset: Esc never
+// reaches it while the search mode is open (that Esc cancels the search
+// first), but the refresh re-resolution in detail_fresh.go can tear the viewer
+// down from inside an open search, and must not leave that state behind.
+func (m *Model) exitLogsViewer() {
+	m.logsMode = false
+	m.logsAutoRefresh = false // Stop auto-refresh
+	m.logsAutoScroll = false  // Reset auto-scroll
+	m.logsSearchMode = false
+	m.logsSearchText = ""
+	m.selectedContainer = ""
+	m.containerLogs = ""
+	m.logsFetched = false
+	m.logsScrollOffset = 0
+	m.logsError = ""
 }
