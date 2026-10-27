@@ -132,6 +132,11 @@ func (m *Model) renderNodeBasicInfo(node *model.NodeData) string {
 	return strings.Join(info, "\n")
 }
 
+// nodeDetailSparkWidth is how many samples the node detail's sparklines show.
+// The same budget the overview's load box uses: a short trend beside the value
+// is enough to read the shape without pushing the value off a narrow terminal.
+const nodeDetailSparkWidth = 10
+
 // renderNodeResourceInfo renders node resource information
 func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 	var info []string
@@ -141,32 +146,81 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 
 	// CPU
 	if node.CPUAllocatable > 0 {
+		// Capacity is the denominator, matching the session sample behind the
+		// sparkline so the number and its trend cannot come from two different
+		// denominators. Allocatable is the fallback for payloads (legacy
+		// fixtures) that never carried capacity.
+		cpuDenom := node.CPUCapacity
+		if cpuDenom <= 0 {
+			cpuDenom = node.CPUAllocatable
+		}
 		cpuUsage := "N/A"
 		cpuPercent := "N/A"
 		if node.CPUUsage > 0 {
 			cpuUsage = FormatMillicores(node.CPUUsage)
-			cpuPercent = fmt.Sprintf("%.1f%%", float64(node.CPUUsage)*100.0/float64(node.CPUAllocatable))
+			cpuPercent = fmt.Sprintf("%.1f%%", float64(node.CPUUsage)*100.0/float64(cpuDenom))
 		}
-		info = append(info, fmt.Sprintf("  %s: %s / %s (%s)",
+		line := fmt.Sprintf("  %s: %s / %s (%s)",
 			StyleTextSecondary.Render(m.T("detail.field.cpu")),
 			cpuUsage,
-			FormatMillicores(node.CPUAllocatable),
-			cpuPercent))
+			FormatMillicores(cpuDenom),
+			cpuPercent)
+		// Session trend beside the instantaneous figure. It is appended only
+		// when the node has kubelet usage at all (a missing summary has no
+		// trend to draw) and only from the second sample on: one point is not a
+		// trend. The value keeps its room — appendSpark yields whole when the
+		// sparkline does not fit.
+		if nodeVizDataValid(node) {
+			if series := m.nodeVizSeriesFor(node, func(s NodeVizSample) (float64, bool) {
+				return s.CPUPct, true
+			}); len(series) >= 2 {
+				line, _ = appendSpark(line, series, nodeDetailSparkWidth, m.width)
+			}
+		}
+		info = append(info, line)
+		// Allocatable reference, mirroring the overview load box: capacity is
+		// the headline denominator, and the schedulable budget stays visible as
+		// a muted line whenever the two differ — they do on real nodes that
+		// carry a system reserve.
+		if node.CPUUsage > 0 && node.CPUCapacity > 0 && node.CPUCapacity != node.CPUAllocatable {
+			info = append(info, fmt.Sprintf("          %s %s (%s)",
+				FormatMillicores(node.CPUAllocatable),
+				StyleTextMuted.Render(m.T("metrics.allocatable")),
+				StyleTextMuted.Render(fmt.Sprintf("%.1f%%", float64(node.CPUUsage)*100.0/float64(node.CPUAllocatable)))))
+		}
 	}
 
 	// Memory
 	if node.MemAllocatable > 0 {
+		memDenom := node.MemoryCapacity
+		if memDenom <= 0 {
+			memDenom = node.MemAllocatable
+		}
 		memUsage := "N/A"
 		memPercent := "N/A"
 		if node.MemoryUsage > 0 {
 			memUsage = FormatBytes(node.MemoryUsage)
-			memPercent = fmt.Sprintf("%.1f%%", float64(node.MemoryUsage)*100.0/float64(node.MemAllocatable))
+			memPercent = fmt.Sprintf("%.1f%%", float64(node.MemoryUsage)*100.0/float64(memDenom))
 		}
-		info = append(info, fmt.Sprintf("  %s: %s / %s (%s)",
+		line := fmt.Sprintf("  %s: %s / %s (%s)",
 			StyleTextSecondary.Render(m.T("detail.field.memory")),
 			memUsage,
-			FormatBytes(node.MemAllocatable),
-			memPercent))
+			FormatBytes(memDenom),
+			memPercent)
+		if nodeVizDataValid(node) {
+			if series := m.nodeVizSeriesFor(node, func(s NodeVizSample) (float64, bool) {
+				return s.MemPct, s.MemValid
+			}); len(series) >= 2 {
+				line, _ = appendSpark(line, series, nodeDetailSparkWidth, m.width)
+			}
+		}
+		info = append(info, line)
+		if node.MemoryUsage > 0 && node.MemoryCapacity > 0 && node.MemoryCapacity != node.MemAllocatable {
+			info = append(info, fmt.Sprintf("          %s %s (%s)",
+				FormatBytes(node.MemAllocatable),
+				StyleTextMuted.Render(m.T("metrics.allocatable")),
+				StyleTextMuted.Render(fmt.Sprintf("%.1f%%", float64(node.MemoryUsage)*100.0/float64(node.MemAllocatable)))))
+		}
 	}
 
 	// Pods
@@ -190,6 +244,14 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 			node.NPUAllocated,
 			node.NPUAllocatable,
 			npuPercent))
+
+		// Chart rows at the top of the NPU block, before any chip table: the
+		// whole node's chips at a glance, then the session trend behind the
+		// aggregate figures below.
+		if strip := m.renderNodeChipHeatStrip(node); strip != "" {
+			info = append(info, strip)
+		}
+		info = append(info, m.renderNodeNPUTrends(node)...)
 
 		// NPU details
 		info = append(info, "")
@@ -874,7 +936,78 @@ func (m *Model) renderNodeResourceInfo(node *model.NodeData) string {
 	return strings.Join(info, "\n")
 }
 
-// renderNodePodsInfo renders pods running on this node
+// renderNodeChipHeatStrip renders the node-detail heat strip: one cell per
+// chip, shaded by AI Core utilisation on the absolute 0-100 scale, grouped by
+// NPU with the same two-space gap the NPU view's matrix uses. It reuses the
+// matrix's own cell functions (npuHeatLevels / npuChipCellRow), so a chip shows
+// the same glyph here as in the NPU view's default mode.
+//
+// Degraded and faulted chips keep their health glyphs (▒/▁) — heat is an
+// addition to health, never a replacement — and a node with no chip data
+// renders nothing rather than an empty strip that would read as "no chips".
+// The legend is appended only when the whole line still fits, and the final
+// npuClipLine clip means the tail of a too-narrow line goes rather than
+// wrapping onto a second row.
+func (m *Model) renderNodeChipHeatStrip(node *model.NodeData) string {
+	if node == nil || len(node.NPUChipHealth) == 0 {
+		return ""
+	}
+
+	levels := npuHeatLevels(npuChipValues(node, npuMatrixModeAICore), npuMatrixModeAICore)
+	strip := npuMatrixText(npuChipCellRow(node.NPUChipHealth, levels), -1)
+
+	line := "  " + StyleTextSecondary.Render(m.T("nodedetail.heat_strip")) + " " + strip
+	// The legend is decorative: append it only when the whole line including
+	// the legend fits, so a narrow terminal loses the legend whole instead of
+	// keeping a truncated "lo..." fragment that reads as a broken word. The
+	// final clip still guards the chips themselves.
+	if legend := m.TF("nodedetail.heat_legend", map[string]interface{}{"Ramp": npuHeatRamp}); legend != "" {
+		if withLegend := line + "  " + StyleTextMuted.Render(legend); visualLength(withLegend) <= m.width {
+			line = withLegend
+		}
+	}
+	return m.npuClipLine(line)
+}
+
+// renderNodeNPUTrends renders the node detail's NPU session trend rows: the
+// mean AI Core utilisation over the reporting chips (always when two samples
+// exist) and the summed chip power (only when the line still fits). Each is
+// skipped below two samples — one point is not a trend — and the series drop
+// samples their source did not report, so a gap is drawn as a gap. A node with
+// no chip data now draws nothing: an old trend under an empty chip block would
+// read as a measurement of the chips that are missing.
+func (m *Model) renderNodeNPUTrends(node *model.NodeData) []string {
+	if node == nil || len(node.NPUChips) == 0 {
+		return nil
+	}
+	var lines []string
+
+	utilSeries := m.nodeVizSeriesFor(node, func(s NodeVizSample) (float64, bool) {
+		return s.NPUUtilPct, s.NPUUtilValid
+	})
+	if len(utilSeries) >= 2 {
+		if line, ok := appendSpark("  "+StyleTextMuted.Render(m.T("nodedetail.npu_util_trend")),
+			utilSeries, nodeDetailSparkWidth, m.width); ok {
+			lines = append(lines, line)
+		}
+	}
+
+	// Power is valid wherever a chip reported utilisation or drew power: a chip
+	// with unknown health still consumes power, and an all-zero sum is "no chip
+	// data", not an idle board.
+	powerSeries := m.nodeVizSeriesFor(node, func(s NodeVizSample) (float64, bool) {
+		return s.NPUPowerW, s.NPUUtilValid || s.NPUPowerW > 0
+	})
+	if len(powerSeries) >= 2 {
+		if line, ok := appendSpark("  "+StyleTextMuted.Render(m.T("nodedetail.npu_power_trend")),
+			powerSeries, nodeDetailSparkWidth, m.width); ok {
+			lines = append(lines, line)
+		}
+	}
+
+	return lines
+}
+
 func (m *Model) renderNodePodsInfo(node *model.NodeData) string {
 	var info []string
 

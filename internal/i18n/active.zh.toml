@@ -1179,6 +1179,19 @@ other = "本节点上没有运行中的 Pod"
 [detail.node.more_pods]
 other = "... 还有 {{.Count}} 个 Pod"
 
+# 节点详情图表（第三十二批）：芯片热力条与会话趋势。
+[nodedetail.heat_strip]
+other = "芯片利用率："
+
+[nodedetail.heat_legend]
+other = "{{.Ramp}} 低→高"
+
+[nodedetail.npu_util_trend]
+other = "AI 核趋势："
+
+[nodedetail.npu_power_trend]
+other = "功耗趋势："
+
 # 事件详情视图
 [detail.event.no_selected]
 other = "未选择事件"

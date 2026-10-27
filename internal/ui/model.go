@@ -128,6 +128,29 @@ type VizSample struct {
 	HBMTotalMB   int64   // sum of HBM capacity, MB
 }
 
+// NodeVizSample is one session sample of the per-node series the node detail
+// draws its sparklines from. It is deliberately separate from MetricSnapshot:
+// that one is keyed per node/pod and capped at ten, while a detail page needs a
+// long, flat series for the single node the user is looking at.
+//
+// The *Valid flags separate "the source reported zero" from "the source said
+// nothing". A missing kubelet summary must not be drawn as an idle node, and a
+// node with NPUs but no chip health data must not grow an NPU trend that
+// claims the chips idle. Only the fields with a flag can tell the difference;
+// CPUPct is a plain value because a zero CPU reading is either a real idle
+// sample or a gap, and the sparkline renders both as no bar.
+type NodeVizSample struct {
+	At           time.Time
+	CPUPct       float64 // kubelet CPU used / CPUCapacity
+	MemPct       float64 // kubelet memory used / MemoryCapacity
+	MemValid     bool    // a kubelet summary carried usage and capacity was positive
+	NPUUtilPct   float64 // mean AI Core utilisation over the chips that reported
+	NPUUtilValid bool    // at least one chip reported (health not "Unknown")
+	NPUPowerW    float64 // sum of chip power, W (zero when no chip data)
+	HBMPct       float64 // sum of chip HBM used / sum of chip HBM total
+	HBMValid     bool    // total HBM capacity was positive
+}
+
 // Trend represents the trend direction
 type Trend int
 
@@ -214,6 +237,14 @@ type Model struct {
 	// path as metricHistory, so a cached repeat is not drawn twice.
 	vizHistory    []VizSample
 	maxVizHistory int
+
+	// Per-node session history behind the node detail's sparklines: the same
+	// guarded recording path as vizHistory, but keyed to the node whose detail
+	// is on screen. Switching nodes starts a new session (the recorder clears
+	// the ring when nodeVizNodeName changes).
+	nodeVizHistory    []NodeVizSample
+	maxNodeVizHistory int
+	nodeVizNodeName   string
 
 	// npuMatrixMode selects how the NPU view encodes a chip cell: 0 (the zero
 	// value, so the default) shades the healthy chips by AI Core utilisation;
@@ -362,20 +393,22 @@ func DefaultKeyMap() KeyMap {
 // NewModel creates a new UI model
 func NewModel(dataProvider DataProvider, logger *zap.Logger, refreshInterval time.Duration, locale string, version string, logTailLines int) *Model {
 	return &Model{
-		dataProvider:     dataProvider,
-		logger:           logger,
-		localizer:        i18n.NewLocalizer(locale),
-		locale:           locale,
-		version:          version,
-		refreshInterval:  refreshInterval,
-		logTailLines:     logTailLines,
-		currentView:      ViewOverview,
-		keys:             DefaultKeyMap(),
-		metricHistory:    make([]MetricSnapshot, 0, 10),
-		maxHistory:       10, // Keep last 10 snapshots for trend calculation
-		vizHistory:       make([]VizSample, 0, 60),
-		maxVizHistory:    60, // ≈2 minutes of refresh samples at the default interval
-		workloadSections: make(map[string]workloadSection),
+		dataProvider:      dataProvider,
+		logger:            logger,
+		localizer:         i18n.NewLocalizer(locale),
+		locale:            locale,
+		version:           version,
+		refreshInterval:   refreshInterval,
+		logTailLines:      logTailLines,
+		currentView:       ViewOverview,
+		keys:              DefaultKeyMap(),
+		metricHistory:     make([]MetricSnapshot, 0, 10),
+		maxHistory:        10, // Keep last 10 snapshots for trend calculation
+		vizHistory:        make([]VizSample, 0, 60),
+		maxVizHistory:     60, // ≈2 minutes of refresh samples at the default interval
+		nodeVizHistory:    make([]NodeVizSample, 0, 60),
+		maxNodeVizHistory: 60, // same session depth as the cluster series
+		workloadSections:  make(map[string]workloadSection),
 	}
 }
 

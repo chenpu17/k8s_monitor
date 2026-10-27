@@ -1213,6 +1213,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Same guard, second ring: the sparkline series must not draw a
 				// cached repeat as a new sample either.
 				m.recordVizSample(msg.data, snapshotTime)
+				// Third ring: the node detail's session series. It records after
+				// reresolveDetailSelections above, so it measures the object the
+				// page is about to render rather than the one captured on entry
+				// (batch 31). A detail that is not on screen records nothing; the
+				// ring is cleared when the user switches to another node.
+				if m.detailMode && m.currentView == ViewNodeDetail && m.selectedNode != nil {
+					m.recordNodeVizSample(m.selectedNode, snapshotTime)
+				}
 				m.lastSnapshotTime = snapshotTime
 			}
 

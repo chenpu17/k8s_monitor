@@ -421,8 +421,11 @@ func TestZhCopyFixes(t *testing.T) {
 //
 // Batch 30 (NPU default matrix mode, HBM view, h discoverability) added 4:
 // npuview.{mode_hbm,mode_health,health_legend} and keys.npu_matrix — 823 + 4 = 827.
+//
+// Batch 32 (node detail charts) added 4: nodedetail.{heat_strip,heat_legend,
+// npu_util_trend,npu_power_trend} — 827 + 4 = 831.
 func TestBundleKeyCount(t *testing.T) {
-	const want = 827
+	const want = 831
 
 	en := readBundleMessages(t, "../../internal/i18n/active.en.toml")
 	zh := readBundleMessages(t, "../../internal/i18n/active.zh.toml")

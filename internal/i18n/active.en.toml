@@ -1191,6 +1191,19 @@ other = "No pods running on this node"
 [detail.node.more_pods]
 other = "... and {{.Count}} more pods"
 
+# Node detail charts (batch 32): the chip heat strip and the session trends.
+[nodedetail.heat_strip]
+other = "Chip util:"
+
+[nodedetail.heat_legend]
+other = "{{.Ramp}} low→high"
+
+[nodedetail.npu_util_trend]
+other = "AI Core trend:"
+
+[nodedetail.npu_power_trend]
+other = "Power trend:"
+
 # Event Detail View
 [detail.event.no_selected]
 other = "No event selected"
