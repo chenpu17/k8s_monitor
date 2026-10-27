@@ -1023,6 +1023,9 @@ other = "search"
 [keys.filter]
 other = "filter"
 
+[keys.npu_matrix]
+other = "matrix mode"
+
 [keys.clear]
 other = "clear"
 
@@ -1863,14 +1866,25 @@ other = "Utilization {{.Percent}}%"
 [npuview.mode_aicore]
 other = "AI Core utilization"
 
+[npuview.mode_hbm]
+other = "HBM utilization"
+
 [npuview.mode_temp]
 other = "Temperature"
 
 [npuview.mode_power]
 other = "Power"
 
+[npuview.mode_health]
+other = "Chip health"
+
 [npuview.heat_legend]
 other = "Mode: {{.Mode}} (h to switch) · {{.Ramp}} low→high"
+
+# The health matrix has no ramp to describe, but its legend line is still the
+# discoverability anchor for the h key: it names the active mode and the key.
+[npuview.health_legend]
+other = "Mode: {{.Mode}} (h to switch)"
 
 # The exporter fetch path state, rendered in the node detail next to the raw
 # failure text (which the view appends itself and truncates to the field width).

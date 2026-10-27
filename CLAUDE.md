@@ -160,7 +160,7 @@ The UI supports multiple views (see `ViewType` enum in `internal/ui/model.go`):
 ### Keyboard Navigation
 
 - **Global**: `q`/`Ctrl+C` quit, `r` refresh, `1-8` switch core views, `9` Queues (requires Volcano), `0` Topology (requires SuperPod), `tab` cycle views
-- **List views**: `↑`/`k` up, `↓`/`j` down, `PgUp`/`PgDn` page, `enter` detail, `s` sort, `/` search, `h` cycle NPU matrix mode (NPU view only: health/AI Core/temp/power)
+- **List views**: `↑`/`k` up, `↓`/`j` down, `PgUp`/`PgDn` page, `enter` detail, `s` sort, `/` search, `h` cycle NPU matrix mode (NPU view only: AI Core default/HBM/temp/power/health)
 - **Detail views**: `↑`/`↓` scroll, `esc` back, `l` logs (pods), `a` actions
 - **Search mode**: Type to filter, `backspace` delete, `esc` cancel
 - **Logs mode**: `↑`/`↓` scroll, `/` search, `esc` back

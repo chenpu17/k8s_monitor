@@ -1012,6 +1012,9 @@ other = "搜索"
 [keys.filter]
 other = "筛选"
 
+[keys.npu_matrix]
+other = "矩阵模式"
+
 [keys.clear]
 other = "清除"
 
@@ -1838,14 +1841,24 @@ other = "利用率 {{.Percent}}%"
 [npuview.mode_aicore]
 other = "AI核利用率"
 
+[npuview.mode_hbm]
+other = "HBM利用率"
+
 [npuview.mode_temp]
 other = "温度"
 
 [npuview.mode_power]
 other = "功耗"
 
+[npuview.mode_health]
+other = "芯片健康"
+
 [npuview.heat_legend]
 other = "模式：{{.Mode}}（h 切换）· {{.Ramp}} 低→高"
+
+# 健康档没有渐变可描述，但图例行仍是 h 键的可发现性锚点：它标出当前档位与切换键。
+[npuview.health_legend]
+other = "模式：{{.Mode}}（h 切换）"
 
 # 采集通道状态，在节点详情中渲染（原始失败文本由视图自行追加并按字段宽截断）。
 [npu.liveness.ok]

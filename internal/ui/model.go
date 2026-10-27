@@ -215,9 +215,10 @@ type Model struct {
 	vizHistory    []VizSample
 	maxVizHistory int
 
-	// npuMatrixMode selects how the NPU view encodes a chip cell: 0 grades the
-	// health (the default, unchanged from before the heat modes), 1-3 shade the
-	// healthy chips by utilisation, temperature or power.
+	// npuMatrixMode selects how the NPU view encodes a chip cell: 0 (the zero
+	// value, so the default) shades the healthy chips by AI Core utilisation;
+	// 1-3 shade by HBM utilisation, temperature or power; 4 is the grade
+	// matrix (▉▒▁) every earlier batch rendered.
 	npuMatrixMode int
 
 	// Logs viewer state

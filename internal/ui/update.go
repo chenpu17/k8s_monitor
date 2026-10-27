@@ -851,12 +851,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case msg.String() == "h":
-			// Cycle the NPU matrix encoding: health (default) → AI Core
-			// utilisation → temperature → power → health. It is NPU-view only,
-			// and it sits behind the search interception above, so in search mode
-			// 'h' stays the character the user is typing. The line-based scroll
-			// offset is kept: the mode adds at most one legend line, and the
-			// clamp in the renderer handles a shorter document.
+			// Cycle the NPU matrix encoding: AI Core utilisation (the default)
+			// → HBM utilisation → temperature → power → health → AI Core. It is
+			// NPU-view only, and it sits behind the search interception above,
+			// so in search mode 'h' stays the character the user is typing. The
+			// line-based scroll offset is kept: the mode legend is one line in
+			// every mode, and the clamp in the renderer handles a shorter
+			// document.
 			if !m.viewSwitchBlocked() && m.currentView == ViewNPU && m.hasNPUNodes() {
 				m.npuMatrixMode = (m.npuMatrixMode + 1) % npuMatrixModeCount
 			}

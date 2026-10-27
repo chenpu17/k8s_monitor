@@ -418,8 +418,11 @@ func TestZhCopyFixes(t *testing.T) {
 // Batch 29 review fixes added 2: npuview.aggregate_health_no_known (the
 // aggregate bar's no-known-fault wording for unknown-health chips) and
 // overview.npu_chip_unknown (the card's unknown count) — 821 + 2 = 823.
+//
+// Batch 30 (NPU default matrix mode, HBM view, h discoverability) added 4:
+// npuview.{mode_hbm,mode_health,health_legend} and keys.npu_matrix — 823 + 4 = 827.
 func TestBundleKeyCount(t *testing.T) {
-	const want = 823
+	const want = 827
 
 	en := readBundleMessages(t, "../../internal/i18n/active.en.toml")
 	zh := readBundleMessages(t, "../../internal/i18n/active.zh.toml")

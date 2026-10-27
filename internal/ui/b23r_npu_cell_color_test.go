@@ -22,6 +22,8 @@ func TestNPUViewCellColorMatchesGrade(t *testing.T) {
 	m := NewModel(nil, zap.NewNop(), time.Second, "en", "test", 200)
 	m.width, m.height = 120, 40
 	m.currentView = ViewNPU
+	// Batch 30 made AI Core the default; this probe is about the grade matrix.
+	m.npuMatrixMode = npuMatrixModeHealth
 	n := &model.NodeData{Name: "npu-1", Status: "Ready", NPUCapacity: 3, NPUAllocatable: 3,
 		NPUChipHealth: []model.NPUChipGrade{
 			{NPUID: 0, Chip: 0, Grade: model.NPUChipGradeHealthy},

@@ -52,16 +52,19 @@ const (
 	npuAggregateSparkWidth = 10
 )
 
-// The NPU matrix heat modes. Mode 0 is the health matrix every earlier batch
-// rendered: the glyph is the grade and nothing else. Modes 1-3 shade the
-// healthy chips by a metric, so a wall of ▉ chips becomes a readability map.
+// The NPU matrix modes. Mode 0 — the zero value of the model field, so the
+// first thing a user sees — shades the healthy chips by AI Core utilisation,
+// the number the user asked for first. The remaining heat modes shade by HBM
+// utilisation, temperature or power draw; the last mode is the health matrix
+// every earlier batch rendered, where the glyph is the grade and nothing else.
 // The grades keep their own glyphs in every mode — heat is an addition to the
 // health semantics, never a replacement.
 const (
-	npuMatrixModeHealth = iota // grade glyphs (default)
-	npuMatrixModeAICore        // AI Core utilisation, %
+	npuMatrixModeAICore = iota // AI Core utilisation, % — the default
+	npuMatrixModeHBM           // HBM utilisation, %
 	npuMatrixModeTemp          // temperature, °C
 	npuMatrixModePower         // power draw, W
+	npuMatrixModeHealth        // grade glyphs ▉▒▁
 	npuMatrixModeCount
 )
 
@@ -83,6 +86,15 @@ func npuHeatValue(chip model.NPUChipData, mode int) float64 {
 	switch mode {
 	case npuMatrixModeAICore:
 		return float64(chip.AICore)
+	case npuMatrixModeHBM:
+		// A chip that reports no HBM capacity has no ratio to shade by, and it
+		// reads as an empty HBM — the same "nothing reported" the aggregate bar
+		// omits its segment for. An empty HBM is not a fault grade: the chip
+		// keeps its heat cell at the bottom of the ramp.
+		if chip.HBMTotal > 0 {
+			return float64(chip.HBMUsed) / float64(chip.HBMTotal) * 100
+		}
+		return 0
 	case npuMatrixModeTemp:
 		return float64(chip.Temp)
 	case npuMatrixModePower:
@@ -120,20 +132,45 @@ func npuChipValues(node *model.NodeData, mode int) []float64 {
 	return values
 }
 
-// npuHeatLevels normalizes values to the heat ramp, node-local: the ramp spans
-// this node's own min and max, so a rack full of idle chips still shows which
-// ones are busiest. Values from every chip of the node are considered, because
-// the range is a property of the node, not of the healthy subset — a faulted
-// chip's temperature is still evidence about the node's thermal band.
+// npuHeatLevels normalizes values to the heat ramp. There are two scales,
+// because the two kinds of metric answer two different questions:
 //
-// A node whose values are all equal maps to the middle level, which renders as
-// the flat ▄ row.
-func npuHeatLevels(values []float64) []int {
+//   - The percentage modes (AI Core, HBM) have a god-given scale: 0-100 is
+//     meaningful on every node. They map absolutely, so "4% HBM on every chip"
+//     draws a flat bottom row — the honest picture of an idle node. A
+//     node-local range would stretch that 4% across the whole ramp and invent
+//     a gradient that is not in the data. All zeros draw the bottom level
+//     (▂), the same honest zero the aggregate bar's "Utilization 0%" states.
+//   - The sensor modes (temperature, power) have no such scale: 46 °C is cold
+//     on one SKU and warm on another, and a wattage only ranks within its own
+//     board. They normalize node-locally, so a rack full of idle chips still
+//     shows which ones are busiest. A node whose values are all equal maps to
+//     the middle level (▅), which renders as the flat mid row.
+//
+// Values from every chip of the node are considered, because the range is a
+// property of the node, not of the healthy subset — a faulted chip's
+// temperature is still evidence about the node's thermal band.
+func npuHeatLevels(values []float64, mode int) []int {
 	levels := make([]int, len(values))
 	if len(values) == 0 {
 		return levels
 	}
 	top := len([]rune(npuHeatRamp)) - 1
+
+	if npuHeatModeIsPercent(mode) {
+		for i, v := range values {
+			idx := int(v / 100 * float64(top))
+			if idx < 0 {
+				idx = 0
+			}
+			if idx > top {
+				idx = top
+			}
+			levels[i] = idx
+		}
+		return levels
+	}
+
 	minVal, maxVal := values[0], values[0]
 	for _, v := range values {
 		if v < minVal {
@@ -160,6 +197,13 @@ func npuHeatLevels(values []float64) []int {
 		levels[i] = idx
 	}
 	return levels
+}
+
+// npuHeatModeIsPercent reports whether the mode's metric is a percentage with
+// an absolute 0-100 scale. Those modes normalize absolutely; the sensors
+// normalize node-locally. See npuHeatLevels.
+func npuHeatModeIsPercent(mode int) bool {
+	return mode == npuMatrixModeAICore || mode == npuMatrixModeHBM
 }
 
 // npuHeatCell renders one heat cell: the ramp glyph at its level, in the
@@ -212,8 +256,8 @@ func npuChipCellGroups(grades []model.NPUChipGrade) [][]string {
 }
 
 // npuChipCellRow is npuChipCellGroups with an optional heat metric: levels is
-// nil for the health matrix (the default, unchanged output) and carries one
-// normalized heat level per grade otherwise.
+// nil for the health matrix and carries one normalized heat level per grade
+// otherwise.
 func npuChipCellRow(grades []model.NPUChipGrade, levels []int) [][]string {
 	groups := make([][]string, 0, len(grades))
 	lastNPU := 0
@@ -360,11 +404,12 @@ func (m *Model) npuMatrixRow(node *model.NodeData, selected bool) string {
 
 	groups := npuChipCellGroups(node.NPUChipHealth)
 	if m.npuMatrixMode != npuMatrixModeHealth {
-		// Heat mode: the cells are shaded by the node-local metric range, so the
-		// row shows this node's own hot and cold chips. The health glyphs stay
-		// for the chips that are not healthy, which is why this is an override of
-		// the healthy cells and not a different matrix.
-		groups = npuChipCellRow(node.NPUChipHealth, npuHeatLevels(npuChipValues(node, m.npuMatrixMode)))
+		// Heat mode: the healthy cells are shaded by the metric, over the scale
+		// the mode calls for (absolute for the percentages, node-local for the
+		// sensors). The health glyphs stay for the chips that are not healthy,
+		// which is why this is an override of the healthy cells and not a
+		// different matrix.
+		groups = npuChipCellRow(node.NPUChipHealth, npuHeatLevels(npuChipValues(node, m.npuMatrixMode), m.npuMatrixMode))
 	}
 	suffix := m.npuRowSuffix(node)
 	// The suffix without its informational occupancy count — what the row
@@ -820,27 +865,35 @@ func (m *Model) npuClipLine(line string) string {
 	return truncate(line, m.width)
 }
 
-// npuHeatModeName returns the localized name of a heat mode.
+// npuHeatModeName returns the localized name of a matrix mode.
 func (m *Model) npuHeatModeName(mode int) string {
 	switch mode {
 	case npuMatrixModeAICore:
 		return m.T("npuview.mode_aicore")
+	case npuMatrixModeHBM:
+		return m.T("npuview.mode_hbm")
 	case npuMatrixModeTemp:
 		return m.T("npuview.mode_temp")
 	case npuMatrixModePower:
 		return m.T("npuview.mode_power")
+	case npuMatrixModeHealth:
+		return m.T("npuview.mode_health")
 	default:
 		return ""
 	}
 }
 
 // npuHeatLegend renders the line that says which metric the matrix is shaded
-// by, how to change it, and in which direction the ramp runs. It only exists in
-// heat mode: the health matrix is self-describing through the health legend
-// below it and keeps its bytes.
+// by and how to change it. It exists in every mode, including health: the line
+// is the main discoverability anchor for the `h` key, so it must be on screen
+// from the first render rather than only after the user already found the key.
+// The heat modes add the ramp and its direction; the health matrix has no ramp
+// to describe, so its line only names the mode and the key.
 func (m *Model) npuHeatLegend() string {
 	if m.npuMatrixMode == npuMatrixModeHealth {
-		return ""
+		return m.npuClipLine(StyleTextMuted.Render(m.TF("npuview.health_legend", map[string]interface{}{
+			"Mode": m.npuHeatModeName(m.npuMatrixMode),
+		})))
 	}
 	return m.npuClipLine(StyleTextMuted.Render(m.TF("npuview.heat_legend", map[string]interface{}{
 		"Mode": m.npuHeatModeName(m.npuMatrixMode),
@@ -971,16 +1024,15 @@ func (m *Model) npuContentLines() []string {
 
 	lines = append(lines, wrapSummarySegments(m.npuSummarySegments(nodes), m.width, "  •  ")...)
 
-	// The aggregate gauge bar and the heat legend only exist when they have
-	// something to say: a cluster with no chip data gets no aggregate bar (the
-	// summary's "monitoring unavailable" already covers it), and the health
-	// matrix keeps the bytes it had before either existed.
+	// The aggregate gauge bar only exists when it has something to say: a
+	// cluster with no chip data gets no aggregate bar (the summary's
+	// "monitoring unavailable" already covers it). The mode legend, by
+	// contrast, is always on screen — it names the active matrix mode and the
+	// key that changes it, which is what makes `h` discoverable.
 	if agg := m.npuAggregateSegments(nodes, m.currentVizSample()); len(agg) > 0 {
 		lines = append(lines, wrapSummarySegments(agg, m.width, "  •  ")...)
 	}
-	if heat := m.npuHeatLegend(); heat != "" {
-		lines = append(lines, heat)
-	}
+	lines = append(lines, m.npuHeatLegend())
 
 	lines = append(lines, m.npuClipLine(StyleTextMuted.Render(m.T("npuview.legend"))))
 	lines = append(lines, "")

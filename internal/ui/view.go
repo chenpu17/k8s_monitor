@@ -269,6 +269,11 @@ func (m *Model) renderFooter() string {
 		if m.currentView == ViewPods {
 			bindings = append(bindings, RenderKeyBinding("f", m.T("keys.filter")))
 		}
+		// Add matrix-mode help for NPU view: the mode legend names the active
+		// mode, this segment points at the key that changes it.
+		if m.currentView == ViewNPU {
+			bindings = append(bindings, RenderKeyBinding("h", m.T("keys.npu_matrix")))
+		}
 		// Show clear if any filter is active
 		if m.filterNamespace != "" || m.filterStatus != "" || m.filterRole != "" || m.searchText != "" {
 			bindings = append(bindings, RenderKeyBinding("c", m.T("keys.clear")))

@@ -82,7 +82,9 @@ func npuViewFixture() *model.ClusterData {
 	}
 }
 
-// npuViewModel returns a model on the NPU view with the fixture loaded.
+// npuViewModel returns a model on the NPU view with the fixture loaded. The
+// matrix is put in the health mode explicitly: batch 30 made AI Core the
+// default, and the byte anchors in this file are about the health matrix.
 func npuViewModel(t *testing.T, locale string, width, height int) *Model {
 	t.Helper()
 
@@ -91,6 +93,7 @@ func npuViewModel(t *testing.T, locale string, width, height int) *Model {
 	m.height = height
 	m.currentView = ViewNPU
 	m.clusterData = npuViewFixture()
+	m.npuMatrixMode = npuMatrixModeHealth
 	return m
 }
 
@@ -103,6 +106,7 @@ func TestNPUViewEnGolden(t *testing.T) {
 	const want = " 🧮 NPU Overview \n" +
 		"\n" +
 		"13/16 healthy · 2 degraded · 1 fault  •  Allocation 11/32 (34.4%)  •  Monitoring 1/2 nodes\n" +
+		"Mode: Chip health (h to switch)\n" +
 		"▉ healthy  ▒ degraded  ▁ fault\n" +
 		"\n" +
 		"> node-a    ▉ ▉  ▉ ▒  ▉ ▉  ▉ ▁  ▉ ▉  ▒ ▉  ▉ ▉  ▉ ▉  2 degraded • 1 fault\n" +

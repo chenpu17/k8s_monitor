@@ -2,10 +2,12 @@ package ui
 
 // b29_heat_test.go — batch 29 (overview visualisation), contract T-heat.
 //
-// The chip matrix gains three heat modes behind the `h` key. The hard line this
-// file defends is the one the batch promised: the default health matrix is byte
-// for byte what it was before the modes existed, and the heat modes are an
-// addition to the health semantics, never a replacement for them.
+// The chip matrix gains heat modes behind the `h` key. Batch 30 reordered the
+// modes so the default is AI Core utilisation and added the HBM mode; the
+// health matrix is now the last mode, selected explicitly. The hard line this
+// file still defends is that the health matrix itself is byte for byte what it
+// was before the modes existed, and that heat is an addition to the health
+// semantics, never a replacement for them.
 
 import (
 	"regexp"
@@ -64,10 +66,11 @@ func b29MatrixRows(m *Model) []string {
 	return rows
 }
 
-// TestB29HealthMatrixBytesUnchanged is the zero-drift anchor for the default
-// mode: both locale fixtures at four widths, compared against the bytes the
+// TestB29HealthMatrixBytesUnchanged is the zero-drift anchor for the health
+// matrix: both locale fixtures at four widths, compared against the bytes the
 // pre-batch tree produced for the same fixture (captured with a detached-HEAD
-// dump and frozen here).
+// dump and frozen here). Batch 30 made AI Core the default, so the health mode
+// is selected explicitly here; the matrix bytes are still the pre-batch ones.
 //
 // The rows below are the whole matrix as the user sees it. They are asserted
 // individually rather than as one blob so a failure names the width that broke.
@@ -95,9 +98,9 @@ func TestB29HealthMatrixBytesUnchanged(t *testing.T) {
 		for width, rows := range want {
 			m := b29HeatModel(t, locale)
 			m.width = width
-			if m.npuMatrixMode != npuMatrixModeHealth {
-				t.Fatalf("the default matrix mode is %d, want the health mode 0", m.npuMatrixMode)
-			}
+			// Batch 30: AI Core is the default; this anchor is about the
+			// health matrix's own bytes, so select it explicitly.
+			m.npuMatrixMode = npuMatrixModeHealth
 			got := b29MatrixRows(m)
 			if len(got) != len(rows) {
 				t.Fatalf("%s/%d: %d rows, want %d", locale, width, len(got), len(rows))
@@ -113,13 +116,15 @@ func TestB29HealthMatrixBytesUnchanged(t *testing.T) {
 
 // TestB29HealthModeIgnoresChipMetrics pins the same rule from the other side:
 // filling every chip with a distinct utilisation, temperature and power must not
-// move a single byte of the default matrix. A heat leak into mode 0 would show
-// up here even if the idle anchor above somehow matched.
+// move a single byte of the health matrix. A heat leak into the health mode
+// would show up here even if the idle anchor above somehow matched.
 func TestB29HealthModeIgnoresChipMetrics(t *testing.T) {
 	base := b29HeatModel(t, "en")
+	base.npuMatrixMode = npuMatrixModeHealth
 	before := b29MatrixRows(base)
 
 	moved := b29HeatModel(t, "en")
+	moved.npuMatrixMode = npuMatrixModeHealth
 	for _, node := range moved.clusterData.Nodes {
 		for i := range node.NPUChips {
 			node.NPUChips[i].AICore = i * 6
@@ -207,7 +212,7 @@ func TestB29HeatModeKeepsGradeSemantics(t *testing.T) {
 		node.NPUChips[i].Power = 100 + float64(i)*13
 	}
 
-	for _, mode := range []int{npuMatrixModeAICore, npuMatrixModeTemp, npuMatrixModePower} {
+	for _, mode := range []int{npuMatrixModeAICore, npuMatrixModeHBM, npuMatrixModeTemp, npuMatrixModePower} {
 		m := NewModel(nil, zap.NewNop(), time.Second, "en", "test", 200)
 		m.width, m.height = 160, 60
 		m.currentView = ViewNPU
@@ -233,9 +238,9 @@ func TestB29HeatModeKeepsGradeSemantics(t *testing.T) {
 	}
 }
 
-// TestB29HeatModeCycle pins the `h` key: from the health mode it steps through
-// the three heat modes back to health, only on the NPU view, and never while a
-// mode that owns the keyboard is open.
+// TestB29HeatModeCycle pins the `h` key: from the AI Core default it steps
+// through HBM, temperature, power and health back to AI Core, only on the NPU
+// view, and never while a mode that owns the keyboard is open.
 func TestB29HeatModeCycle(t *testing.T) {
 	m := b29HeatModel(t, "en")
 
@@ -244,7 +249,7 @@ func TestB29HeatModeCycle(t *testing.T) {
 		got = append(got, m.npuMatrixMode)
 		m.Update(keyMsg("h"))
 	}
-	want := []int{npuMatrixModeHealth, npuMatrixModeAICore, npuMatrixModeTemp, npuMatrixModePower, npuMatrixModeHealth}
+	want := []int{npuMatrixModeAICore, npuMatrixModeHBM, npuMatrixModeTemp, npuMatrixModePower, npuMatrixModeHealth}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Errorf("press %d: mode %d, want %d (cycle %v)", i, got[i], want[i], got)
@@ -255,7 +260,7 @@ func TestB29HeatModeCycle(t *testing.T) {
 	other := b29HeatModel(t, "en")
 	other.currentView = ViewOverview
 	other.Update(keyMsg("h"))
-	if other.npuMatrixMode != npuMatrixModeHealth {
+	if other.npuMatrixMode != npuMatrixModeAICore {
 		t.Errorf("'h' on the overview changed the matrix mode to %d", other.npuMatrixMode)
 	}
 
@@ -263,7 +268,7 @@ func TestB29HeatModeCycle(t *testing.T) {
 	searching := b29HeatModel(t, "en")
 	searching.searchMode = true
 	searching.Update(keyMsg("h"))
-	if searching.npuMatrixMode != npuMatrixModeHealth {
+	if searching.npuMatrixMode != npuMatrixModeAICore {
 		t.Errorf("'h' in search mode changed the matrix mode to %d", searching.npuMatrixMode)
 	}
 	if !strings.Contains(searching.searchText, "h") {
@@ -339,13 +344,15 @@ func TestB29HeatModeKeepsNPUGrouping(t *testing.T) {
 	m.npuMatrixMode = npuMatrixModeAICore
 
 	// The same grouping the health matrix produces, with the cells shaded: four
-	// per NPU, a double gap between groups, one space between cells.
-	groups := npuChipCellRow(node.NPUChipHealth, npuHeatLevels(npuChipValues(node, npuMatrixModeAICore)))
+	// per NPU, a double gap between groups, one space between cells. Batch 30
+	// made AI Core absolute, so the levels are floor(AICore/100*6) for the
+	// 0,6,…,90 fixture: 0,0,0,1 1,1,2,2 2,3,3,3 4,4,5,5.
+	groups := npuChipCellRow(node.NPUChipHealth, npuHeatLevels(npuChipValues(node, npuMatrixModeAICore), npuMatrixModeAICore))
 	if len(groups) != 4 {
 		t.Fatalf("the heat matrix has %d NPU groups, want 4", len(groups))
 	}
 	if got, want := stripANSI(npuMatrixText(groups, -1)),
-		"▂ ▂ ▂ ▃  ▃ ▄ ▄ ▄  ▅ ▅ ▆ ▆  ▆ ▇ ▇ █"; got != want {
+		"▂ ▂ ▂ ▃  ▃ ▃ ▄ ▄  ▄ ▅ ▅ ▅  ▆ ▆ ▇ ▇"; got != want {
 		t.Errorf("the heat matrix text = %q, want the health matrix's layout with shaded cells %q", got, want)
 	}
 	// And the same layout is what the health matrix produces for the same
@@ -397,17 +404,21 @@ func TestB29HeatCellsCarryDistinctColors(t *testing.T) {
 	}
 }
 
-// TestB29HeatIsNormalizedPerNode pins the normalization scope: the ramp spans
-// each node's own min and max, not the cluster's. Two nodes with disjoint
-// operating ranges must both show a full gradient — a cluster-wide scale would
-// flatten one of them to a single glyph, which is exactly the case the mode
-// exists for (one rack busy, one idle).
-func TestB29HeatIsNormalizedPerNode(t *testing.T) {
+// TestB29HeatNormalizationSplitsByMetricKind pins the two scales batch 30
+// established. The percentage modes (AI Core, HBM) have an absolute 0-100
+// scale: the same percentage draws the same glyph on every node, whatever the
+// node's own range is. The sensor modes (temperature, power) keep the
+// node-local min-max scale, because a wattage only ranks within its own board.
+// The non-vacuousness clause keeps the probe honest: the sensor fixture really
+// does span the full ramp.
+func TestB29HeatNormalizationSplitsByMetricKind(t *testing.T) {
 	cool := b29IdleNode("node-cool")
 	warm := b29IdleNode("node-warm")
 	for i := range cool.NPUChips {
-		cool.NPUChips[i].AICore = i      // 0..15
-		warm.NPUChips[i].AICore = 80 + i // 80..95
+		cool.NPUChips[i].AICore = i      // 0..15 %
+		warm.NPUChips[i].AICore = 80 + i // 80..95 %
+		cool.NPUChips[i].Power = float64(i)
+		warm.NPUChips[i].Power = 300 + float64(i)
 	}
 
 	m := NewModel(nil, zap.NewNop(), time.Second, "en", "test", 200)
@@ -419,45 +430,76 @@ func TestB29HeatIsNormalizedPerNode(t *testing.T) {
 	}
 	m.npuMatrixMode = npuMatrixModeAICore
 
-	for _, node := range []*model.NodeData{cool, warm} {
-		row := stripANSI(m.npuMatrixRow(node, false))
-		var glyphs []rune
-		for _, r := range row {
-			if strings.ContainsRune(npuHeatRamp, r) {
-				glyphs = append(glyphs, r)
-			}
+	// AI Core: absolute. The cool node's 0..15 % is the bottom of the ramp on
+	// every chip; the warm node's 80..95 % is the top two levels. A node-local
+	// scale would stretch both nodes across the whole ramp.
+	coolGlyphs := heatGlyphs(stripANSI(m.npuMatrixRow(cool, false)))
+	warmGlyphs := heatGlyphs(stripANSI(m.npuMatrixRow(warm, false)))
+	if len(coolGlyphs) != 16 || len(warmGlyphs) != 16 {
+		t.Fatalf("glyph counts %d/%d, want 16/16", len(coolGlyphs), len(warmGlyphs))
+	}
+	if got := strings.Count(string(coolGlyphs), "▂"); got != 16 {
+		t.Errorf("the 0..15%% node draws %q; 15%% is still below one ramp step, want all ▂", string(coolGlyphs))
+	}
+	for i, g := range warmGlyphs {
+		if g != '▆' && g != '▇' {
+			t.Errorf("the 80..95%% node chip %d draws %q, want ▆/▇ from the absolute scale", i, string(g))
 		}
-		if len(glyphs) != 16 {
-			t.Fatalf("%s: %d heat glyphs, want 16: %q", node.Name, len(glyphs), row)
+	}
+
+	// Power: still node-local. Two disjoint wattage bands draw identical rows.
+	levelsCool := npuHeatLevels(npuChipValues(cool, npuMatrixModePower), npuMatrixModePower)
+	levelsWarm := npuHeatLevels(npuChipValues(warm, npuMatrixModePower), npuMatrixModePower)
+	for i := range levelsCool {
+		if levelsCool[i] != levelsWarm[i] {
+			t.Errorf("power chip %d: cool level %d, warm level %d — the sensor range is not node-local",
+				i, levelsCool[i], levelsWarm[i])
 		}
-		// Each node's own range spans the ramp from bottom to top.
-		if glyphs[0] != '▂' || glyphs[15] != '█' {
-			t.Errorf("%s: the ramp spans %q…%q, want the full node-local range", node.Name,
-				string(glyphs[0]), string(glyphs[15]))
-		}
+	}
+	if levelsCool[0] != 0 || levelsCool[15] != len([]rune(npuHeatRamp))-1 {
+		t.Errorf("the node-local power ramp is %d..%d, want 0..%d",
+			levelsCool[0], levelsCool[15], len([]rune(npuHeatRamp))-1)
 	}
 }
 
-// TestB29HeatLegendOnlyInHeatMode pins the legend line: it appears in a heat
-// mode, names the metric and the key, fits the terminal, and is absent in the
-// health mode where the old legend is the only legend.
-func TestB29HeatLegendOnlyInHeatMode(t *testing.T) {
+// heatGlyphs extracts the heat-ramp glyphs of a row, in chip order.
+func heatGlyphs(row string) []rune {
+	var glyphs []rune
+	for _, r := range row {
+		if strings.ContainsRune(npuHeatRamp, r) {
+			glyphs = append(glyphs, r)
+		}
+	}
+	return glyphs
+}
+
+// TestB29HeatLegendInEveryMode pins the legend line: it appears in every mode
+// (batch 30 made the health legend part of the h-key discoverability work), it
+// names the metric and the key, fits the terminal, and only the heat modes
+// carry the ramp. The health legend must not show a ramp: the health matrix has
+// no gradient, and two legends reading the same glyphs differently is exactly
+// the collision batch 29 fixed.
+func TestB29HeatLegendInEveryMode(t *testing.T) {
 	for _, locale := range []string{"en", "zh"} {
 		m := b29HeatModel(t, locale)
-		if got := m.npuHeatLegend(); got != "" {
-			t.Errorf("%s: the health mode rendered a heat legend: %q", locale, got)
-		}
-		for _, mode := range []int{npuMatrixModeAICore, npuMatrixModeTemp, npuMatrixModePower} {
+		for _, mode := range []int{npuMatrixModeAICore, npuMatrixModeHBM, npuMatrixModeTemp, npuMatrixModePower, npuMatrixModeHealth} {
 			m.npuMatrixMode = mode
 			line := stripANSI(m.npuHeatLegend())
 			if line == "" {
-				t.Fatalf("%s: mode %d rendered no heat legend", locale, mode)
+				t.Fatalf("%s: mode %d rendered no mode legend", locale, mode)
 			}
 			if !strings.Contains(line, stripANSI(m.npuHeatModeName(mode))) {
 				t.Errorf("%s: mode %d legend %q does not name the metric %q",
 					locale, mode, line, stripANSI(m.npuHeatModeName(mode)))
 			}
-			if !strings.Contains(line, npuHeatRamp) {
+			if !strings.Contains(line, "h") {
+				t.Errorf("%s: mode %d legend %q does not name the h key", locale, mode, line)
+			}
+			if mode == npuMatrixModeHealth {
+				if strings.Contains(line, npuHeatRamp) {
+					t.Errorf("%s: the health legend carries the heat ramp: %q", locale, line)
+				}
+			} else if !strings.Contains(line, npuHeatRamp) {
 				t.Errorf("%s: mode %d legend %q does not show the ramp", locale, mode, line)
 			}
 			// Bounded by the width, never wrapped. The check is done at the

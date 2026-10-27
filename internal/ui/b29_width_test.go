@@ -44,12 +44,12 @@ func b29NarrowModel(t *testing.T, locale string, width int) *Model {
 
 // TestB29NPUViewFitsThirtyEightColumns pins the hard width budget for the whole
 // NPU view in every matrix mode: no rendered line exceeds the terminal, in both
-// locales. The health mode is included because the aggregate bar and the legend
-// line exist there too — only the heat legend is mode-specific.
+// locales. Every mode — including health since batch 30 — carries a mode
+// legend line, so all five are exercised.
 func TestB29NPUViewFitsThirtyEightColumns(t *testing.T) {
 	for _, locale := range []string{"en", "zh"} {
 		for _, width := range []int{38, 40, 60, 100} {
-			for _, mode := range []int{npuMatrixModeHealth, npuMatrixModeAICore, npuMatrixModeTemp, npuMatrixModePower} {
+			for _, mode := range []int{npuMatrixModeAICore, npuMatrixModeHBM, npuMatrixModeTemp, npuMatrixModePower, npuMatrixModeHealth} {
 				t.Run(fmt.Sprintf("%s/%d/mode%d", locale, width, mode), func(t *testing.T) {
 					m := b29NarrowModel(t, locale, width)
 					m.npuMatrixMode = mode

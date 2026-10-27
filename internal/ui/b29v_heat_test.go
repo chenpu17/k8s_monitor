@@ -78,6 +78,8 @@ func TestB29VGradedCellsIdenticalInEveryMode(t *testing.T) {
 		node.NPUChips[i].AICore = i * 12
 		node.NPUChips[i].Temp = 40 + i*3
 		node.NPUChips[i].Power = 100 + float64(i)*30
+		node.NPUChips[i].HBMUsed = int64(i * 10)
+		node.NPUChips[i].HBMTotal = 100
 	}
 
 	health := b29vFlattenCells(npuChipCellRow(node.NPUChipHealth, nil))
@@ -85,8 +87,8 @@ func TestB29VGradedCellsIdenticalInEveryMode(t *testing.T) {
 		t.Fatalf("health matrix has %d cells, want 8", len(health))
 	}
 
-	for _, mode := range []int{npuMatrixModeAICore, npuMatrixModeTemp, npuMatrixModePower} {
-		levels := npuHeatLevels(npuChipValues(node, mode))
+	for _, mode := range []int{npuMatrixModeAICore, npuMatrixModeHBM, npuMatrixModeTemp, npuMatrixModePower} {
+		levels := npuHeatLevels(npuChipValues(node, mode), mode)
 		cells := b29vFlattenCells(npuChipCellRow(node.NPUChipHealth, levels))
 		if len(cells) != 8 {
 			t.Fatalf("mode %d has %d cells, want 8", mode, len(cells))
@@ -133,7 +135,7 @@ func TestB29VHeatMonotoneTempAndPower(t *testing.T) {
 	}
 
 	for _, mode := range []int{npuMatrixModeTemp, npuMatrixModePower} {
-		levels := npuHeatLevels(npuChipValues(node, mode))
+		levels := npuHeatLevels(npuChipValues(node, mode), mode)
 		for i := range node.NPUChips {
 			for j := range node.NPUChips {
 				vi := npuHeatValue(node.NPUChips[i], mode)
@@ -177,7 +179,7 @@ func TestB29VHeatAllEqualDrawsMidLevel(t *testing.T) {
 	if got := strings.Count(row, "▅"); got != 8 {
 		t.Errorf("the flat temp matrix has %d middle-level cells, want 8: %q", got, row)
 	}
-	levels := npuHeatLevels(npuChipValues(node, npuMatrixModeTemp))
+	levels := npuHeatLevels(npuChipValues(node, npuMatrixModeTemp), npuMatrixModeTemp)
 	for i, level := range levels {
 		if want := (len([]rune(npuHeatRamp)) - 1) / 2; level != want {
 			t.Errorf("flat node chip %d level = %d, want the middle %d", i, level, want)
@@ -196,8 +198,8 @@ func TestB29VHeatIsNodeLocalForPower(t *testing.T) {
 		cool.NPUChips[i].Power = float64(i)       // 0..7 W
 		warm.NPUChips[i].Power = 300 + float64(i) // 300..307 W
 	}
-	levelsCool := npuHeatLevels(npuChipValues(cool, npuMatrixModePower))
-	levelsWarm := npuHeatLevels(npuChipValues(warm, npuMatrixModePower))
+	levelsCool := npuHeatLevels(npuChipValues(cool, npuMatrixModePower), npuMatrixModePower)
+	levelsWarm := npuHeatLevels(npuChipValues(warm, npuMatrixModePower), npuMatrixModePower)
 	if len(levelsCool) != 8 || len(levelsWarm) != 8 {
 		t.Fatalf("levels %d/%d, want 8/8", len(levelsCool), len(levelsWarm))
 	}
@@ -281,10 +283,13 @@ func TestB29VHeatLegendClipsOnDisplayWidth(t *testing.T) {
 			Summary: &model.ClusterSummary{NPUCapacity: 8, NPUAllocatable: 8},
 		}
 
-		if got := m.npuHeatLegend(); got != "" {
-			t.Errorf("%s: health mode rendered a heat legend: %q", locale, got)
+		// Batch 30: the health legend exists too (it is the h-key anchor); it
+		// names the mode without claiming a ramp.
+		m.npuMatrixMode = npuMatrixModeHealth
+		if got := stripANSI(m.npuHeatLegend()); got == "" || strings.Contains(got, npuHeatRamp) {
+			t.Errorf("%s: the health legend is %q, want a mode line without the ramp", locale, got)
 		}
-		for _, mode := range []int{npuMatrixModeAICore, npuMatrixModeTemp, npuMatrixModePower} {
+		for _, mode := range []int{npuMatrixModeAICore, npuMatrixModeHBM, npuMatrixModeTemp, npuMatrixModePower, npuMatrixModeHealth} {
 			m.npuMatrixMode = mode
 			for width := 1; width <= 40; width++ {
 				m.width = width

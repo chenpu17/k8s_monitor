@@ -1,8 +1,8 @@
 package ui
 
 // b29v_zerodrift_test.go — the verifier's anchor for batch 29's hard line: in
-// the default (health) matrix mode the NPU view must be the pre-batch view plus
-// the aggregate bar and nothing else.
+// the health matrix mode the NPU view must be the pre-batch view plus the
+// aggregate bar and nothing else.
 //
 // The evidence behind the frozen block: the same fixture was rendered through a
 // detached HEAD worktree (git worktree at e2867f1) and through the batch tree,
@@ -12,6 +12,11 @@ package ui
 // segment or alert line moved. The frozen document here is the width-100 shape
 // of that comparison, so a future change that moves the bar, reorders the rows,
 // or drifts a summary segment fails with the exact line.
+//
+// Batch 30 made AI Core the default and added the always-on mode legend, so the
+// health mode is now selected explicitly and the document gains exactly one
+// line — the health legend — between the aggregate bar and the static glyph
+// legend. Every pre-batch line keeps its bytes.
 
 import (
 	"strings"
@@ -56,6 +61,7 @@ func TestB29VHealthModeDocumentIsPreBatchPlusAggregateBar(t *testing.T) {
 			"",
 			"14/16 healthy · 1 degraded · 1 fault  •  Allocation 6/24 (25.0%)  •  Monitoring 2/3 nodes",
 			"Nodes 3  •  Chips 14/16 healthy  •  Power 3040W  •  Avg temp 46°C  •  Utilization 0%",
+			"Mode: Chip health (h to switch)",
 			"▉ healthy  ▒ degraded  ▁ fault",
 			"",
 			"> npu-idle  ▉ ▉  ▉ ▉  ▉ ▉  ▉ ▉",
@@ -71,6 +77,7 @@ func TestB29VHealthModeDocumentIsPreBatchPlusAggregateBar(t *testing.T) {
 			"",
 			"14/16 健康 · 1 降级 · 1 故障  •  分配 6/24（25.0%）  •  监控 2/3 节点",
 			"节点 3  •  芯片 14/16 健康  •  功耗 3040W  •  均温 46°C  •  利用率 0%",
+			"模式：芯片健康（h 切换）",
 			"▉ 健康  ▒ 降级  ▁ 故障",
 			"",
 			"> npu-idle  ▉ ▉  ▉ ▉  ▉ ▉  ▉ ▉",
@@ -88,11 +95,13 @@ func TestB29VHealthModeDocumentIsPreBatchPlusAggregateBar(t *testing.T) {
 		m.width, m.height = 100, 90
 		m.currentView = ViewNPU
 		m.clusterData = b29vZeroDriftData()
+		// Batch 30: AI Core is the default; this anchor is the health mode.
+		m.npuMatrixMode = npuMatrixModeHealth
 
 		got := strings.Split(stripANSI(m.renderNPUView()), "\n")
 		if len(got) != len(want[locale]) {
-			t.Fatalf("%s: the document has %d lines, want the pre-batch %d + 1 aggregate line:\n%q",
-				locale, len(got), len(want[locale]), got)
+			t.Fatalf("%s: the document has %d lines, want the pre-batch %d + 2 (aggregate bar, mode legend):\n%q",
+				locale, len(got), len(want[locale])-2, got)
 		}
 		for i := range want[locale] {
 			if got[i] != want[locale][i] {

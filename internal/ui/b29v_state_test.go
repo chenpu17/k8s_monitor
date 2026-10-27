@@ -55,7 +55,7 @@ func TestB29VHeatKeyBlockedInEveryOwningMode(t *testing.T) {
 	m.logsMode = true
 	m.logsSearchMode = true
 	m.Update(keyMsg("h"))
-	if m.npuMatrixMode != npuMatrixModeHealth {
+	if m.npuMatrixMode != npuMatrixModeAICore {
 		t.Errorf("logs search: 'h' cycled the matrix to %d", m.npuMatrixMode)
 	}
 	if !strings.Contains(m.logsSearchText, "h") {
@@ -102,27 +102,27 @@ func TestB29VHeatKeyNoOpWithoutNPUNodes(t *testing.T) {
 		m := b29vStateModel()
 		m.clusterData = data
 		m.Update(keyMsg("h"))
-		if m.npuMatrixMode != npuMatrixModeHealth {
+		if m.npuMatrixMode != npuMatrixModeAICore {
 			t.Errorf("%s: 'h' cycled the matrix to %d without NPU nodes", name, m.npuMatrixMode)
 		}
 	}
 }
 
-// TestB29VHeatCycleReturnsToTheHealthBytes pins the loop end to end: after a
-// full cycle the view must be byte-identical to the health-mode view again,
-// legend gone and health glyphs back.
-func TestB29VHeatCycleReturnsToTheHealthBytes(t *testing.T) {
+// TestB29VHeatCycleReturnsToTheStartingBytes pins the loop end to end: after a
+// full cycle the view must be byte-identical to the starting (AI Core) view
+// again, with the same legend and the same heat glyphs.
+func TestB29VHeatCycleReturnsToTheStartingBytes(t *testing.T) {
 	forcedAsciiProfile(t)
 	m := b29vStateModel()
 	before := m.renderNPUView()
 	for i := 0; i < npuMatrixModeCount; i++ {
 		m.Update(keyMsg("h"))
 	}
-	if m.npuMatrixMode != npuMatrixModeHealth {
-		t.Fatalf("a full cycle ended at mode %d, want health", m.npuMatrixMode)
+	if m.npuMatrixMode != npuMatrixModeAICore {
+		t.Fatalf("a full cycle ended at mode %d, want the AI Core default", m.npuMatrixMode)
 	}
 	if after := m.renderNPUView(); after != before {
-		t.Errorf("the view did not return to the health bytes after a full cycle:\nbefore:\n%s\nafter:\n%s", before, after)
+		t.Errorf("the view did not return to the starting bytes after a full cycle:\nbefore:\n%s\nafter:\n%s", before, after)
 	}
 }
 
